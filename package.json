@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run local-backend\" \"vite\"",
-    "local-backend": "npx deno run --allow-net --allow-env --allow-read --allow-write local-server.ts",
+    "local-backend": "npx deno run --allow-net --allow-env --allow-read --allow-write --allow-sys local-server.ts",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",

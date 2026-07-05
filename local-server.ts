@@ -4,64 +4,49 @@ import { DB } from "https://deno.land/x/sqlite@v3.9.1/mod.ts";
 // Initialize SQLite database
 const db = new DB("cloudpilot.db");
 
-// Create database schema
-db.execute(`
-  CREATE TABLE IF NOT EXISTS registered_users (
-    id TEXT PRIMARY KEY,
-    email TEXT UNIQUE,
-    password TEXT,
-    created_at TEXT
-  );
+// Dynamic schema helper: ensures tables and columns exist on-the-fly
+function ensureTableAndColumns(tableName: string, sampleObject?: any, url?: URL) {
+  // 1. Create table if it doesn't exist
+  db.execute(`CREATE TABLE IF NOT EXISTS ${tableName} (id TEXT PRIMARY KEY, created_at TEXT, updated_at TEXT)`);
 
-  CREATE TABLE IF NOT EXISTS conversations (
-    id TEXT PRIMARY KEY,
-    title TEXT,
-    user_id TEXT,
-    created_at TEXT,
-    updated_at TEXT
-  );
+  const keysToAdd = new Set<string>();
 
-  CREATE TABLE IF NOT EXISTS messages (
-    id TEXT PRIMARY KEY,
-    conversation_id TEXT,
-    content TEXT,
-    role TEXT,
-    user_id TEXT,
-    created_at TEXT
-  );
+  if (sampleObject) {
+    for (const key of Object.keys(sampleObject)) {
+      keysToAdd.add(key);
+    }
+  }
 
-  CREATE TABLE IF NOT EXISTS automation_idempotency_keys (
-    id TEXT PRIMARY KEY,
-    user_id TEXT,
-    operation_name TEXT,
-    request_key TEXT,
-    request_hash TEXT,
-    status TEXT,
-    created_at TEXT,
-    updated_at TEXT
-  );
+  if (url) {
+    for (const [key, value] of url.searchParams.entries()) {
+      if (key === "select" || key === "limit" || key === "order" || key === "offset") continue;
+      keysToAdd.add(key);
+    }
+  }
 
-  CREATE TABLE IF NOT EXISTS agent_audit_log (
-    id TEXT PRIMARY KEY,
-    user_id TEXT,
-    aws_service TEXT,
-    aws_operation TEXT,
-    aws_region TEXT,
-    status TEXT,
-    validator_result TEXT,
-    execution_time_ms INTEGER,
-    created_at TEXT
-  );
+  if (keysToAdd.size > 0) {
+    // 2. Get existing columns
+    const info = [...db.query(`PRAGMA table_info(${tableName})`)];
+    const existingColumns = new Set(info.map(row => row[1]));
 
-  CREATE TABLE IF NOT EXISTS aws_credential_vault (
-    id TEXT PRIMARY KEY,
-    user_id TEXT,
-    credentials TEXT,
-    created_at TEXT
-  );
-`);
+    // 3. Add any missing columns dynamically as TEXT
+    for (const key of keysToAdd) {
+      if (!existingColumns.has(key)) {
+        console.log(`[CloudPilot SQLite] Dynamic schema: adding column '${key}' to table '${tableName}'`);
+        try {
+          db.execute(`ALTER TABLE ${tableName} ADD COLUMN ${key} TEXT`);
+        } catch (err) {
+          console.warn(`[CloudPilot SQLite] Warning adding column '${key}':`, err);
+        }
+      }
+    }
+  }
+}
 
-console.log("[CloudPilot SQLite] Real SQL database schema loaded successfully.");
+// Pre-create auth table
+ensureTableAndColumns("registered_users", { email: "", password: "" });
+
+console.log("[CloudPilot SQLite] SQLite engine active.");
 
 // Parse .env file locally
 const envVars: Record<string, string> = {};
@@ -165,7 +150,6 @@ serve(async (req) => {
       const authAction = path.slice("/auth/v1/".length);
       console.log(`[CloudPilot SQL Auth] ${req.method} ${path}`);
 
-      // Helper to generate a JWT-style session payload
       const getSessionPayload = (user: any) => {
         const expires_in = 3600;
         return {
@@ -269,6 +253,7 @@ serve(async (req) => {
 
       // GET: Query rows
       if (req.method === "GET") {
+        ensureTableAndColumns(tableName, null, url);
         const { where, params, limit, order } = parseFilters(url);
         const queryStr = `SELECT * FROM ${tableName} ${where} ${order} ${limit}`;
         const rows = [...db.queryEntries(queryStr, params)];
@@ -294,13 +279,17 @@ serve(async (req) => {
         const list = Array.isArray(body) ? body : [body];
         const results: any[] = [];
 
+        // Check columns based on sample payload
+        if (list.length > 0) {
+          ensureTableAndColumns(tableName, list[0], url);
+        }
+
         for (const item of list) {
           const id = item.id || crypto.randomUUID();
           const created_at = item.created_at || new Date().toISOString();
           const updated_at = item.updated_at || new Date().toISOString();
           const merged = { id, created_at, updated_at, ...item };
 
-          // Extract columns dynamically from input object keys
           const keys = Object.keys(merged);
           const placeholders = keys.map(() => "?").join(",");
           const insertSql = `INSERT INTO ${tableName} (${keys.join(",")}) VALUES (${placeholders})`;
@@ -317,8 +306,9 @@ serve(async (req) => {
       // PATCH: Update rows
       if (req.method === "PATCH") {
         const body = await req.json();
+        ensureTableAndColumns(tableName, body, url);
+        
         const { where, params } = parseFilters(url);
-
         const updates: string[] = [];
         const updateParams: any[] = [];
 
@@ -341,6 +331,7 @@ serve(async (req) => {
 
       // DELETE: Delete rows
       if (req.method === "DELETE") {
+        ensureTableAndColumns(tableName, null, url);
         const { where, params } = parseFilters(url);
         const deleteSql = `DELETE FROM ${tableName} ${where}`;
         db.query(deleteSql, params);
@@ -351,7 +342,7 @@ serve(async (req) => {
       }
     }
 
-    // ── Special Edge Functions ────────────────────────────────────────────────
+    // ── Edge Functions ────────────────────────────────────────────────────────
     console.log(`[CloudPilot Deno Gateway] ${req.method} ${path}`);
 
     let response: Response;
