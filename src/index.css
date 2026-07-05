@@ -148,4 +148,13 @@
   .bg-radial-glow {
     background: radial-gradient(circle at center, hsla(36, 100%, 50%, 0.15) 0%, transparent 70%);
   }
+
+  @keyframes flow-horizontal {
+    0% { transform: translateX(-150%); }
+    100% { transform: translateX(350%); }
+  }
+
+  .animate-flow-arrow {
+    animation: flow-horizontal 1.8s linear infinite;
+  }
 }
