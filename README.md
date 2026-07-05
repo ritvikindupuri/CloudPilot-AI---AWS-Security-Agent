@@ -17,8 +17,8 @@ sequenceDiagram
     participant DB as Local Storage (Mock DB)
     participant Gateway as Local Deno Gateway
     participant Agent as aws-agent
-    participant Classifier as Gemini 2.5 Flash Lite
-    participant LLM as Gemini 3.5 Flash
+    participant Classifier as Local Intent Classifier
+    participant LLM as Local Qwen2.5-Coder
     participant AWS as AWS Account
 
     User->>Frontend: Enter query & credentials
@@ -45,8 +45,8 @@ sequenceDiagram
 
 1. **User Interaction**: The user accesses the React Frontend, inputs their AWS query (e.g., "Find exposed S3 buckets"), and provides their AWS credentials (either Access Keys or an AssumeRole ARN).
 2. **Request Handling**: The frontend securely sends the prompt and credentials to the Local Deno Gateway (`local-server.ts`), which mounts and executes the `aws-agent` module locally on port 54321.
-3. **Intent Classification**: Before engaging the main AI model, `aws-agent` sends the query to Gemini 2.5 Flash Lite for intent classification. The classifier categorizes the query into one of 9 domains (e.g., `security_audit`, `cost_analysis`, `drift_detection`), and only the relevant tool subset is selected for the main agent. This reduces token usage by 40-70% on focused queries.
-4. **AI Evaluation**: The local Deno router builds the system context (enforcing "zero simulation tolerance") and communicates with Gemini 3.5 Flash via the Google Gemini API, providing only the filtered tool definitions for the classified intent.
+3. **Intent Classification**: Before engaging the main AI model, `aws-agent` sends the query to the local `qwen2.5-coder` model (via Ollama) for intent classification. The classifier categorizes the query into one of 9 domains (e.g., `security_audit`, `cost_analysis`, `drift_detection`), and only the relevant tool subset is selected for the main agent. This reduces token usage by 40-70% on focused queries.
+4. **AI Evaluation**: The local Deno router builds the system context (enforcing "zero simulation tolerance") and communicates with the local `qwen2.5-coder` model via Ollama's completions API, providing only the filtered tool definitions for the classified intent.
 5. **AWS Integration**: When the AI determines it needs data, it requests a tool call to `execute_aws_api`. The local gateway dynamically instantiates an AWS SDK client using the user's provided credentials and executes the requested API call against the user's real AWS account via the `aws-executor` module.
 6. **Synthesis & Streaming**: The real AWS API responses are passed back to the AI model. The model synthesizes an executive summary, findings table, detailed analysis, and exact CLI remediation commands. The gateway streams this synthesized response back to the React Frontend for real-time display via SSE.
 7. **Database Storage**: Conversations, user sessions, runbooks, compliance configurations, and drift baselines are persisted completely client-side inside the browser's `localStorage` mock client, guaranteeing zero setup and 100% offline data privacy.
@@ -59,8 +59,8 @@ CloudPilot AI employs a lightweight LLM-based intent router that classifies each
 
 | Component | Model | Purpose |
 |-----------|-------|---------|
-| **Intent Classifier** | Gemini 2.5 Flash Lite | Single-shot query classification into 9 intent categories (~100-200ms) |
-| **Main Agent** | Gemini 3.5 Flash | Multi-iteration agentic loop with filtered tool set (up to 15 iterations) |
+| **Intent Classifier** | Qwen2.5-Coder (via Ollama) | Single-shot query classification into 9 intent categories (~100-200ms) |
+| **Main Agent** | Qwen2.5-Coder (via Ollama) | Multi-iteration agentic loop with filtered tool set (up to 15 iterations) |
 
 ### Intent Categories
 
@@ -76,12 +76,11 @@ CloudPilot AI employs a lightweight LLM-based intent router that classifies each
 | `direct_query` | 1 tool | "List my S3 buckets" |
 | `general` | All 15 tools | Ambiguous or multi-domain queries |
 
-### Why Gemini 3.5 Flash?
+### Why Qwen2.5-Coder?
 
-- **Lowest latency** among models with strong tool-calling capabilities — critical for an agentic loop with up to 15 iterations
-- **High tool-calling accuracy** with structured JSON schemas at sub-second inference times
-- **~80% lower cost per token** vs Pro-tier models, enabling sustained high-volume security operations
-- **Sufficient reasoning depth** for CloudPilot's highly structured system prompt and deterministic tool-call workflows
+- **100% Private and Local**: Runs entirely on your local machine. No credentials, tokens, or audit logs leave your network.
+- **Top-Tier Tool Calling**: Specially fine-tuned to emit structured JSON API calls, allowing the agentic loop to consistently select correct AWS SDK operations.
+- **Zero API Cost & Key Setup**: No developer keys, credits, or rate limits. You can run unlimited security scans offline.
 
 ---
 
@@ -161,7 +160,7 @@ For full details on input validation, rate limiting behavior, and practical impl
 - **Frontend:** React, TypeScript, Vite, Tailwind CSS, shadcn-ui, Framer Motion
 - **Backend / API:** Local Deno Gateway (`local-server.ts`), running Edge Function modules locally on port 54321
 - **Database / Auth:** Mocked locally using browser `localStorage` and client-side session handlers
-- **AI Models:** Google Gemini 3.5 Flash (main agent) + Gemini 2.5 Flash Lite (intent classifier) via the Google Gemini API
+- **AI Model:** Qwen2.5-Coder (via local Ollama server)
 - **Cloud Integration:** AWS SDK for JavaScript v3 (35+ services)
 
 ---
@@ -190,7 +189,7 @@ bun install
 
 ### 2. Configure Environment Variables
 
-Create a `.env` file in the root directory (if not present) and add any required frontend environment variables. Ensure the Supabase Edge Function also has `GEMINI_API_KEY` configured in its environment.
+Create a `.env` file in the root directory (if not present) and specify your local model (e.g. `OLLAMA_MODEL="qwen2.5-coder"`). Ensure your local Ollama server is running.
 
 ### 3. Start the Development Server
 

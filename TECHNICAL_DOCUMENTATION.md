@@ -6,11 +6,11 @@
 ---
 
 > [!IMPORTANT]
-> ## ARCHITECTURAL UPDATE: Self-Contained Local Mode (No Supabase Required)
-> CloudPilot AI has been migrated to run in a fully local, self-contained architecture. While this document describes the enterprise-grade multi-tenant Supabase architecture:
-> 1. **Local Database & Auth Mocking**: All tables (conversations, messages, runbooks, compliance baselines) and auth flows are intercepted by a mock database client and stored directly in the browser's `localStorage`, linked to a default local virtual user profile.
-> 2. **Local Deno Server Gateway**: A local Deno gateway (`local-server.ts`) runs on port `54321` via a lightweight local `deno-bin` wrapper. It mounts, parses, and executes all edge function logic locally on your machine with zero Docker or cloud database setup required.
-> 3. **CORS Bypass**: The custom Gemini API Key and AWS session credentials are sent in request payloads, bypassing CORS preflight validation and eliminating network routing restrictions.
+> ## ARCHITECTURAL UPDATE: Self-Contained Local Mode (No Supabase or Gemini Cloud Required)
+> CloudPilot AI runs in a 100% local, self-contained architecture:
+> 1. **Local Relational Database**: All tables (conversations, messages, runbooks, compliance baselines) are persisted in a real local SQLite database (`cloudpilot.db`) on your machine.
+> 2. **Local Deno Server Gateway**: A local Deno gateway (`local-server.ts`) runs on port `54321`. It mounts and executes all edge function logic locally with zero Docker or cloud database setup.
+> 3. **100% Offline AI Model**: Integrates with local **Ollama** using the open-source **`qwen2.5-coder`** security model. No cloud API keys or external developer accounts are required.
 
 
 ## Executive Summary
