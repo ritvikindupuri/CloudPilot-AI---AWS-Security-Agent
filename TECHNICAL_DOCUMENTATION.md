@@ -6,7 +6,7 @@
 ---
 
 > [!IMPORTANT]
-> ## ARCHITECTURAL UPDATE: Self-Contained Local Mode (No Supabase or Gemini Cloud Required)
+> ## ARCHITECTURAL UPDATE: Self-Contained Local Mode (No Supabase or Qwen2.5-Coder Cloud Required)
 > CloudPilot AI runs in a 100% local, self-contained architecture:
 > 1. **Local Relational Database**: All tables (conversations, messages, runbooks, compliance baselines) are persisted in a real local SQLite database (`cloudpilot.db`) on your machine.
 > 2. **Local Deno Server Gateway**: A local Deno gateway (`local-server.ts`) runs on port `54321`. It mounts and executes all edge function logic locally with zero Docker or cloud database setup.
@@ -19,7 +19,7 @@ CloudPilot AI is an elite AWS cloud security operations agent designed explicitl
 
 Unlike traditional cloud security posture management (CSPM) tools or purely generative AI assistants, CloudPilot AI employs a strict **"Zero Simulation Tolerance"** policy. Every insight, security finding, and configuration analysis provided by the agent is backed by real, authenticated AWS API calls executed securely on behalf of the user. This guarantees that the intelligence is accurate, contextual, and actionable.
 
-The application is built on a modern, highly responsive stack. The frontend leverages React, Vite, Tailwind CSS, and shadcn-ui for a seamless user experience, incorporating features like real-time chat, AWS credential management (including **Pre-Flight IAM Boundary Checks** that render a capability checklist), chat history persistence, and actionable finding panels. The backend is orchestrated by Supabase Edge Functions running on Deno, which seamlessly broker communications between the React client, Google's Gemini 3.5 Flash (via the Gemini API), and the user's AWS account via the AWS SDK. A lightweight **Intent Router** powered by Gemini 2.5 Flash Lite classifies each query before the main agent loop, selecting only the relevant tool subset to reduce token usage and improve accuracy.
+The application is built on a modern, highly responsive stack. The frontend leverages React, Vite, Tailwind CSS, and shadcn-ui for a seamless user experience, incorporating features like real-time chat, AWS credential management (including **Pre-Flight IAM Boundary Checks** that render a capability checklist), chat history persistence, and actionable finding panels. The backend is orchestrated by Supabase Edge Functions running on Deno, which seamlessly broker communications between the React client, Local Qwen2.5-Coder (via Ollama API), and the user's AWS account via the AWS SDK. A lightweight **Intent Router** powered by Qwen2.5-Coder classifies each query before the main agent loop, selecting only the relevant tool subset to reduce token usage and improve accuracy.
 
 For security operations with absolute privacy requirements, the backend supports configurations to use **PrivateLink / VPC Endpoints**, ensuring that AWS API calls never route over the public internet. By configuring Private DNS in your VPC endpoints, the AWS SDK will automatically route traffic locally. Additionally, all API tool executions perform **WORM Audit Logging**, directly streaming request payloads into an immutable S3 bucket configured for Write-Once-Read-Many storage.
 
@@ -103,9 +103,9 @@ graph TB
     end
 
     subgraph "AI Layer"
-        E[Google Gemini API]
-        F[Google Gemini 3.5 Flash - Main Agent]
-        F2[Google Gemini 2.5 Flash Lite - Intent Classifier]
+        E[Local Ollama API]
+        F[Qwen2.5-Coder - Main Agent]
+        F2[Qwen2.5-Coder - Intent Classifier]
     end
 
     subgraph "AWS Layer"
@@ -144,7 +144,7 @@ This diagram illustrates the complete four-layer architecture of CloudPilot AI a
 - **Client Layer:** The React frontend communicates with three backend services. It sends user queries and AWS session credentials to the `aws-agent` edge function over HTTPS with a Bearer token. It reads and writes chat history (conversations and messages) directly to the Supabase Database, protected by Row-Level Security (RLS) policies that scope all queries to the authenticated user. It manages authentication state through Supabase Auth. It also calls `aws-exchange-credentials` directly for STS credential exchange before any agent interaction.
 
 - **Backend Layer:** Ten edge functions collaborate to deliver the full feature set:
-  - **`aws-agent`** (1,337 lines) — The central orchestrator. Receives the user query, classifies intent using an LLM-based router (Gemini 2.5 Flash Lite), selects only the relevant tool subset for the classified intent, manages the agentic loop with the main AI model (Gemini 3.5 Flash), dispatches tool calls to `aws-agent-tools`, and streams the final response back as SSE.
+  - **`aws-agent`** (1,337 lines) — The central orchestrator. Receives the user query, classifies intent using an LLM-based router (Qwen2.5-Coder), selects only the relevant tool subset for the classified intent, manages the agentic loop with the main AI model (Qwen2.5-Coder), dispatches tool calls to `aws-agent-tools`, and streams the final response back as SSE.
   - **`aws-agent-tools`** (75 lines) — A thin router that classifies incoming tool calls and dispatches them in parallel to either `aws-agent-scanner` or `aws-agent-ops`.
   - **`aws-agent-scanner`** (2,987 lines) — Handles `run_unified_audit`, `run_cost_anomaly_scan`, `manage_cost_rule`, `manage_drift_baseline`, `run_drift_detection`, and `execute_aws_api`. Contains the unified audit engine, cost anomaly detection, drift detection, and raw AWS API execution logic.
   - **`aws-agent-ops`** (4,572 lines) — Handles `manage_runbook_execution`, `manage_event_response_policy`, `replay_cloudtrail_events`, `run_org_query`, `manage_org_operation`, `manage_security_group_rule`, `manage_iam_access`, `run_attack_simulation`, and `run_evasion_test`. Contains the operational automation, org-wide queries, security group mutations, IAM automation, attack simulation, and evasion testing logic.
@@ -155,11 +155,11 @@ This diagram illustrates the complete four-layer architecture of CloudPilot AI a
   - **`aws-credential-vault`** (170 lines) — The AES-256-GCM credential encryption/decryption service. Uses PBKDF2 with 100,000 iterations to derive per-user encryption keys from the service role key. Handles `encrypt_and_store` (for client credential submission) and `decrypt` (for guardian-scheduler autonomous scans). See Section 34 for full details.
   - **`webhook-notify`** (250 lines) — The external notification dispatcher. Sends Guardian alerts, auto-fix notifications, drift events, and cost anomalies to Slack (Block Kit), PagerDuty (Events API v2), or generic webhook endpoints. Manages webhook registration, listing, and deletion. See Section 36 for full details.
 
-- **AI Layer:** The Google Gemini API receives requests for two Google Gemini models. The **Intent Classifier** uses Gemini 2.5 Flash Lite (fastest, cheapest) for a single classification call that determines which tool subset to activate. The **Main Agent** uses Gemini 3.5 Flash (balanced speed and capability) for the multi-iteration agentic loop with tool calling. This two-model architecture reduces token usage by 40-70% on focused queries by excluding irrelevant tools from the context.
+- **AI Layer:** The Local Ollama API receives requests for two Local Qwen2.5-Coder models. The **Intent Classifier** uses Qwen2.5-Coder (fastest, cheapest) for a single classification call that determines which tool subset to activate. The **Main Agent** uses Qwen2.5-Coder (balanced speed and capability) for the multi-iteration agentic loop with tool calling. This two-model architecture reduces token usage by 40-70% on focused queries by excluding irrelevant tools from the context.
 
 - **AWS Layer:** The user's real AWS account, accessed via AWS SDK v3 through the `aws-executor` proxy using temporary session credentials. The agent can interact with 35+ security-relevant services.
 
-- **Data Flow:** Queries flow from the client to `aws-agent` to the AI Gateway to Gemini. When Gemini returns tool calls, `aws-agent` batches them to `aws-agent-tools`, which routes them to `aws-agent-scanner` or `aws-agent-ops`. These functions call `aws-executor` for any AWS SDK operations. Real API responses flow back through the chain to Gemini for analysis. The final Markdown response is streamed to the client via SSE.
+- **Data Flow:** Queries flow from the client to `aws-agent` to the AI Gateway to Qwen2.5-Coder. When Qwen2.5-Coder returns tool calls, `aws-agent` batches them to `aws-agent-tools`, which routes them to `aws-agent-scanner` or `aws-agent-ops`. These functions call `aws-executor` for any AWS SDK operations. Real API responses flow back through the chain to Qwen2.5-Coder for analysis. The final Markdown response is streamed to the client via SSE.
 
 ### Component Responsibilities
 
@@ -176,7 +176,7 @@ This diagram illustrates the complete four-layer architecture of CloudPilot AI a
 | `guardian-event-processor` | Deno Edge Function (499 lines) | Real-time CloudTrail event reaction and auto-fix |
 | Supabase Auth | Supabase Auth (email/password) | User registration, login, session management |
 | Supabase Database | PostgreSQL + RLS | Chat history, audit logs, cache, idempotency keys |
-| Google Gemini API | Model API | Serves Gemini 2.5 Flash Lite (intent classifier) and Gemini 3.5 Flash (main agent) |
+| Local Ollama API | Model API | Serves Qwen2.5-Coder (intent classifier) and Qwen2.5-Coder (main agent) |
 | AWS Account | AWS SDK v3 (35+ services) | Real infrastructure data, configuration states, resource management |
 
 ---
@@ -194,7 +194,7 @@ sequenceDiagram
     participant Router as aws-agent-tools
     participant Scanner as aws-agent-scanner
     participant Executor as aws-executor
-    participant AI as Gemini 3.5 Flash via AI Gateway
+    participant AI as Qwen2.5-Coder via AI Gateway
     participant AWS as User AWS Account
 
     Note over User,AWS: Example - Audit all S3 buckets for public access
@@ -267,7 +267,7 @@ This sequence diagram traces the exact lifecycle of a typical user query ("Audit
 
 5. **First AI Invocation — Forced Tool Call (EF -> AI):** The edge function constructs the full context: a system prompt enforcing Zero Simulation Tolerance (including all 15 tool usage protocols), the sanitized conversation history, the credential context string (masked key + region), and 15 tool definitions. On iteration 0, `tool_choice` is set to `"required"`, forcing the AI to make at least one tool call before generating text.
 
-6. **Tool Call Routing (EF -> Router -> Scanner/Ops -> Executor -> AWS):** When Gemini returns tool calls, `aws-agent` batches them all into a single POST to `aws-agent-tools`. The router classifies each call: scanner tools (`execute_aws_api`, `run_unified_audit`, `run_cost_anomaly_scan`, `manage_cost_rule`, `manage_drift_baseline`, `run_drift_detection`) go to `aws-agent-scanner`; ops tools (`manage_runbook_execution`, `manage_event_response_policy`, `replay_cloudtrail_events`, `run_org_query`, `manage_org_operation`, `manage_security_group_rule`, `manage_iam_access`, `run_attack_simulation`, `run_evasion_test`) go to `aws-agent-ops`. Both scanner and ops functions delegate actual AWS SDK calls to `aws-executor`, which dynamically loads the appropriate `@aws-sdk/client-*` package and executes the command.
+6. **Tool Call Routing (EF -> Router -> Scanner/Ops -> Executor -> AWS):** When Qwen2.5-Coder returns tool calls, `aws-agent` batches them all into a single POST to `aws-agent-tools`. The router classifies each call: scanner tools (`execute_aws_api`, `run_unified_audit`, `run_cost_anomaly_scan`, `manage_cost_rule`, `manage_drift_baseline`, `run_drift_detection`) go to `aws-agent-scanner`; ops tools (`manage_runbook_execution`, `manage_event_response_policy`, `replay_cloudtrail_events`, `run_org_query`, `manage_org_operation`, `manage_security_group_rule`, `manage_iam_access`, `run_attack_simulation`, `run_evasion_test`) go to `aws-agent-ops`. Both scanner and ops functions delegate actual AWS SDK calls to `aws-executor`, which dynamically loads the appropriate `@aws-sdk/client-*` package and executes the command.
 
 7. **Agentic Loop (up to 15 iterations):** This tool-call cycle can repeat up to 15 times. From iteration 2 onward, `tool_choice` switches to `"auto"`, allowing the AI to decide when it has gathered sufficient data.
 
@@ -564,19 +564,19 @@ The UI follows a **"Tactical Clarity"** design philosophy—dark charcoal backgr
 
 The frontend architecture described in Section 5 communicates primarily with a single backend entry point: the `aws-agent` edge function. This section details its internal logic, system prompt engineering, and agentic loop mechanics.
 
-The `aws-agent` edge function (`supabase/functions/aws-agent/index.ts`, 1,337 lines) runs on Deno, guaranteeing ephemeral, isolated compute per request. It employs a **two-model architecture**: a fast intent classifier (Gemini 2.5 Flash Lite) determines the query domain, followed by the main agentic model (Gemini 3.5 Flash) operating with only the relevant tool subset.
+The `aws-agent` edge function (`supabase/functions/aws-agent/index.ts`, 1,337 lines) runs on Deno, guaranteeing ephemeral, isolated compute per request. It employs a **two-model architecture**: a fast intent classifier (Qwen2.5-Coder) determines the query domain, followed by the main agentic model (Qwen2.5-Coder) operating with only the relevant tool subset.
 
 ### Core Responsibilities
 
 1. **Input Validation** — Validates message arrays (max 100), content lengths (max 50,000 chars), credential formats via regex, and requires `sessionToken`
-2. **Intent Classification** — Uses Gemini 2.5 Flash Lite for a single-shot classification of user intent into one of 9 categories, selecting only the relevant tool subset
+2. **Intent Classification** — Uses Qwen2.5-Coder for a single-shot classification of user intent into one of 9 categories, selecting only the relevant tool subset
 3. **System Prompt Injection** — Constructs the AI context with Zero Simulation Tolerance rules, tool usage protocols (scoped to classified intent), attack simulation lifecycle, output format mandates, S3 archival instructions, and SNS notification instructions
-4. **Agentic Tool-Call Loop** — Up to 15 iterations of AI-tool interactions using Gemini 3.5 Flash with the filtered tool set, dispatching all tool calls to `aws-agent-tools` in batched requests
+4. **Agentic Tool-Call Loop** — Up to 15 iterations of AI-tool interactions using Qwen2.5-Coder with the filtered tool set, dispatching all tool calls to `aws-agent-tools` in batched requests
 5. **SSE Streaming** — Streams the final Markdown response as 30-character chunks at 8ms intervals
 
 ### Intent Router — LLM-Based Tool Selection
 
-Before entering the agentic loop, `aws-agent` invokes Gemini 2.5 Flash Lite (the fastest, cheapest model) to classify the user's intent into one of 9 categories. Based on this classification, only the relevant tools are included in the main agent's context, reducing token usage and improving accuracy.
+Before entering the agentic loop, `aws-agent` invokes Qwen2.5-Coder (the fastest, cheapest model) to classify the user's intent into one of 9 categories. Based on this classification, only the relevant tools are included in the main agent's context, reducing token usage and improving accuracy.
 
 | Intent | Tool Subset | Example Queries |
 |--------|-------------|-----------------|
@@ -592,7 +592,7 @@ Before entering the agentic loop, `aws-agent` invokes Gemini 2.5 Flash Lite (the
 
 ```mermaid
 flowchart TD
-    A[User Query + Conversation Context] --> B[Gemini 2.5 Flash Lite Intent Classifier]
+    A[User Query + Conversation Context] --> B[Qwen2.5-Coder Intent Classifier]
     B --> C{Classified Intent}
     C -- security_audit --> D[4 tools selected]
     C -- cost_analysis --> E[3 tools selected]
@@ -603,7 +603,7 @@ flowchart TD
     C -- event_automation --> J[3 tools selected]
     C -- direct_query --> K[1 tool selected]
     C -- general --> L[All 15 tools]
-    D --> M[Gemini 3.5 Flash Main Agentic Loop with filtered tools]
+    D --> M[Qwen2.5-Coder Main Agentic Loop with filtered tools]
     E --> M
     F --> M
     G --> M
@@ -622,21 +622,21 @@ flowchart TD
 
 This diagram shows the two-stage model architecture:
 
-1. **Classification Stage:** The user's latest message and last 3 conversation messages are sent to Gemini 2.5 Flash Lite with a structured classification prompt. The model returns a single category string (e.g., `security_audit`). If classification fails (network error, invalid response), the system falls back to `general` which includes all 15 tools.
+1. **Classification Stage:** The user's latest message and last 3 conversation messages are sent to Qwen2.5-Coder with a structured classification prompt. The model returns a single category string (e.g., `security_audit`). If classification fails (network error, invalid response), the system falls back to `general` which includes all 15 tools.
 
 2. **Tool Filtering:** The classified intent maps to a pre-defined tool subset via `INTENT_TOOL_MAP`. For example, a cost query only sees `execute_aws_api`, `run_cost_anomaly_scan`, and `manage_cost_rule` — 3 tools instead of 15. This reduces the tool definition tokens by ~80% for focused queries.
 
-3. **Main Agent:** Gemini 3.5 Flash receives the full system prompt, conversation history, and the **filtered** tool set. It then enters the standard agentic loop (up to 15 iterations).
+3. **Main Agent:** Qwen2.5-Coder receives the full system prompt, conversation history, and the **filtered** tool set. It then enters the standard agentic loop (up to 15 iterations).
 
-**Why Gemini 3.5 Flash Was Chosen:**
+**Why Qwen2.5-Coder Was Chosen:**
 
 The model selection for CloudPilot AI was driven by three operational requirements specific to an agentic security tool:
 
-- **Latency sensitivity:** Security operations demand fast response times. Gemini 3.5 Flash provides the lowest latency among models with strong tool-calling capabilities, critical for an agentic loop that may iterate up to 15 times per query. Each iteration adds round-trip latency, so a slower model (e.g., GPT-5 or Gemini 2.5 Pro) would compound delays across iterations, making complex audits impractical.
+- **Latency sensitivity:** Security operations demand fast response times. Qwen2.5-Coder provides the lowest latency among models with strong tool-calling capabilities, critical for an agentic loop that may iterate up to 15 times per query. Each iteration adds round-trip latency, so a slower model (e.g., GPT-5 or Qwen2.5-Coder 2.5 Pro) would compound delays across iterations, making complex audits impractical.
 
-- **Tool-calling accuracy at scale:** CloudPilot exposes 15 complex tools with nested JSON schemas. Gemini 3.5 Flash demonstrates high accuracy in structured tool-call generation while maintaining sub-second inference times — a balance that larger models achieve at 3-5x the cost and latency.
+- **Tool-calling accuracy at scale:** CloudPilot exposes 15 complex tools with nested JSON schemas. Qwen2.5-Coder demonstrates high accuracy in structured tool-call generation while maintaining sub-second inference times — a balance that larger models achieve at 3-5x the cost and latency.
 
-- **Cost efficiency for high-volume usage:** Security teams run dozens of queries per session, each consuming multiple tool-call iterations. Gemini 3.5 Flash costs ~80% less per token than Pro-tier models, making sustained usage economically viable. The two-model architecture further optimizes this: Gemini 2.5 Flash Lite (the cheapest, fastest tier) handles the single-shot classification at ~10x lower cost, while Flash handles the reasoning-intensive agentic loop.
+- **Cost efficiency for high-volume usage:** Security teams run dozens of queries per session, each consuming multiple tool-call iterations. Qwen2.5-Coder costs ~80% less per token than Pro-tier models, making sustained usage economically viable. The two-model architecture further optimizes this: Qwen2.5-Coder (the cheapest, fastest tier) handles the single-shot classification at ~10x lower cost, while Flash handles the reasoning-intensive agentic loop.
 
 - **Sufficient reasoning depth:** While Pro-tier models offer marginally better reasoning on ambiguous queries, CloudPilot's system prompt and tool-call protocols are highly structured — the model follows deterministic workflows rather than open-ended reasoning. This structured context compensates for any reasoning gap, making Flash's capability level the optimal cost-performance sweet spot.
 
@@ -681,13 +681,13 @@ The edge function exposes **15 tools** to the LLM:
 ```mermaid
 flowchart TD
     A[Receive user query + session credentials] --> B[Validate inputs - messages, content length, sessionToken]
-    B --> B2[Intent Classification via Gemini 2.5 Flash Lite]
+    B --> B2[Intent Classification via Qwen2.5-Coder]
     B2 --> B3[Select filtered tool subset based on intent]
     B3 --> C[Construct system prompt + filtered tools + credential context]
     C --> D[Iteration i = 0]
     D --> E{i == 0}
-    E -- Yes --> F[Call Gemini 3.5 Flash with tool_choice required]
-    E -- No --> G[Call Gemini 3.5 Flash with tool_choice auto]
+    E -- Yes --> F[Call Qwen2.5-Coder with tool_choice required]
+    E -- No --> G[Call Qwen2.5-Coder with tool_choice auto]
     F --> H{Response has tool_calls}
     G --> H
     H -- Yes --> I[Batch ALL tool calls to aws-agent-tools]
@@ -717,13 +717,13 @@ This flowchart details the exact decision logic inside the agentic loop, includi
 
 1. **Entry:** The edge function receives validated session credentials (must include `sessionToken`).
 
-2. **Intent Classification:** Before entering the agentic loop, the user's query (with last 3 messages for context) is sent to Gemini 2.5 Flash Lite for intent classification. This takes ~100-200ms and returns one of 9 categories. On failure, falls back to `general` (all tools).
+2. **Intent Classification:** Before entering the agentic loop, the user's query (with last 3 messages for context) is sent to Qwen2.5-Coder for intent classification. This takes ~100-200ms and returns one of 9 categories. On failure, falls back to `general` (all tools).
 
 3. **Tool Filtering:** The classified intent maps to a filtered tool subset. For example, `cost_analysis` includes only 3 tools instead of 15, reducing prompt tokens significantly.
 
 4. **Context Construction:** The 575-line system prompt is combined with sanitized conversation history, a credential context string showing the masked key and active region, and the **filtered** tool definitions.
 
-5. **Iteration Control:** The loop runs up to 15 iterations (`MAX_ITERATIONS = 15`). On iteration 0, `tool_choice` is `"required"`. On all subsequent iterations, `tool_choice` is `"auto"`. The main model is Gemini 3.5 Flash.
+5. **Iteration Control:** The loop runs up to 15 iterations (`MAX_ITERATIONS = 15`). On iteration 0, `tool_choice` is `"required"`. On all subsequent iterations, `tool_choice` is `"auto"`. The main model is Qwen2.5-Coder.
 
 6. **Batched Tool Dispatch:** When the AI returns tool calls, ALL calls in the response are sent in a single POST to `aws-agent-tools`. This is a key architectural decision — it avoids multiple round trips and enables the router to parallelize scanner and ops calls.
 
@@ -3285,7 +3285,7 @@ This section tracks the enterprise readiness status of each major capability are
 
 ## 45. Conclusion
 
-CloudPilot AI represents a significant advancement in applied generative AI for cloud security operations. By bridging the reasoning capabilities of Google's Gemini 3.5 Flash with the strict, deterministic execution of real AWS APIs across 35+ services, it eliminates the "hallucination" problem common in standard chat assistants through its uncompromising Zero Simulation Tolerance policy. The two-model architecture — Gemini 2.5 Flash Lite for intent classification and Gemini 3.5 Flash for the main agent — optimizes for both speed and accuracy, reducing token usage by 40-70% on focused queries.
+CloudPilot AI represents a significant advancement in applied generative AI for cloud security operations. By bridging the reasoning capabilities of Google's Qwen2.5-Coder with the strict, deterministic execution of real AWS APIs across 35+ services, it eliminates the "hallucination" problem common in standard chat assistants through its uncompromising Zero Simulation Tolerance policy. The two-model architecture — Qwen2.5-Coder for intent classification and Qwen2.5-Coder for the main agent — optimizes for both speed and accuracy, reducing token usage by 40-70% on focused queries.
 
 The architecture is meticulously designed for security at every layer: STS credential exchange ensures raw keys never reach the agent (Section 4); AES-256-GCM encryption with PBKDF2-derived per-user keys protects stored credentials at rest (Section 34); six defense-in-depth gates validate every tool call (Section 10); IAM blocked actions prevent privilege escalation through automation (Section 11); triple-sink audit logging provides forensic-grade accountability (Section 12); and TOTP-based MFA enrollment adds a second authentication factor (Section 36).
 
