@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowRight, ChevronRight, Check, Play, Terminal, Shield, Cpu, RefreshCw, Database } from "lucide-react";
+import { ArrowRight, ChevronRight, Check, Shield, Cpu, RefreshCw, Database } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import CloudPilotLogo from "@/components/CloudPilotLogo";
@@ -14,7 +14,7 @@ const ThreeDLogo = () => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width - 0.5;
     const y = (e.clientY - rect.top) / rect.height - 0.5;
-    setTilt({ x: x * 20, y: -y * 20 });
+    setTilt({ x: x * 15, y: -y * 15 });
   };
 
   const handleMouseLeave = () => {
@@ -25,10 +25,12 @@ const ThreeDLogo = () => {
     <div
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      className="relative w-40 h-40 mx-auto perspective-1000 group cursor-pointer"
+      className="relative w-36 h-36 mx-auto perspective-1000 group cursor-pointer"
     >
+      {/* Glow Backdrop */}
       <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full scale-125 opacity-60 group-hover:opacity-90 transition-opacity duration-500 animate-pulse" />
       
+      {/* 3D Container */}
       <div
         style={{
           transform: `rotateY(${tilt.x}deg) rotateX(${tilt.y}deg)`,
@@ -36,21 +38,24 @@ const ThreeDLogo = () => {
         }}
         className="w-full h-full relative transition-transform duration-200 ease-out flex items-center justify-center"
       >
+        {/* Shadow layer */}
         <div 
-          style={{ transform: "translateZ(-30px)" }}
-          className="absolute w-32 h-32 rounded-3xl bg-black/50 blur-lg" 
+          style={{ transform: "translateZ(-25px)" }}
+          className="absolute w-28 h-28 rounded-3xl bg-black/50 blur-lg" 
         />
         
+        {/* Layer 1: Glass border */}
         <div 
-          style={{ transform: "translateZ(-15px)" }}
-          className="absolute w-32 h-32 rounded-3xl bg-gradient-to-tr from-primary/20 to-blue-500/5 border border-primary/20 backdrop-blur-xl shadow-inner shadow-primary/10" 
+          style={{ transform: "translateZ(-10px)" }}
+          className="absolute w-28 h-28 rounded-3xl bg-gradient-to-tr from-primary/25 to-blue-500/5 border border-primary/20 backdrop-blur-xl shadow-inner shadow-primary/10" 
         />
         
+        {/* Layer 2: Core Logo Container */}
         <div 
           style={{ transform: "translateZ(10px)" }}
-          className="absolute w-32 h-32 rounded-3xl bg-gradient-to-br from-[#0c1125] to-[#040815] border border-primary/45 flex items-center justify-center shadow-2xl shadow-primary/20"
+          className="absolute w-28 h-28 rounded-3xl bg-gradient-to-br from-[#0c1125] to-[#040815] border border-primary/45 flex items-center justify-center shadow-2xl shadow-primary/25"
         >
-          <CloudPilotLogo className="w-16 h-16 text-primary filter drop-shadow-[0_0_12px_rgba(59,130,246,0.5)]" />
+          <CloudPilotLogo className="w-14 h-14 text-primary filter drop-shadow-[0_0_12px_rgba(59,130,246,0.55)]" />
         </div>
       </div>
     </div>
@@ -325,7 +330,6 @@ const PipelineFlow = () => {
           const isActive = idx === activeStep;
           return (
             <div key={idx} className="flex-1 flex flex-col items-center text-center relative z-10 w-full">
-              {/* Animated ring glow wrapper */}
               <div className="relative">
                 {isActive && (
                   <span className="absolute -inset-2.5 rounded-full bg-primary/25 blur-sm animate-ping" />
@@ -346,7 +350,6 @@ const PipelineFlow = () => {
                 {step.desc}
               </p>
 
-              {/* Connecting Pipeline arrow channel */}
               {idx < 4 && (
                 <div className="hidden lg:block absolute top-7 left-[calc(50%+2rem)] right-[calc(-50%+2rem)] h-[3px] bg-border/20 overflow-hidden">
                   <div className={`h-full bg-gradient-to-r from-transparent via-primary to-transparent w-16 transition-transform duration-1000 ${
@@ -379,17 +382,17 @@ const Landing = () => {
     show: {
       opacity: 1,
       transition: {
-        staggerChildren: 0.15
+        staggerChildren: 0.12
       }
     }
   };
 
   const fadeUp = {
-    hidden: { opacity: 0, y: 20 },
+    hidden: { opacity: 0, y: 15 },
     show: { 
       opacity: 1, 
       y: 0,
-      transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] } 
+      transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] } 
     }
   };
 
@@ -401,9 +404,9 @@ const Landing = () => {
       {/* Navigation Header */}
       <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/10 bg-[#030712]/80 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/25 flex items-center justify-center glow-primary">
-              <span className="text-primary font-bold text-sm">CP</span>
+              <CloudPilotLogo className="w-4.5 h-4.5 text-primary" />
             </div>
             <span className="font-semibold text-xs tracking-tight text-[#f5f5f7]">CloudPilot AI</span>
           </div>
@@ -443,87 +446,71 @@ const Landing = () => {
         </div>
       </header>
 
-      {/* Hero Split Layout */}
-      <section className="relative pt-24 pb-12 md:pt-36 md:pb-20 max-w-6xl mx-auto px-6 z-10">
-        <div className="grid lg:grid-cols-12 gap-12 items-center">
-          
-          {/* Left Text Column */}
-          <motion.div 
-            variants={staggerContainer}
-            initial="hidden"
-            animate="show"
-            className="lg:col-span-6 space-y-6 text-center lg:text-left"
-          >
-            <motion.div 
-              variants={fadeUp}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-mono tracking-wider uppercase font-semibold"
-            >
-              <Cpu className="w-3.5 h-3.5" />
-              100% Stateless Security Engine
-            </motion.div>
-
-            <motion.h1 
-              variants={fadeUp}
-              className="text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.08] text-white"
-            >
-              AWS Security Agent.<br />
-              <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-400">Stateless Accuracy.</span>
-            </motion.h1>
-
-            <motion.p 
-              variants={fadeUp}
-              className="text-[#86868b] text-sm md:text-base max-w-lg mx-auto lg:mx-0 font-normal leading-relaxed"
-            >
-              Audit configurations, evaluate security group exposures, map attack movement, and execute sandbox scans without persistent key storage.
-            </motion.p>
-
-            <motion.div 
-              variants={fadeUp}
-              className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-2"
-            >
-              <Button
-                onClick={handleLaunch}
-                className="bg-[#f5f5f7] text-background hover:bg-[#e8e8ed] rounded-full px-7 py-5 font-semibold text-xs tracking-tight transition-colors flex items-center gap-2 group w-full sm:w-auto"
-              >
-                Launch Free Console
-                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
-              </Button>
-              
-              <a
-                href="#demo"
-                className="text-[#86868b] hover:text-[#f5f5f7] transition-colors flex items-center gap-1.5 text-xs font-semibold py-2"
-              >
-                <Play className="w-3 h-3 text-primary fill-primary/10" />
-                Watch active simulation
-              </a>
-            </motion.div>
-
-            {/* Render 3D Logo floating beneath */}
-            <motion.div variants={fadeUp} className="pt-6 hidden lg:block">
-              <ThreeDLogo />
-            </motion.div>
+      {/* Hero Section (Centered Layout matching Claude/ChatGPT) */}
+      <section className="relative pt-24 pb-12 md:pt-36 md:pb-16 max-w-4xl mx-auto px-6 z-10 text-center">
+        <motion.div 
+          variants={staggerContainer}
+          initial="hidden"
+          animate="show"
+          className="space-y-6"
+        >
+          {/* Centered 3D Tilt interactive Logo */}
+          <motion.div variants={fadeUp} className="mb-2">
+            <ThreeDLogo />
           </motion.div>
 
-          {/* Right Interactive Console Column */}
+          {/* Badge (Removed Cpu/Bug icon) */}
           <motion.div 
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="lg:col-span-6 w-full" 
-            id="demo"
+            variants={fadeUp}
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-mono tracking-wider uppercase font-semibold"
           >
-            <div className="relative">
-              <div className="absolute inset-0 bg-primary/10 blur-3xl rounded-full scale-105 pointer-events-none" />
-              <AnimatedConsole />
-            </div>
+            100% Stateless Security Engine
           </motion.div>
-        </div>
+
+          {/* Centered Main Headline */}
+          <motion.h1 
+            variants={fadeUp}
+            className="text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.08] text-white"
+          >
+            AWS Security Agent.<br />
+            <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-400">Stateless Accuracy.</span>
+          </motion.h1>
+
+          {/* Centered Shortened Copy */}
+          <motion.p 
+            variants={fadeUp}
+            className="text-[#86868b] text-sm md:text-base max-w-xl mx-auto font-normal leading-relaxed"
+          >
+            Audit configurations, scan security group exposures, and map lateral movement without storing persistent credentials.
+          </motion.p>
+
+          {/* Centered Call-To-Action Button */}
+          <motion.div 
+            variants={fadeUp}
+            className="flex items-center justify-center pt-2"
+          >
+            <Button
+              onClick={handleLaunch}
+              className="bg-[#f5f5f7] text-background hover:bg-[#e8e8ed] rounded-full px-8 py-5 font-semibold text-xs tracking-tight transition-colors flex items-center gap-2 group w-full sm:w-auto"
+            >
+              Launch Free Console
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+            </Button>
+          </motion.div>
+        </motion.div>
+
+        {/* Centered Animated Interactive Chat Console directly below CTAs */}
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+          className="mt-14 w-full max-w-3xl mx-auto relative" 
+          id="demo"
+        >
+          <div className="absolute inset-0 bg-primary/5 blur-3xl rounded-full scale-105 pointer-events-none" />
+          <AnimatedConsole />
+        </motion.div>
       </section>
-
-      {/* 3D Logo For Mobile / Tablet */}
-      <div className="lg:hidden py-6">
-        <ThreeDLogo />
-      </div>
 
       {/* Animated Pipeline Flow Diagram Section */}
       <section id="flow" className="py-20 border-t border-border/10 bg-[#040816]/30 relative z-10">
