@@ -24,7 +24,10 @@ import { supabase } from "@/integrations/supabase/client";
 const ChatInterface = () => {
   const navigate = useNavigate();
   const [input, setInput] = useState("");
-  const [credentials, setCredentials] = useState<AwsCredentials | null>(null);
+  const [credentials, setCredentials] = useState<AwsCredentials | null>(() => {
+    const saved = sessionStorage.getItem("cloudpilot-aws-credentials");
+    return saved ? JSON.parse(saved) : null;
+  });
   const [showSidebar, setShowSidebar] = useState(true);
   const [currentConvId, setCurrentConvId] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
@@ -79,6 +82,11 @@ const ChatInterface = () => {
     clearAllHistory,
   } = useChatHistory(user);
 
+  const handleSignOut = async () => {
+    sessionStorage.removeItem("cloudpilot-aws-credentials");
+    await signOut();
+  };
+
   const { messages, isLoading, sendMessage, clearMessages, auditSummary, findings, liveRunbook } = useChat(currentConvId, notificationEmail);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -97,6 +105,7 @@ const ChatInterface = () => {
 
   const handleCredentialsSave = (creds: AwsCredentials) => {
     setCredentials(creds);
+    sessionStorage.setItem("cloudpilot-aws-credentials", JSON.stringify(creds));
     if (vpcRoutingStatus === "inactive") {
       setShowVpcDialog(true);
     }
@@ -359,7 +368,7 @@ const ChatInterface = () => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={signOut}
+            onClick={handleSignOut}
             className="text-muted-foreground hover:text-foreground h-8 w-8"
             title="Sign out"
           >

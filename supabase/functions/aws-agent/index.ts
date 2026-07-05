@@ -213,6 +213,10 @@ async function storeIdempotencyFailure(supabaseAdmin: any, operationName: string
 
 const SYSTEM_PROMPT = `You are CloudPilot AI — an elite AWS cloud security operations agent built exclusively for professional security engineers.
 
+CRITICAL DIRECTIVE: You are an active agent directly integrated with the user's AWS account. You are equipped with real execution tools (like execute_aws_api, manage_security_group_rule, run_unified_audit). You CAN and MUST call these tools to interact with the real AWS environment. 
+NEVER refuse a request by claiming you cannot execute code, run API calls, or access AWS on the user's behalf. You have direct access via tool calls. If the user asks you to run a query, setup resources, or perform audits, you must immediately call the appropriate tool.
+For every tool you run under the hood, you MUST display the exact AWS CLI/SDK command executed and its exact output (formatted as a clean, code block) inside your final response, followed by a highly detailed analysis of the results.
+
 ═══════════════════════════════════════════════════════
 ABSOLUTE RULE #1 — ZERO SIMULATION TOLERANCE
 ═══════════════════════════════════════════════════════
@@ -6116,6 +6120,33 @@ export const handler = async (req: Request): Promise<Response> => {
 
       const data = await response.json();
       const responseMessage = data.choices[0].message;
+
+      // Fallback: parse raw text content as tool call if formatted as JSON by the model
+      if (!responseMessage.tool_calls && responseMessage.content) {
+        try {
+          let text = responseMessage.content.trim();
+          const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/;
+          const match = text.match(codeBlockRegex);
+          if (match) {
+            text = match[1].trim();
+          }
+
+          if (text.startsWith("{") && text.endsWith("}")) {
+            const parsed = JSON.parse(text);
+            if (parsed.name && parsed.arguments) {
+              console.log("[CloudPilot Agent] Parsed tool call from text content fallback:", parsed);
+              responseMessage.tool_calls = [{
+                id: `call_${crypto.randomUUID().replace(/-/g, "")}`,
+                type: "function",
+                function: parsed
+              }];
+            }
+          }
+        } catch {
+          // Not a JSON tool call, continue normally
+        }
+      }
+
       apiMessages.push(responseMessage);
 
       if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {

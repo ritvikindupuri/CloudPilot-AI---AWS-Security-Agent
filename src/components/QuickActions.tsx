@@ -7,7 +7,7 @@ import {
   UserX, BellRing, Archive, Mail, ShieldCheck,
   BarChart3, Bell, Gauge, ScrollText, LayoutDashboard,
   Siren, Bug, ShieldAlert, KeyRound, Map,
-  Ghost, Skull, Wand2
+  Ghost, Skull, Wand2, ChevronDown, ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -499,6 +499,23 @@ const categoryBorderColors: Record<string, string> = {
 
 const QuickActions = ({ onAction, disabled, credentials }: QuickActionsProps) => {
   const [selectedAction, setSelectedAction] = useState<{prompt: string, label: string, requiredPermissions: string[]} | null>(null);
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({
+    AUDIT: false,
+    COMPLIANCE: true,
+    "ATTACK SIMULATION": true,
+    "INCIDENT RESPONSE": true,
+    GUARDDUTY: true,
+    REMEDIATION: true,
+    "REPORTING & ALERTS": true,
+    CLOUDWATCH: true,
+  });
+
+  const toggleCategory = (label: string) => {
+    setCollapsedCategories(prev => ({
+      ...prev,
+      [label]: !prev[label]
+    }));
+  };
 
   const handleActionClick = (action: {prompt: string, label: string, requiredPermissions: string[]}) => {
     setSelectedAction(action);
@@ -510,31 +527,51 @@ const QuickActions = ({ onAction, disabled, credentials }: QuickActionsProps) =>
       setSelectedAction(null);
     }
   };
+
   return (
     <>
-    <div className="space-y-5">
-      {categories.map((cat) => (
-        <div key={cat.label} className={`rounded-lg border ${categoryBorderColors[cat.label] ?? "border-border"} bg-card/40 p-3`}>
-          <p className={`text-[10px] font-mono tracking-widest uppercase mb-2.5 px-0.5 font-semibold ${cat.color}`}>
-            {cat.label}
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-            {cat.actions.map((action) => (
-              <Button
-                key={action.label}
-                variant="action"
-                size="xs"
-                onClick={() => handleActionClick(action as { prompt: string, label: string, requiredPermissions: string[] })}
-                disabled={disabled}
-                className="flex items-center gap-1.5 justify-start h-auto py-2 px-2.5 text-left"
-              >
-                <action.icon className="w-3 h-3 flex-shrink-0" />
-                <span className="truncate">{action.label}</span>
-              </Button>
-            ))}
+    <div className="space-y-4">
+      {categories.map((cat) => {
+        const isCollapsed = collapsedCategories[cat.label] ?? false;
+        return (
+          <div key={cat.label} className={`rounded-lg border ${categoryBorderColors[cat.label] ?? "border-border"} bg-card/40 overflow-hidden transition-all duration-200`}>
+            <button
+              type="button"
+              onClick={() => toggleCategory(cat.label)}
+              className="w-full flex items-center justify-between p-3 text-left hover:bg-muted/30 transition-colors focus:outline-none"
+            >
+              <span className={`text-[10px] font-mono tracking-widest uppercase font-semibold ${cat.color}`}>
+                {cat.label}
+              </span>
+              {isCollapsed ? (
+                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/60" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground/60" />
+              )}
+            </button>
+            
+            {!isCollapsed && (
+              <div className="p-3 pt-0 border-t border-border/10 animate-fade-in">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 mt-2">
+                  {cat.actions.map((action) => (
+                    <Button
+                      key={action.label}
+                      variant="action"
+                      size="xs"
+                      onClick={() => handleActionClick(action as { prompt: string, label: string, requiredPermissions: string[] })}
+                      disabled={disabled}
+                      className="flex items-center gap-1.5 justify-start h-auto py-2 px-2.5 text-left"
+                    >
+                      <action.icon className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">{action.label}</span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
       {selectedAction && (
         <QuickActionPermissionsDialog
