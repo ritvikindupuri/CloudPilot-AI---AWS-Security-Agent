@@ -22,8 +22,7 @@ function requireEnv(name: string): string {
 }
 
 function getGeminiApiKey(): string {
-  const key = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("LOVABLE_API_KEY");
-  return key || "dummy-gemini-key";
+  return "dummy-key";
 }
 
 const RUNTIME_CONFIG = {
