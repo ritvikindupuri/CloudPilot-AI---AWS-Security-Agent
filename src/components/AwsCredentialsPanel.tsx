@@ -56,7 +56,6 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
   const [exchanging, setExchanging] = useState(false);
   const [storeForGuardian, setStoreForGuardian] = useState(false);
   const [notificationEmail, setNotificationEmail] = useState("");
-  const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem("cloudpilot-gemini-api-key") || "");
 
   const handleSave = async () => {
     setExchanging(true);
@@ -153,11 +152,7 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
         }
       }
 
-      if (geminiApiKey.trim()) {
-        localStorage.setItem("cloudpilot-gemini-api-key", geminiApiKey.trim());
-      } else {
-        localStorage.removeItem("cloudpilot-gemini-api-key");
-      }
+      localStorage.removeItem("cloudpilot-gemini-api-key");
 
       setAccessKeyId("");
       setSecretAccessKey("");
@@ -304,28 +299,7 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">Gemini API Key</Label>
-                <div className="relative">
-                  <Input
-                    type={showSecret ? "text" : "password"}
-                    value={geminiApiKey}
-                    onChange={(e) => setGeminiApiKey(e.target.value)}
-                    placeholder="AI Studio API Key (AIzaSy...)"
-                    className="font-mono text-xs h-8 bg-muted border-border focus:border-primary/40 pr-8"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowSecret(!showSecret)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showSecret ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                  </button>
-                </div>
-                <p className="text-[9px] text-muted-foreground leading-tight mt-0.5">
-                  Direct routing to Google Gemini API (bypasses Lovable proxy limits).
-                </p>
-              </div>
+              {/* Gemini API Key is configured globally on the local Deno server environment */}
 
               {method === "access_key" && (
                 <div className="space-y-1">
