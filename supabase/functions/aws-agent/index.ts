@@ -1241,14 +1241,22 @@ async function classifyIntent(
     // Include last 3 messages for context
     const contextMessages = messages.slice(-3).map((m) => `${m.role}: ${m.content}`).join("\n");
 
-    const resp = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+    const isLovable = geminiApiKey.startsWith("AQ.");
+    const gatewayUrl = isLovable
+      ? "https://ai.gateway.lovable.dev/v1/chat/completions"
+      : "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+    const classifierModel = isLovable
+      ? "google/gemini-2.5-flash-lite"
+      : "gemini-1.5-flash";
+
+    const resp = await fetch(gatewayUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${geminiApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gemini-1.5-flash",
+        model: classifierModel,
         messages: [
           { role: "system", content: INTENT_CLASSIFIER_PROMPT },
           { role: "user", content: `Conversation context:\n${contextMessages}\n\nLatest user message: ${latestUserMsg}` },
@@ -6085,14 +6093,22 @@ export const handler = async (req: Request): Promise<Response> => {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const toolChoice = i === 0 ? "required" : "auto";
 
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+      const isLovable = resolvedGeminiKey.startsWith("AQ.");
+      const gatewayUrl = isLovable
+        ? "https://ai.gateway.lovable.dev/v1/chat/completions"
+        : "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+      const agentModel = isLovable
+        ? "google/gemini-2.5-flash"
+        : "gemini-1.5-pro";
+
+      const response = await fetch(gatewayUrl, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${resolvedGeminiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gemini-1.5-pro",
+          model: agentModel,
           messages: apiMessages,
           tools: filteredTools,
           tool_choice: toolChoice,
