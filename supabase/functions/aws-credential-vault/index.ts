@@ -69,7 +69,7 @@ export async function decryptValue(encryptedB64: string, userId: string): Promis
   return new TextDecoder().decode(decrypted);
 }
 
-serve(async (req) => {
+export const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
@@ -184,4 +184,8 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-});
+};
+
+if (import.meta.main) {
+  serve(handler);
+}

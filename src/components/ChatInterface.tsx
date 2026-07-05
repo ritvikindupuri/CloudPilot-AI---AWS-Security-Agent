@@ -38,8 +38,39 @@ const ChatInterface = () => {
     return localStorage.getItem("cloudpilot-vpc-status") === "requested" ? "requested" : "inactive";
   });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [subscriptionTier, setSubscriptionTier] = useState<string>("free");
 
   const { user, signOut } = useAuth();
+
+  useEffect(() => {
+    const fetchSubscription = async () => {
+      if (!user) return;
+      try {
+        const { data: membership } = await supabase
+          .from("org_members")
+          .select("org_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (membership?.org_id) {
+          const { data: sub } = await supabase
+            .from("subscriptions")
+            .select("plan_name, status")
+            .eq("org_id", membership.org_id)
+            .maybeSingle();
+
+          if (sub && sub.status === "active") {
+            setSubscriptionTier(sub.plan_name);
+          } else {
+            setSubscriptionTier("free");
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load subscription status:", err);
+      }
+    };
+    fetchSubscription();
+  }, [user]);
   const {
     conversations,
     loading: historyLoading,
@@ -182,6 +213,8 @@ const ChatInterface = () => {
         throw new Error("No active session. Please sign in again.");
       }
 
+      const customGeminiKey = localStorage.getItem("cloudpilot-gemini-api-key");
+
       const resp = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aws-agent`,
         {
@@ -200,6 +233,7 @@ const ChatInterface = () => {
             ],
             credentials: credentials.session,
             notificationEmail: null,
+            geminiApiKey: customGeminiKey || null,
           }),
         }
       );

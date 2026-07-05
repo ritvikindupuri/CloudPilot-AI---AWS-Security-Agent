@@ -55,24 +55,20 @@ describe("useAuth hook", () => {
     });
   });
 
-  it("should enforce email confirmation on signIn", async () => {
+  it("should not enforce email confirmation on signIn", async () => {
     (supabase.auth.signInWithPassword as any).mockResolvedValue({ data: { user: { email_confirmed_at: null } }, error: null });
-    (supabase.auth.signOut as any).mockResolvedValue({ error: null });
 
     const { result } = renderHook(() => useAuth());
 
-    let error;
-    try {
-      await act(async () => {
-        await result.current.signIn("test@example.com", "password123");
-      });
-    } catch (e: any) {
-      error = e;
-    }
+    await act(async () => {
+      await result.current.signIn("test@example.com", "password123");
+    });
 
-    expect(error).toBeDefined();
-    expect(error.message).toBe("Please verify your email address before signing in.");
-    expect(supabase.auth.signOut).toHaveBeenCalled();
+    expect(supabase.auth.signInWithPassword).toHaveBeenCalledWith({
+      email: "test@example.com",
+      password: "password123",
+    });
+    expect(supabase.auth.signOut).not.toHaveBeenCalled();
   });
 
   it("should call signUp", async () => {

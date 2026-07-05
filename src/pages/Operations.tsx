@@ -579,7 +579,7 @@ const Operations = () => {
               </Link>
             </Button>
             <Button variant="outline" size="sm" asChild>
-              <Link to="/">
+              <Link to="/app">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back to Chat
               </Link>

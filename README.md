@@ -14,22 +14,27 @@ Real-time AWS security operations. Connect your credentials to audit, investigat
 sequenceDiagram
     participant User
     participant Frontend as React Frontend
-    participant Edge as aws-agent
+    participant DB as Local Storage (Mock DB)
+    participant Gateway as Local Deno Gateway
+    participant Agent as aws-agent
     participant Classifier as Gemini 2.5 Flash Lite
-    participant Gateway as Gemini 2.5 Flash
+    participant LLM as Gemini 3.5 Flash
     participant AWS as AWS Account
 
-    User->>Frontend: Enter query and AWS credentials
-    Frontend->>Edge: Send prompt + session credentials
-    Edge->>Classifier: Classify intent from query
-    Classifier-->>Edge: Returns intent category
-    Edge->>Gateway: Forward prompt + filtered tools for intent
-    Gateway-->>Edge: Returns required AWS tool calls
-    Edge->>AWS: Executes AWS SDK calls via aws-executor
-    AWS-->>Edge: Returns API response
-    Edge->>Gateway: Provide API response context
-    Gateway-->>Edge: Synthesizes final analysis
-    Edge-->>Frontend: Streams Markdown response via SSE
+    User->>Frontend: Enter query & credentials
+    Frontend->>DB: Save credentials & context
+    Frontend->>Gateway: Forward query & credentials
+    Gateway->>Agent: Route to Deno aws-agent
+    Agent->>Classifier: Classify query intent
+    Classifier-->>Agent: Returns intent category
+    Agent->>LLM: Forward query + intent-filtered tools
+    LLM-->>Agent: Returns required AWS tool calls
+    Agent->>AWS: Executes real AWS SDK calls (aws-executor)
+    AWS-->>Agent: Returns AWS API JSON response
+    Agent->>LLM: Provide API response context
+    LLM-->>Agent: Synthesizes final security analysis
+    Agent-->>Gateway: Returns streaming SSE chunks
+    Gateway-->>Frontend: Streams Markdown response
     Frontend-->>User: Displays real-time insights
 ```
 <div align="center">
@@ -39,11 +44,12 @@ sequenceDiagram
 ### Architecture Explanation
 
 1. **User Interaction**: The user accesses the React Frontend, inputs their AWS query (e.g., "Find exposed S3 buckets"), and provides their AWS credentials (either Access Keys or an AssumeRole ARN).
-2. **Request Handling**: The frontend securely sends the prompt and credentials to the Supabase Edge Function (`aws-agent`), which acts as the backend orchestrator.
+2. **Request Handling**: The frontend securely sends the prompt and credentials to the Local Deno Gateway (`local-server.ts`), which mounts and executes the `aws-agent` module locally on port 54321.
 3. **Intent Classification**: Before engaging the main AI model, `aws-agent` sends the query to Gemini 2.5 Flash Lite for intent classification. The classifier categorizes the query into one of 9 domains (e.g., `security_audit`, `cost_analysis`, `drift_detection`), and only the relevant tool subset is selected for the main agent. This reduces token usage by 40-70% on focused queries.
-4. **AI Evaluation**: The Edge Function builds the system context (enforcing "zero simulation tolerance") and communicates with Gemini 2.5 Flash via the Lovable AI Gateway, providing only the filtered tool definitions for the classified intent.
-5. **AWS Integration**: When the AI determines it needs data, it requests a tool call to `execute_aws_api`. The Edge Function dynamically instantiates an AWS SDK client using the user's provided credentials and executes the requested API call against the user's real AWS account via the `aws-executor` proxy.
-6. **Synthesis & Streaming**: The real API responses are passed back to the AI model. The model synthesizes an executive summary, findings table, detailed analysis, and exact CLI remediation commands. The Edge Function then streams this synthesized response back to the React Frontend for real-time display via SSE.
+4. **AI Evaluation**: The local Deno router builds the system context (enforcing "zero simulation tolerance") and communicates with Gemini 3.5 Flash via the Google Gemini API, providing only the filtered tool definitions for the classified intent.
+5. **AWS Integration**: When the AI determines it needs data, it requests a tool call to `execute_aws_api`. The local gateway dynamically instantiates an AWS SDK client using the user's provided credentials and executes the requested API call against the user's real AWS account via the `aws-executor` module.
+6. **Synthesis & Streaming**: The real AWS API responses are passed back to the AI model. The model synthesizes an executive summary, findings table, detailed analysis, and exact CLI remediation commands. The gateway streams this synthesized response back to the React Frontend for real-time display via SSE.
+7. **Database Storage**: Conversations, user sessions, runbooks, compliance configurations, and drift baselines are persisted completely client-side inside the browser's `localStorage` mock client, guaranteeing zero setup and 100% offline data privacy.
 
 ---
 
@@ -54,7 +60,7 @@ CloudPilot AI employs a lightweight LLM-based intent router that classifies each
 | Component | Model | Purpose |
 |-----------|-------|---------|
 | **Intent Classifier** | Gemini 2.5 Flash Lite | Single-shot query classification into 9 intent categories (~100-200ms) |
-| **Main Agent** | Gemini 2.5 Flash | Multi-iteration agentic loop with filtered tool set (up to 15 iterations) |
+| **Main Agent** | Gemini 3.5 Flash | Multi-iteration agentic loop with filtered tool set (up to 15 iterations) |
 
 ### Intent Categories
 
@@ -70,7 +76,7 @@ CloudPilot AI employs a lightweight LLM-based intent router that classifies each
 | `direct_query` | 1 tool | "List my S3 buckets" |
 | `general` | All 15 tools | Ambiguous or multi-domain queries |
 
-### Why Gemini 2.5 Flash?
+### Why Gemini 3.5 Flash?
 
 - **Lowest latency** among models with strong tool-calling capabilities — critical for an agentic loop with up to 15 iterations
 - **High tool-calling accuracy** with structured JSON schemas at sub-second inference times
@@ -153,10 +159,10 @@ For full details on input validation, rate limiting behavior, and practical impl
 ## Tech Stack
 
 - **Frontend:** React, TypeScript, Vite, Tailwind CSS, shadcn-ui, Framer Motion
-- **Backend / API:** Supabase Edge Functions (Deno), 8 specialized edge functions
-- **AI Models:** Google Gemini 2.5 Flash (main agent) + Gemini 2.5 Flash Lite (intent classifier) via Lovable AI Gateway
+- **Backend / API:** Local Deno Gateway (`local-server.ts`), running Edge Function modules locally on port 54321
+- **Database / Auth:** Mocked locally using browser `localStorage` and client-side session handlers
+- **AI Models:** Google Gemini 3.5 Flash (main agent) + Gemini 2.5 Flash Lite (intent classifier) via the Google Gemini API
 - **Cloud Integration:** AWS SDK for JavaScript v3 (35+ services)
-- **Scheduling:** PostgreSQL pg_cron + pg_net for automated guardian polling
 
 ---
 
@@ -167,13 +173,12 @@ Follow these steps to run the application locally.
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) & npm installed (or [Bun](https://bun.sh/) as an alternative package manager).
-- An active [Supabase](https://supabase.com/) project (if deploying edge functions locally).
+- No database setup or Docker installation is needed! Everything runs locally on your machine.
 
 ### 1. Clone & Install Dependencies
 
 ```sh
 # Clone the repository
-
 git clone <https://github.com/ritvikindupuri/aws-guardian-buddy.git>
 cd <aws-guardian-buddy>
 
@@ -185,7 +190,7 @@ bun install
 
 ### 2. Configure Environment Variables
 
-Create a `.env` file in the root directory (if not present) and add any required frontend environment variables. Ensure the Supabase Edge Function also has `LOVABLE_API_KEY` configured in its environment.
+Create a `.env` file in the root directory (if not present) and add any required frontend environment variables. Ensure the Supabase Edge Function also has `GEMINI_API_KEY` configured in its environment.
 
 ### 3. Start the Development Server
 
@@ -290,3 +295,24 @@ If you prefer to build a custom least-privilege role instead of using `Administr
 | **Task Automator (Remediation)** | Varies per runbook (e.g., `s3:PutBucketPublicAccessBlock`, `ec2:RevokeSecurityGroupIngress`) |
 | **Email Alert Engine** | `ses:GetIdentityVerificationAttributes`, `ses:SendEmail`, `sns:ListSubscriptionsByTopic` |
 | **Audit Archive Verification** | `dynamodb:DescribeTable`, `s3:GetBucketObjectLockConfiguration` |
+
+---
+
+## Subscription Plans & Execution Limits
+
+CloudPilot AI implements tiered feature restrictions and API execution limits managed via real Stripe subscriptions:
+
+| Feature / Limit | Free Plan | Pro Plan ($49/seat/mo) | Enterprise Plan ($199/seat/mo) |
+|-----------------|-----------|------------------------|-------------------------------|
+| **API Execution Limit** | **5 queries per calendar day** | **Unlimited** | **Unlimited** |
+| **AWS Account Support** | Single AWS Account | Single AWS Account | Multi-Account & Cross-Account Role Auditing |
+| **VPC Routing Support** | **Standard** | **High-throughput** | **High-throughput** |
+| **Threat Detection / Alerts** | Disabled | **Advanced** | **Advanced** |
+| **SSO & SAML Login** | Disabled | Disabled | **Enabled** |
+| **Audit Trails (WORM)** | Disabled | Disabled | **Enabled** (Immutable logs) |
+
+### How Plan Restrictions are Enforced:
+1. **API Execution Limits**: If a user on the Free Plan exceeds 5 queries in a day, the backend `aws-agent` Deno function intercepts the request and returns an HTTP 403 error: *"You have reached the limit of 5 API Executions per day on the Free Plan. Please upgrade your plan in the Billing section to continue."*
+2. **VPC Routing**: Eligible and configurable for all plans.
+3. **SSO & SAML Authentication**: Managed via Supabase Auth and restricted during SSO login flows.
+

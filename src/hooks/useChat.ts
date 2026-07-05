@@ -278,6 +278,8 @@ export const useChat = (conversationId: string | null, notificationEmail?: strin
           throw new Error("No active session. Please sign in again.");
         }
 
+        const customGeminiKey = localStorage.getItem("cloudpilot-gemini-api-key");
+
         const resp = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aws-agent`,
           {
@@ -292,6 +294,7 @@ export const useChat = (conversationId: string | null, notificationEmail?: strin
               credentials: sessionCreds,
               notificationEmail: notificationEmail || null,
               conversationId: targetConvId || null,
+              geminiApiKey: customGeminiKey || null,
             }),
           }
         );

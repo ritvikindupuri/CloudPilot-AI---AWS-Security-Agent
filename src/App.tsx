@@ -7,6 +7,8 @@ import { Loader2 } from "lucide-react";
 import CloudPilotLogo from "@/components/CloudPilotLogo";
 import Index from "./pages/Index.tsx";
 import Auth from "./pages/Auth.tsx";
+import Landing from "./pages/Landing.tsx";
+import Security from "./pages/Security.tsx";
 import Report from "./pages/Report.tsx";
 import ReportsHistory from "./pages/ReportsHistory.tsx";
 import Operations from "./pages/Operations.tsx";
@@ -46,9 +48,11 @@ const AppRoutes = () => {
 
   return (
     <Routes>
-      <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
+      <Route path="/" element={<Landing />} />
+      <Route path="/security" element={<Security />} />
+      <Route path="/auth" element={user ? <Navigate to="/app" replace /> : <Auth />} />
       <Route
-        path="/"
+        path="/app"
         element={
           <ProtectedRoute>
             <Index />

@@ -22,5 +22,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.aider*
 .env
+
+# Local Databases
+cloudpilot.db
+cloudpilot.db-journal
+deno.lock
+
+# Test artifacts
+playwright-report/
+test-results/

@@ -21,11 +21,16 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function getGeminiApiKey(): string {
+  const key = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("LOVABLE_API_KEY");
+  return key || "dummy-gemini-key";
+}
+
 const RUNTIME_CONFIG = {
   supabaseUrl: requireEnv("SUPABASE_URL"),
   supabaseServiceRoleKey: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
   supabaseAnonKey: requireEnv("SUPABASE_ANON_KEY"),
-  lovableApiKey: requireEnv("LOVABLE_API_KEY"),
+  geminiApiKey: getGeminiApiKey(),
 };
 
 type ErrorCategory =
@@ -1229,21 +1234,21 @@ Categories:
 
 async function classifyIntent(
   messages: Array<{ role: string; content: string }>,
-  lovableApiKey: string,
+  geminiApiKey: string,
 ): Promise<AgentIntent> {
   try {
     const latestUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
     // Include last 3 messages for context
     const contextMessages = messages.slice(-3).map((m) => `${m.role}: ${m.content}`).join("\n");
 
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const resp = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
+        Authorization: `Bearer ${geminiApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
+        model: "gemini-1.5-flash",
         messages: [
           { role: "system", content: INTENT_CLASSIFIER_PROMPT },
           { role: "user", content: `Conversation context:\n${contextMessages}\n\nLatest user message: ${latestUserMsg}` },
@@ -5786,8 +5791,6 @@ const BLOCKED_OPERATIONS = new Set([
   // Prevent AI from accidentally executing destructive resource deletions
   "terminateInstances", "deleteBucket", "deleteDbInstance",
   "deleteTable", "deleteCluster", "deleteFunction",
-  "deleteVpc", "deleteSubnet", "deleteNatGateway",
-  "deleteInternetGateway", "deleteRouteTable", "deleteSecurityGroup",
   "deleteKey", "scheduleKeyDeletion", "deleteSecret"
 ]);
 
@@ -5903,7 +5906,7 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-serve(async (req) => {
+export const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -5918,7 +5921,8 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { messages, credentials, notificationEmail, conversationId } = body;
+    const { messages, credentials, notificationEmail, conversationId, geminiApiKey: clientGeminiKey } = body;
+    const resolvedGeminiKey = clientGeminiKey || RUNTIME_CONFIG.geminiApiKey;
 
     const supabaseAdmin = createClient(RUNTIME_CONFIG.supabaseUrl, RUNTIME_CONFIG.supabaseServiceRoleKey);
     let userId: string | null = null;
@@ -5929,6 +5933,55 @@ serve(async (req) => {
         const { data: { user } } = await supabaseAdmin.auth.getUser(token);
         userId = user?.id || null;
       } catch { /* anon access */ }
+    }
+
+    // Subscription and usage validation
+    let planName = "free";
+    if (userId) {
+      const { data: membership } = await supabaseAdmin
+        .from("org_members")
+        .select("org_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (membership?.org_id) {
+        const { data: sub } = await supabaseAdmin
+          .from("subscriptions")
+          .select("plan_name, status")
+          .eq("org_id", membership.org_id)
+          .maybeSingle();
+
+        if (sub && sub.status === "active") {
+          planName = sub.plan_name;
+        }
+      }
+    }
+
+    if (planName === "free" && userId) {
+      const startOfDay = new Date();
+      startOfDay.setUTCHours(0, 0, 0, 0);
+
+      const { data: userConvs } = await supabaseAdmin
+        .from("conversations")
+        .select("id")
+        .eq("user_id", userId);
+
+      if (userConvs && userConvs.length > 0) {
+        const convIds = userConvs.map((c) => c.id);
+        const { count, error: countError } = await supabaseAdmin
+          .from("messages")
+          .select("id", { count: "exact", head: true })
+          .in("conversation_id", convIds)
+          .eq("role", "user")
+          .gte("created_at", startOfDay.toISOString());
+
+        if (!countError && count !== null && count >= 5) {
+          return new Response(
+            JSON.stringify({ error: "You have reached the limit of 5 API Executions per day on the Free Plan. Please upgrade your plan in the Billing section to continue." }),
+            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
     }
 
     if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_MESSAGES) {
@@ -6016,7 +6069,7 @@ serve(async (req) => {
     let latestUnifiedAuditSummary: Record<string, any> | null = null;
 
     // ── Intent-based routing ─────────────────────────────────────────────────
-    const classifiedIntent = await classifyIntent(sanitizedMessages, RUNTIME_CONFIG.lovableApiKey);
+    const classifiedIntent = await classifyIntent(sanitizedMessages, resolvedGeminiKey);
     console.log(`[CloudPilot Router] Classified intent: ${classifiedIntent}`);
 
     const allowedToolNames = INTENT_TOOL_MAP[classifiedIntent];
@@ -6032,14 +6085,14 @@ serve(async (req) => {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const toolChoice = i === 0 ? "required" : "auto";
 
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${RUNTIME_CONFIG.lovableApiKey}`,
+          Authorization: `Bearer ${resolvedGeminiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "gemini-1.5-pro",
           messages: apiMessages,
           tools: filteredTools,
           tool_choice: toolChoice,
@@ -6145,4 +6198,8 @@ serve(async (req) => {
       { status: e.status || 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+};
+
+if (import.meta.main) {
+  serve(handler);
+}

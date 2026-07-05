@@ -5,13 +5,21 @@
 
 ---
 
+> [!IMPORTANT]
+> ## ARCHITECTURAL UPDATE: Self-Contained Local Mode (No Supabase Required)
+> CloudPilot AI has been migrated to run in a fully local, self-contained architecture. While this document describes the enterprise-grade multi-tenant Supabase architecture:
+> 1. **Local Database & Auth Mocking**: All tables (conversations, messages, runbooks, compliance baselines) and auth flows are intercepted by a mock database client and stored directly in the browser's `localStorage`, linked to a default local virtual user profile.
+> 2. **Local Deno Server Gateway**: A local Deno gateway (`local-server.ts`) runs on port `54321` via a lightweight local `deno-bin` wrapper. It mounts, parses, and executes all edge function logic locally on your machine with zero Docker or cloud database setup required.
+> 3. **CORS Bypass**: The custom Gemini API Key and AWS session credentials are sent in request payloads, bypassing CORS preflight validation and eliminating network routing restrictions.
+
+
 ## Executive Summary
 
 CloudPilot AI is an elite AWS cloud security operations agent designed explicitly for professional security engineers. It operates as a real-time conversational interface where users can interactively audit, investigate, and remediate AWS cloud infrastructure using natural language queries.
 
 Unlike traditional cloud security posture management (CSPM) tools or purely generative AI assistants, CloudPilot AI employs a strict **"Zero Simulation Tolerance"** policy. Every insight, security finding, and configuration analysis provided by the agent is backed by real, authenticated AWS API calls executed securely on behalf of the user. This guarantees that the intelligence is accurate, contextual, and actionable.
 
-The application is built on a modern, highly responsive stack. The frontend leverages React, Vite, Tailwind CSS, and shadcn-ui for a seamless user experience, incorporating features like real-time chat, AWS credential management (including **Pre-Flight IAM Boundary Checks** that render a capability checklist), chat history persistence, and actionable finding panels. The backend is orchestrated by Supabase Edge Functions running on Deno, which seamlessly broker communications between the React client, Google's Gemini 2.5 Flash (via Lovable AI Gateway), and the user's AWS account via the AWS SDK. A lightweight **Intent Router** powered by Gemini 2.5 Flash Lite classifies each query before the main agent loop, selecting only the relevant tool subset to reduce token usage and improve accuracy.
+The application is built on a modern, highly responsive stack. The frontend leverages React, Vite, Tailwind CSS, and shadcn-ui for a seamless user experience, incorporating features like real-time chat, AWS credential management (including **Pre-Flight IAM Boundary Checks** that render a capability checklist), chat history persistence, and actionable finding panels. The backend is orchestrated by Supabase Edge Functions running on Deno, which seamlessly broker communications between the React client, Google's Gemini 3.5 Flash (via the Gemini API), and the user's AWS account via the AWS SDK. A lightweight **Intent Router** powered by Gemini 2.5 Flash Lite classifies each query before the main agent loop, selecting only the relevant tool subset to reduce token usage and improve accuracy.
 
 For security operations with absolute privacy requirements, the backend supports configurations to use **PrivateLink / VPC Endpoints**, ensuring that AWS API calls never route over the public internet. By configuring Private DNS in your VPC endpoints, the AWS SDK will automatically route traffic locally. Additionally, all API tool executions perform **WORM Audit Logging**, directly streaming request payloads into an immutable S3 bucket configured for Write-Once-Read-Many storage.
 
@@ -95,8 +103,8 @@ graph TB
     end
 
     subgraph "AI Layer"
-        E[Lovable AI Gateway]
-        F[Google Gemini 2.5 Flash - Main Agent]
+        E[Google Gemini API]
+        F[Google Gemini 3.5 Flash - Main Agent]
         F2[Google Gemini 2.5 Flash Lite - Intent Classifier]
     end
 
@@ -136,7 +144,7 @@ This diagram illustrates the complete four-layer architecture of CloudPilot AI a
 - **Client Layer:** The React frontend communicates with three backend services. It sends user queries and AWS session credentials to the `aws-agent` edge function over HTTPS with a Bearer token. It reads and writes chat history (conversations and messages) directly to the Supabase Database, protected by Row-Level Security (RLS) policies that scope all queries to the authenticated user. It manages authentication state through Supabase Auth. It also calls `aws-exchange-credentials` directly for STS credential exchange before any agent interaction.
 
 - **Backend Layer:** Ten edge functions collaborate to deliver the full feature set:
-  - **`aws-agent`** (1,337 lines) — The central orchestrator. Receives the user query, classifies intent using an LLM-based router (Gemini 2.5 Flash Lite), selects only the relevant tool subset for the classified intent, manages the agentic loop with the main AI model (Gemini 2.5 Flash), dispatches tool calls to `aws-agent-tools`, and streams the final response back as SSE.
+  - **`aws-agent`** (1,337 lines) — The central orchestrator. Receives the user query, classifies intent using an LLM-based router (Gemini 2.5 Flash Lite), selects only the relevant tool subset for the classified intent, manages the agentic loop with the main AI model (Gemini 3.5 Flash), dispatches tool calls to `aws-agent-tools`, and streams the final response back as SSE.
   - **`aws-agent-tools`** (75 lines) — A thin router that classifies incoming tool calls and dispatches them in parallel to either `aws-agent-scanner` or `aws-agent-ops`.
   - **`aws-agent-scanner`** (2,987 lines) — Handles `run_unified_audit`, `run_cost_anomaly_scan`, `manage_cost_rule`, `manage_drift_baseline`, `run_drift_detection`, and `execute_aws_api`. Contains the unified audit engine, cost anomaly detection, drift detection, and raw AWS API execution logic.
   - **`aws-agent-ops`** (4,572 lines) — Handles `manage_runbook_execution`, `manage_event_response_policy`, `replay_cloudtrail_events`, `run_org_query`, `manage_org_operation`, `manage_security_group_rule`, `manage_iam_access`, `run_attack_simulation`, and `run_evasion_test`. Contains the operational automation, org-wide queries, security group mutations, IAM automation, attack simulation, and evasion testing logic.
@@ -147,7 +155,7 @@ This diagram illustrates the complete four-layer architecture of CloudPilot AI a
   - **`aws-credential-vault`** (170 lines) — The AES-256-GCM credential encryption/decryption service. Uses PBKDF2 with 100,000 iterations to derive per-user encryption keys from the service role key. Handles `encrypt_and_store` (for client credential submission) and `decrypt` (for guardian-scheduler autonomous scans). See Section 34 for full details.
   - **`webhook-notify`** (250 lines) — The external notification dispatcher. Sends Guardian alerts, auto-fix notifications, drift events, and cost anomalies to Slack (Block Kit), PagerDuty (Events API v2), or generic webhook endpoints. Manages webhook registration, listing, and deletion. See Section 36 for full details.
 
-- **AI Layer:** The Lovable AI Gateway proxies requests to two Google Gemini models. The **Intent Classifier** uses Gemini 2.5 Flash Lite (fastest, cheapest) for a single classification call that determines which tool subset to activate. The **Main Agent** uses Gemini 2.5 Flash (balanced speed and capability) for the multi-iteration agentic loop with tool calling. This two-model architecture reduces token usage by 40-70% on focused queries by excluding irrelevant tools from the context.
+- **AI Layer:** The Google Gemini API receives requests for two Google Gemini models. The **Intent Classifier** uses Gemini 2.5 Flash Lite (fastest, cheapest) for a single classification call that determines which tool subset to activate. The **Main Agent** uses Gemini 3.5 Flash (balanced speed and capability) for the multi-iteration agentic loop with tool calling. This two-model architecture reduces token usage by 40-70% on focused queries by excluding irrelevant tools from the context.
 
 - **AWS Layer:** The user's real AWS account, accessed via AWS SDK v3 through the `aws-executor` proxy using temporary session credentials. The agent can interact with 35+ security-relevant services.
 
@@ -168,7 +176,7 @@ This diagram illustrates the complete four-layer architecture of CloudPilot AI a
 | `guardian-event-processor` | Deno Edge Function (499 lines) | Real-time CloudTrail event reaction and auto-fix |
 | Supabase Auth | Supabase Auth (email/password) | User registration, login, session management |
 | Supabase Database | PostgreSQL + RLS | Chat history, audit logs, cache, idempotency keys |
-| Lovable AI Gateway | Gateway proxy | Routes to Gemini 2.5 Flash Lite (intent classifier) and Gemini 2.5 Flash (main agent) |
+| Google Gemini API | Model API | Serves Gemini 2.5 Flash Lite (intent classifier) and Gemini 3.5 Flash (main agent) |
 | AWS Account | AWS SDK v3 (35+ services) | Real infrastructure data, configuration states, resource management |
 
 ---
@@ -186,7 +194,7 @@ sequenceDiagram
     participant Router as aws-agent-tools
     participant Scanner as aws-agent-scanner
     participant Executor as aws-executor
-    participant AI as Gemini 2.5 Flash via AI Gateway
+    participant AI as Gemini 3.5 Flash via AI Gateway
     participant AWS as User AWS Account
 
     Note over User,AWS: Example - Audit all S3 buckets for public access
@@ -393,6 +401,30 @@ Attack simulations require **write permissions** for creating test resources (IA
 
 ---
 
+## Subscription Plans & Execution Limits
+
+CloudPilot AI features a strict subscription tier validation and daily execution enforcement architecture integrated with Supabase database schemas and Stripe webhooks:
+
+### 1. Database Schema
+* **`subscriptions` Table**: Stores the active subscription state for each organization (`org_id`). Fields include `plan_name` (e.g. `'free'`, `'pro'`, `'enterprise'`), `status` (e.g. `'active'`, `'canceled'`), and `stripe_subscription_id`.
+* **`org_members` Table**: Maps users (`user_id`) to their respective organization (`org_id`).
+* **`messages` Table**: Persists user and assistant messages linked to the respective `conversation_id`.
+
+### 2. Backend Enforcement (`aws-agent` Edge Function)
+Upon receiving a user query, the `aws-agent` orchestrator performs the following backend validations:
+1. **User Identity Resolution**: Retrieves the authenticated `userId` from the bearer authorization token.
+2. **Subscription Lookup**: Resolves the user's active organization ID and queries their subscription record.
+3. **Execution Limit Enforcer**:
+   * If the resolved plan is `'free'`, it queries the `messages` table to count the number of user role queries sent under their conversation history in the current UTC calendar day.
+   * If the message count is **5 or higher**, it aborts the generation immediately and returns an HTTP 403 response with an error payload containing: *"You have reached the limit of 5 API Executions per day on the Free Plan. Please upgrade your plan in the Billing section to continue."*
+
+### 3. Frontend Controls (`ChatInterface.tsx`)
+* **State Management**: The client fetches the user's active plan tier on startup and saves it to the `subscriptionTier` state.
+* **VPC Routing**: Eligible and configurable for all plans.
+
+
+---
+
 ## 4. STS Credential Exchange — Zero Raw Key Transmission
 
 The credential configuration described in Section 3 relies on a critical security mechanism: raw AWS credentials **never reach the AI agent**. This section details the dedicated `aws-exchange-credentials` edge function that implements this protocol.
@@ -532,14 +564,14 @@ The UI follows a **"Tactical Clarity"** design philosophy—dark charcoal backgr
 
 The frontend architecture described in Section 5 communicates primarily with a single backend entry point: the `aws-agent` edge function. This section details its internal logic, system prompt engineering, and agentic loop mechanics.
 
-The `aws-agent` edge function (`supabase/functions/aws-agent/index.ts`, 1,337 lines) runs on Deno, guaranteeing ephemeral, isolated compute per request. It employs a **two-model architecture**: a fast intent classifier (Gemini 2.5 Flash Lite) determines the query domain, followed by the main agentic model (Gemini 2.5 Flash) operating with only the relevant tool subset.
+The `aws-agent` edge function (`supabase/functions/aws-agent/index.ts`, 1,337 lines) runs on Deno, guaranteeing ephemeral, isolated compute per request. It employs a **two-model architecture**: a fast intent classifier (Gemini 2.5 Flash Lite) determines the query domain, followed by the main agentic model (Gemini 3.5 Flash) operating with only the relevant tool subset.
 
 ### Core Responsibilities
 
 1. **Input Validation** — Validates message arrays (max 100), content lengths (max 50,000 chars), credential formats via regex, and requires `sessionToken`
 2. **Intent Classification** — Uses Gemini 2.5 Flash Lite for a single-shot classification of user intent into one of 9 categories, selecting only the relevant tool subset
 3. **System Prompt Injection** — Constructs the AI context with Zero Simulation Tolerance rules, tool usage protocols (scoped to classified intent), attack simulation lifecycle, output format mandates, S3 archival instructions, and SNS notification instructions
-4. **Agentic Tool-Call Loop** — Up to 15 iterations of AI-tool interactions using Gemini 2.5 Flash with the filtered tool set, dispatching all tool calls to `aws-agent-tools` in batched requests
+4. **Agentic Tool-Call Loop** — Up to 15 iterations of AI-tool interactions using Gemini 3.5 Flash with the filtered tool set, dispatching all tool calls to `aws-agent-tools` in batched requests
 5. **SSE Streaming** — Streams the final Markdown response as 30-character chunks at 8ms intervals
 
 ### Intent Router — LLM-Based Tool Selection
@@ -571,7 +603,7 @@ flowchart TD
     C -- event_automation --> J[3 tools selected]
     C -- direct_query --> K[1 tool selected]
     C -- general --> L[All 15 tools]
-    D --> M[Gemini 2.5 Flash Main Agentic Loop with filtered tools]
+    D --> M[Gemini 3.5 Flash Main Agentic Loop with filtered tools]
     E --> M
     F --> M
     G --> M
@@ -594,17 +626,17 @@ This diagram shows the two-stage model architecture:
 
 2. **Tool Filtering:** The classified intent maps to a pre-defined tool subset via `INTENT_TOOL_MAP`. For example, a cost query only sees `execute_aws_api`, `run_cost_anomaly_scan`, and `manage_cost_rule` — 3 tools instead of 15. This reduces the tool definition tokens by ~80% for focused queries.
 
-3. **Main Agent:** Gemini 2.5 Flash receives the full system prompt, conversation history, and the **filtered** tool set. It then enters the standard agentic loop (up to 15 iterations).
+3. **Main Agent:** Gemini 3.5 Flash receives the full system prompt, conversation history, and the **filtered** tool set. It then enters the standard agentic loop (up to 15 iterations).
 
-**Why Gemini 2.5 Flash Was Chosen:**
+**Why Gemini 3.5 Flash Was Chosen:**
 
 The model selection for CloudPilot AI was driven by three operational requirements specific to an agentic security tool:
 
-- **Latency sensitivity:** Security operations demand fast response times. Gemini 2.5 Flash provides the lowest latency among models with strong tool-calling capabilities, critical for an agentic loop that may iterate up to 15 times per query. Each iteration adds round-trip latency, so a slower model (e.g., GPT-5 or Gemini 2.5 Pro) would compound delays across iterations, making complex audits impractical.
+- **Latency sensitivity:** Security operations demand fast response times. Gemini 3.5 Flash provides the lowest latency among models with strong tool-calling capabilities, critical for an agentic loop that may iterate up to 15 times per query. Each iteration adds round-trip latency, so a slower model (e.g., GPT-5 or Gemini 2.5 Pro) would compound delays across iterations, making complex audits impractical.
 
-- **Tool-calling accuracy at scale:** CloudPilot exposes 15 complex tools with nested JSON schemas. Gemini 2.5 Flash demonstrates high accuracy in structured tool-call generation while maintaining sub-second inference times — a balance that larger models achieve at 3-5x the cost and latency.
+- **Tool-calling accuracy at scale:** CloudPilot exposes 15 complex tools with nested JSON schemas. Gemini 3.5 Flash demonstrates high accuracy in structured tool-call generation while maintaining sub-second inference times — a balance that larger models achieve at 3-5x the cost and latency.
 
-- **Cost efficiency for high-volume usage:** Security teams run dozens of queries per session, each consuming multiple tool-call iterations. Gemini 2.5 Flash costs ~80% less per token than Pro-tier models, making sustained usage economically viable. The two-model architecture further optimizes this: Gemini 2.5 Flash Lite (the cheapest, fastest tier) handles the single-shot classification at ~10x lower cost, while Flash handles the reasoning-intensive agentic loop.
+- **Cost efficiency for high-volume usage:** Security teams run dozens of queries per session, each consuming multiple tool-call iterations. Gemini 3.5 Flash costs ~80% less per token than Pro-tier models, making sustained usage economically viable. The two-model architecture further optimizes this: Gemini 2.5 Flash Lite (the cheapest, fastest tier) handles the single-shot classification at ~10x lower cost, while Flash handles the reasoning-intensive agentic loop.
 
 - **Sufficient reasoning depth:** While Pro-tier models offer marginally better reasoning on ambiguous queries, CloudPilot's system prompt and tool-call protocols are highly structured — the model follows deterministic workflows rather than open-ended reasoning. This structured context compensates for any reasoning gap, making Flash's capability level the optimal cost-performance sweet spot.
 
@@ -654,8 +686,8 @@ flowchart TD
     B3 --> C[Construct system prompt + filtered tools + credential context]
     C --> D[Iteration i = 0]
     D --> E{i == 0}
-    E -- Yes --> F[Call Gemini 2.5 Flash with tool_choice required]
-    E -- No --> G[Call Gemini 2.5 Flash with tool_choice auto]
+    E -- Yes --> F[Call Gemini 3.5 Flash with tool_choice required]
+    E -- No --> G[Call Gemini 3.5 Flash with tool_choice auto]
     F --> H{Response has tool_calls}
     G --> H
     H -- Yes --> I[Batch ALL tool calls to aws-agent-tools]
@@ -691,7 +723,7 @@ This flowchart details the exact decision logic inside the agentic loop, includi
 
 4. **Context Construction:** The 575-line system prompt is combined with sanitized conversation history, a credential context string showing the masked key and active region, and the **filtered** tool definitions.
 
-5. **Iteration Control:** The loop runs up to 15 iterations (`MAX_ITERATIONS = 15`). On iteration 0, `tool_choice` is `"required"`. On all subsequent iterations, `tool_choice` is `"auto"`. The main model is Gemini 2.5 Flash.
+5. **Iteration Control:** The loop runs up to 15 iterations (`MAX_ITERATIONS = 15`). On iteration 0, `tool_choice` is `"required"`. On all subsequent iterations, `tool_choice` is `"auto"`. The main model is Gemini 3.5 Flash.
 
 6. **Batched Tool Dispatch:** When the AI returns tool calls, ALL calls in the response are sent in a single POST to `aws-agent-tools`. This is a key architectural decision — it avoids multiple round trips and enables the router to parallelize scanner and ops calls.
 
@@ -3253,7 +3285,7 @@ This section tracks the enterprise readiness status of each major capability are
 
 ## 45. Conclusion
 
-CloudPilot AI represents a significant advancement in applied generative AI for cloud security operations. By bridging the reasoning capabilities of Google's Gemini 2.5 Flash with the strict, deterministic execution of real AWS APIs across 35+ services, it eliminates the "hallucination" problem common in standard chat assistants through its uncompromising Zero Simulation Tolerance policy. The two-model architecture — Gemini 2.5 Flash Lite for intent classification and Gemini 2.5 Flash for the main agent — optimizes for both speed and accuracy, reducing token usage by 40-70% on focused queries.
+CloudPilot AI represents a significant advancement in applied generative AI for cloud security operations. By bridging the reasoning capabilities of Google's Gemini 3.5 Flash with the strict, deterministic execution of real AWS APIs across 35+ services, it eliminates the "hallucination" problem common in standard chat assistants through its uncompromising Zero Simulation Tolerance policy. The two-model architecture — Gemini 2.5 Flash Lite for intent classification and Gemini 3.5 Flash for the main agent — optimizes for both speed and accuracy, reducing token usage by 40-70% on focused queries.
 
 The architecture is meticulously designed for security at every layer: STS credential exchange ensures raw keys never reach the agent (Section 4); AES-256-GCM encryption with PBKDF2-derived per-user keys protects stored credentials at rest (Section 34); six defense-in-depth gates validate every tool call (Section 10); IAM blocked actions prevent privilege escalation through automation (Section 11); triple-sink audit logging provides forensic-grade accountability (Section 12); and TOTP-based MFA enrollment adds a second authentication factor (Section 36).
 

@@ -34,8 +34,8 @@ const PLANS = [
     features: [
       "5 API Executions / day",
       "Single AWS Account",
+      "VPC Routing (Standard)",
       "Basic Security Scans",
-      "Community Support",
     ],
   },
   {
@@ -44,11 +44,10 @@ const PLANS = [
     price: 49,
     icon: Shield,
     features: [
-      "Unlimited API Execution",
-      "Basic Policy Sets",
-      "Real-time SSE Streaming",
-      "Single Account Audit",
-      "Email Notifications",
+      "Unlimited API Executions",
+      "Advanced Threat Detection",
+      "Real-time Alerts (Slack/PagerDuty)",
+      "VPC Routing (High-throughput)",
     ],
   },
   {
@@ -59,11 +58,11 @@ const PLANS = [
     highlighted: true,
     features: [
       "Everything in Pro",
-      "SSO & SAML Integration",
       "Cross-Account Role Auditing",
+      "SSO & SAML Integration",
+      "Immutable Audit Trails (WORM)",
       "Custom Event Policies",
-      "Priority Support",
-      "Immutable Audit Trails",
+      "24/7 Priority Support",
     ],
   },
 ];
@@ -240,7 +239,7 @@ const Billing = () => {
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" asChild className="text-muted-foreground hover:text-foreground">
-              <Link to="/">
+              <Link to="/app">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back to Chat
               </Link>

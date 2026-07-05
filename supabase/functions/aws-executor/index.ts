@@ -208,7 +208,7 @@ async function tryAutoElevate(service: string, config: any): Promise<{ attached:
   }
 }
 
-serve(async (req) => {
+export const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -277,4 +277,8 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-});
+};
+
+if (import.meta.main) {
+  serve(handler);
+}

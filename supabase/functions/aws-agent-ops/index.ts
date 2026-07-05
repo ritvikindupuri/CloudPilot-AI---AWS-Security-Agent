@@ -3368,7 +3368,7 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-serve(async (req) => {
+export const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -5138,4 +5138,8 @@ serve(async (req) => {
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
-});
+};
+
+if (import.meta.main) {
+  serve(handler);
+}

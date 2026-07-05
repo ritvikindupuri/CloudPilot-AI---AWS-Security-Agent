@@ -119,7 +119,7 @@ const Report = () => {
         <div className="text-center space-y-4 max-w-sm">
           <AlertCircle className="w-10 h-10 text-destructive mx-auto" />
           <p className="text-foreground font-medium">{error}</p>
-          <Link to="/" className="text-sm text-primary underline underline-offset-2">
+          <Link to="/app" className="text-sm text-primary underline underline-offset-2">
             Back to CloudPilot AI
           </Link>
         </div>
@@ -135,7 +135,7 @@ const Report = () => {
       <header className="print:hidden sticky top-0 z-10 bg-card/90 backdrop-blur border-b border-border px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link
-            to="/"
+            to="/app"
             className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground text-sm transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />

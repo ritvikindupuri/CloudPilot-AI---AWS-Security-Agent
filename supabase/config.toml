@@ -26,3 +26,8 @@ verify_jwt = false
 
 [functions.stripe-webhook]
 verify_jwt = false
+
+[auth]
+enable_signup = true
+enable_confirmations = false
+

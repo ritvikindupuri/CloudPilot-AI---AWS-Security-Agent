@@ -17,7 +17,7 @@ const Auth = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) navigate("/", { replace: true });
+    if (user) navigate("/app", { replace: true });
   }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,10 +41,10 @@ const Auth = () => {
     try {
       if (mode === "signin") {
         await signIn(email.trim(), password);
-        navigate("/", { replace: true });
+        navigate("/app", { replace: true });
       } else if (mode === "signup") {
         await signUp(email.trim(), password);
-        setSuccessMsg("Account created! Check your email to confirm your address, then sign in.");
+        setMode("signin");
       } else if (mode === "sso") {
         const domain = email.trim().split("@")[1];
         if (!domain) {

@@ -144,4 +144,8 @@
   .animate-fade-in-up {
     animation: fade-in-up 0.3s ease-out forwards;
   }
+
+  .bg-radial-glow {
+    background: radial-gradient(circle at center, hsla(36, 100%, 50%, 0.15) 0%, transparent 70%);
+  }
 }
