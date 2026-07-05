@@ -1,11 +1,295 @@
-import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { ArrowRight, ChevronRight, Check } from "lucide-react";
-import CloudPilotLogo from "@/components/CloudPilotLogo";
+import { ArrowRight, ChevronRight, Check, Play, Terminal, Shield, Cpu, RefreshCw, Database } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 
-export const Landing = () => {
+// 3D Tilt interactive Glassmorphic Logo
+const ThreeDLogo = () => {
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5; // -0.5 to 0.5
+    const y = (e.clientY - rect.top) / rect.height - 0.5; // -0.5 to 0.5
+    setTilt({ x: x * 20, y: -y * 20 }); // Scale to max 20 degrees
+  };
+
+  const handleMouseLeave = () => {
+    setTilt({ x: 0, y: 0 });
+  };
+
+  return (
+    <div
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      className="relative w-44 h-44 mx-auto perspective-1000 group cursor-pointer"
+    >
+      {/* Dynamic Background Glow */}
+      <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full scale-125 opacity-60 group-hover:opacity-90 transition-opacity duration-500 animate-pulse" />
+      
+      {/* 3D Rotatable Wrapper */}
+      <div
+        style={{
+          transform: `rotateY(${tilt.x}deg) rotateX(${tilt.y}deg)`,
+          transformStyle: "preserve-3d",
+        }}
+        className="w-full h-full relative transition-transform duration-200 ease-out flex items-center justify-center"
+      >
+        {/* Shadow Layer */}
+        <div 
+          style={{ transform: "translateZ(-30px)" }}
+          className="absolute w-36 h-36 rounded-3xl bg-black/50 blur-lg" 
+        />
+        
+        {/* Layer 1: Semi-transparent Border Glass */}
+        <div 
+          style={{ transform: "translateZ(-15px)" }}
+          className="absolute w-36 h-36 rounded-3xl bg-gradient-to-tr from-primary/20 to-blue-500/5 border border-primary/20 backdrop-blur-xl shadow-inner shadow-primary/10" 
+        />
+        
+        {/* Layer 2: Main metallic dark face */}
+        <div 
+          style={{ transform: "translateZ(10px)" }}
+          className="absolute w-36 h-36 rounded-3xl bg-gradient-to-br from-[#0c1125] to-[#040815] border border-primary/45 flex items-center justify-center shadow-2xl shadow-primary/20"
+        >
+          <svg 
+            className="w-18 h-18 text-primary filter drop-shadow-[0_0_12px_rgba(59,130,246,0.5)]" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="1.5"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-.778.099-1.533.284-2.253" />
+          </svg>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Animated Chat Console Showcase
+const DEMO_CYCLES = [
+  {
+    query: "Scan S3 buckets for public access block gaps.",
+    classification: "direct_query",
+    terminalLogs: [
+      "» INIT  Stateless exchange requested via ephemeral token...",
+      "» CALL  s3:ListAllMyBuckets",
+      "✔ RESP  Found 3 active S3 Buckets in default registry",
+      "» CALL  s3:GetBucketPublicAccessBlock --bucket cp-prod-db-backups",
+      "✔ RESP  BlockPublicAcls=true, BlockPublicPolicy=true",
+      "» CALL  s3:GetBucketPublicAccessBlock --bucket cp-staging-assets",
+      "⚠ RESP  BlockPublicPolicy=false -- Public configuration exposed!",
+    ],
+    agentResponse: `### S3 Public Access Scan Results
+
+Audited **3 buckets** in your default account and detected **1 public exposure gap**:
+
+| Bucket Name | Status | Recommendation | Risk Level |
+| :--- | :--- | :--- | :--- |
+| **cp-staging-assets** | **EXPOSED** | Restrict public bucket policy | **HIGH** |
+
+**Auto-Fix Blueprint:**
+\`\`\`bash
+aws s3api put-public-access-block --bucket cp-staging-assets \\
+  --public-access-block-configuration "BlockPublicPolicy=true"
+\`\`\``
+  },
+  {
+    query: "Audit my security groups for public SSH open ports.",
+    classification: "ops_automation",
+    terminalLogs: [
+      "» INIT  Scanning EC2 infrastructure...",
+      "» CALL  ec2:DescribeSecurityGroups",
+      "✔ RESP  Loaded 8 active security groups",
+      "» EVAL  Parsing ingress permission rules for 0.0.0.0/0 source...",
+      "⚠ ALERT Port 22 (SSH) open to public on group sg-98cf11",
+    ],
+    agentResponse: `### Security Group Audit
+
+I evaluated **8 security groups** and found **1 critical vulnerability**:
+
+* **Default SG** (\`sg-98cf11\`):
+  * **Issue**: Port **22** is open to all IPs (\`0.0.0.0/0\`).
+  * **Risk**: High vulnerability to automated brute-force attacks.
+  * **Command to run**:
+  \`\`\`bash
+  aws ec2 revoke-security-group-ingress --group-id sg-98cf11 --protocol tcp --port 22 --cidr 0.0.0.0/0
+  \`\`\``
+  }
+];
+
+const AnimatedConsole = () => {
+  const [cycleIndex, setCycleIndex] = useState(0);
+  const [typedQuery, setTypedQuery] = useState("");
+  const [phase, setPhase] = useState<"typing" | "routing" | "terminal" | "response">("typing");
+  const [visibleLogs, setVisibleLogs] = useState<string[]>([]);
+  const [responseText, setResponseText] = useState("");
+
+  const currentData = DEMO_CYCLES[cycleIndex];
+
+  useEffect(() => {
+    let active = true;
+
+    if (phase === "typing") {
+      let charIdx = 0;
+      setTypedQuery("");
+      setVisibleLogs([]);
+      setResponseText("");
+      
+      const interval = setInterval(() => {
+        if (!active) return;
+        const targetQuery = currentData.query;
+        if (charIdx < targetQuery.length) {
+          setTypedQuery(targetQuery.slice(0, charIdx + 1));
+          charIdx++;
+        } else {
+          clearInterval(interval);
+          setTimeout(() => {
+            if (active) setPhase("routing");
+          }, 800);
+        }
+      }, 50);
+
+      return () => {
+        active = false;
+        clearInterval(interval);
+      };
+    }
+
+    if (phase === "routing") {
+      const timeout = setTimeout(() => {
+        if (active) setPhase("terminal");
+      }, 1000);
+      return () => {
+        active = false;
+        clearTimeout(timeout);
+      };
+    }
+
+    if (phase === "terminal") {
+      let logIdx = 0;
+      const interval = setInterval(() => {
+        if (!active) return;
+        if (logIdx < currentData.terminalLogs.length) {
+          setVisibleLogs(prev => [...prev, currentData.terminalLogs[logIdx]]);
+          logIdx++;
+        } else {
+          clearInterval(interval);
+          setTimeout(() => {
+            if (active) setPhase("response");
+          }, 800);
+        }
+      }, 600);
+
+      return () => {
+        active = false;
+        clearInterval(interval);
+      };
+    }
+
+    if (phase === "response") {
+      let charIdx = 0;
+      const text = currentData.agentResponse;
+      const step = 4; // print 4 chars at a time for speed
+      
+      const interval = setInterval(() => {
+        if (!active) return;
+        if (charIdx < text.length) {
+          setResponseText(text.slice(0, charIdx + step));
+          charIdx += step;
+        } else {
+          clearInterval(interval);
+          // Wait 6 seconds, then move to next cycle
+          setTimeout(() => {
+            if (active) {
+              setCycleIndex((prev) => (prev + 1) % DEMO_CYCLES.length);
+              setPhase("typing");
+            }
+          }, 6000);
+        }
+      }, 15);
+
+      return () => {
+        active = false;
+        clearInterval(interval);
+      };
+    }
+  }, [phase, cycleIndex]);
+
+  return (
+    <div className="w-full max-w-2xl mx-auto rounded-xl border border-border/50 bg-[#070b19]/80 shadow-2xl backdrop-blur-md overflow-hidden text-left font-mono text-xs text-muted-foreground flex flex-col h-[380px]">
+      {/* Header Bar */}
+      <div className="bg-[#0f1530] border-b border-border/40 px-4 py-2.5 flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
+          <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
+          <span className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
+        </div>
+        <div className="flex items-center gap-2 text-[10px] text-muted-foreground/60 font-semibold tracking-wider uppercase">
+          <Terminal className="w-3.5 h-3.5 text-primary" />
+          Interactive Live Agent Stream
+        </div>
+        <div className="w-8" />
+      </div>
+
+      {/* Console Area */}
+      <div className="flex-1 p-5 overflow-y-auto space-y-4 scrollbar-thin select-none">
+        {/* User Prompt */}
+        <div className="flex items-start gap-2.5">
+          <span className="text-primary font-bold">user@cloudpilot:~$</span>
+          <span className="text-foreground font-semibold leading-relaxed">
+            {typedQuery}
+            {phase === "typing" && <span className="animate-pulse bg-primary/70 text-primary w-1 h-3.5 ml-0.5 inline-block" />}
+          </span>
+        </div>
+
+        {/* Intent Routing Step */}
+        {(phase === "routing" || phase === "terminal" || phase === "response") && (
+          <div className="space-y-1 pl-4 border-l border-primary/20 py-1 bg-primary/5 rounded-r">
+            <p className="text-[10px] text-primary/70 uppercase tracking-widest font-bold">⚡ Stateless Router</p>
+            <p className="text-foreground/90">
+              Router: Classified intent → <span className="text-blue-400 font-bold">{currentData.classification}</span>
+            </p>
+            <p className="text-muted-foreground">Loaded execution isolation workspace.</p>
+          </div>
+        )}
+
+        {/* Terminal Logs Step */}
+        {(phase === "terminal" || phase === "response") && (
+          <div className="space-y-1.5 pl-4 border-l border-border/50 py-1">
+            {visibleLogs.map((log, i) => (
+              <p key={i} className={log.startsWith("✔") ? "text-green-400/90" : log.startsWith("⚠") ? "text-yellow-400" : "text-muted-foreground"}>
+                {log}
+              </p>
+            ))}
+            {phase === "terminal" && (
+              <span className="animate-spin inline-block text-primary ml-1">
+                <RefreshCw className="w-3 h-3" />
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Final Agent Response Step */}
+        {phase === "response" && (
+          <div className="pl-4 border-l-2 border-green-500/40 py-2.5 bg-green-500/5 rounded-r text-foreground space-y-2 prose prose-invert max-w-none text-xs">
+            <div className="flex items-center gap-1.5 text-green-400 font-bold uppercase text-[10px] tracking-wider">
+              <Shield className="w-3.5 h-3.5" />
+              Agent Findings
+            </div>
+            <div className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
+              {responseText}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const Landing = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -17,120 +301,28 @@ export const Landing = () => {
     }
   };
 
-  const fadeUp = {
-    hidden: { opacity: 0, y: 30 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] }
-    }
-  };
-
-  const steps = [
-    {
-      num: "01",
-      title: "Intent Routing",
-      desc: "Queries are classified instantly to expose only the exact tools needed."
-    },
-    {
-      num: "02",
-      title: "STS Token Exchange",
-      desc: "Short-lived 1-hour session credentials are acquired directly from AWS STS."
-    },
-    {
-      num: "03",
-      title: "Isolated Sandbox",
-      desc: "API commands execute in serverless Deno sandboxes, leaving zero trace."
-    },
-    {
-      num: "04",
-      title: "WORM Compliance",
-      desc: "All activities are write-locked and archived directly to secure S3 storage."
-    }
-  ];
-
-  const plans = [
-    {
-      name: "Free",
-      price: "0",
-      desc: "Essential auditing tools for individual engineers",
-      features: [
-        "5 API Executions / day",
-        "Single AWS Account connection",
-        "VPC Routing (Standard)",
-        "Basic Security Scans"
-      ]
-    },
-    {
-      name: "Pro",
-      price: "49",
-      desc: "Advanced cloud operations for security specialists",
-      highlighted: true,
-      features: [
-        "Unlimited API Executions",
-        "Advanced Threat Detection",
-        "Real-time Alerts (Slack/PagerDuty)",
-        "VPC Routing (High-throughput)",
-        "Priority Email Support"
-      ]
-    },
-    {
-      name: "Enterprise",
-      price: "199",
-      desc: "Designed for multi-account organizations",
-      features: [
-        "Everything in Pro",
-        "Cross-Account Role Auditing",
-        "SSO & SAML Integration",
-        "Immutable Audit Trails (WORM)",
-        "Custom Event Policies",
-        "24/7 Priority Support"
-      ]
-    }
-  ];
-
-  const features = [
-    {
-      title: "Zero Simulation Tolerance",
-      desc: "Every assessment, path analysis, and finding maps directly to real AWS API execution. No mock states, no assumptions."
-    },
-    {
-      title: "Smart Intent Router",
-      desc: "An LLM-driven dispatch system classifies natural queries, loading only the exact AWS tools required to minimize token footprint."
-    },
-    {
-      title: "Real-time Attack Scenarios",
-      desc: "Simulate and detect privilege escalations, exfiltration vectors, and lateral movements directly in your isolated sandbox."
-    },
-    {
-      title: "Automated Remediation",
-      desc: "Receive exact, context-aware AWS CLI command blueprints or run immediate, safe auto-fixes with single-click checkpoints."
-    }
-  ];
-
   return (
-    <div className="min-h-screen bg-background text-[#f5f5f7] font-sans overflow-x-hidden selection:bg-primary/20 selection:text-primary">
-      {/* Background Radial Glow */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[800px] bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.04)_0%,transparent_70%)] pointer-events-none z-0" />
+    <div className="min-h-screen bg-[#030712] text-[#f5f5f7] font-sans overflow-x-hidden selection:bg-primary/20 selection:text-primary relative">
+      {/* Ambient Grid Backdrop */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#111625_1px,transparent_1px),linear-gradient(to_bottom,#111625_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none opacity-40" />
 
-      {/* Navigation Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/40 bg-background/70 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-6 h-12 flex items-center justify-between">
+      {/* Floating Header */}
+      <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/10 bg-[#030712]/80 backdrop-blur-md">
+        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-              <CloudPilotLogo className="w-4 h-4 text-primary" />
+            <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/25 flex items-center justify-center glow-primary">
+              <span className="text-primary font-bold text-sm">CP</span>
             </div>
             <span className="font-semibold text-xs tracking-tight text-[#f5f5f7]">CloudPilot AI</span>
           </div>
 
           <nav className="hidden md:flex items-center gap-8 text-[11px] font-normal text-[#86868b]">
-            <a href="#features" className="hover:text-[#f5f5f7] transition-colors">Features</a>
-            <a href="#how-it-works" className="hover:text-[#f5f5f7] transition-colors">How it Works</a>
-            <a href="#security" className="hover:text-[#f5f5f7] transition-colors">Security</a>
-            <Link to="/security" className="text-primary hover:text-primary/90 transition-colors flex items-center gap-0.5">
+            <a href="#features" className="hover:text-[#f5f5f7] transition-colors">Capabilities</a>
+            <a href="#demo" className="hover:text-[#f5f5f7] transition-colors">Live Simulation</a>
+            <a href="#security" className="hover:text-[#f5f5f7] transition-colors">Security Design</a>
+            <Link to="/security" className="text-primary hover:text-primary/80 transition-colors flex items-center gap-0.5">
               Security Center <ChevronRight className="w-2.5 h-2.5" />
             </Link>
-            <a href="#pricing" className="hover:text-[#f5f5f7] transition-colors">Pricing</a>
           </nav>
 
           <div className="flex items-center gap-4">
@@ -139,9 +331,9 @@ export const Landing = () => {
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate("/app")}
-                className="text-[11px] h-7 px-3 bg-muted hover:bg-muted/80 text-[#f5f5f7] rounded-full transition-colors font-normal"
+                className="text-[11px] h-8 px-4 bg-muted hover:bg-muted/80 text-[#f5f5f7] rounded-full transition-colors font-normal"
               >
-                Console
+                Go to App
               </Button>
             ) : (
               <>
@@ -149,9 +341,9 @@ export const Landing = () => {
                 <Button
                   size="sm"
                   onClick={() => navigate("/auth")}
-                  className="text-[11px] h-7 px-4 bg-[#f5f5f7] text-background hover:bg-[#e8e8ed] rounded-full transition-colors font-medium"
+                  className="text-[11px] h-8 px-4 bg-[#f5f5f7] text-background hover:bg-[#e8e8ed] rounded-full transition-colors font-semibold"
                 >
-                  Launch
+                  Get Started
                 </Button>
               </>
             )}
@@ -159,81 +351,104 @@ export const Landing = () => {
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="relative pt-32 pb-16 md:pt-44 md:pb-24 max-w-5xl mx-auto px-6 z-10 text-center">
-        <motion.div
-          initial="hidden"
-          animate="visible"
-          variants={{ visible: { transition: { staggerChildren: 0.1 } } }}
-          className="space-y-6"
-        >
-          <motion.h1
-            variants={fadeUp}
-            className="text-4xl md:text-6xl lg:text-7xl font-semibold tracking-tight bg-clip-text text-transparent bg-gradient-to-b from-[#ffffff] via-[#ffffff] to-[#86868b] leading-[1.08]"
-          >
-            AWS Security Intelligence.<br />Real-time operations.
-          </motion.h1>
+      {/* Hero Split Layout */}
+      <section className="relative pt-28 pb-16 md:pt-40 md:pb-24 max-w-6xl mx-auto px-6 z-10">
+        <div className="grid lg:grid-cols-12 gap-12 items-center">
+          
+          {/* Left Text Column */}
+          <div className="lg:col-span-6 space-y-6 text-center lg:text-left">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-mono tracking-wider uppercase font-semibold">
+              <Cpu className="w-3.5 h-3.5" />
+              100% Stateless Security Engine
+            </div>
 
-          <motion.p
-            variants={fadeUp}
-            className="text-[#86868b] text-base md:text-lg max-w-xl mx-auto font-normal leading-relaxed"
-          >
-            Audit, isolate, and remediate cloud infrastructure in real-time. Zero key persistence. Stateful accuracy.
-          </motion.p>
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.08] text-white">
+              AWS Security Agent.<br />
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-400">Stateless Accuracy.</span>
+            </h1>
 
-          <motion.div
-            variants={fadeUp}
-            className="flex items-center justify-center gap-6 pt-4 text-sm"
-          >
-            <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}>
+            <p className="text-[#86868b] text-sm md:text-base max-w-lg mx-auto lg:mx-0 font-normal leading-relaxed">
+              Audit IAM configurations, track security group exposure, map attack lateral movement, and run isolated drift scans. Ephemeral execution leaving no key stored.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-2">
               <Button
                 onClick={handleLaunch}
-                className="bg-[#f5f5f7] text-background hover:bg-[#e8e8ed] rounded-full px-6 py-5 font-semibold text-xs tracking-tight transition-colors"
+                className="bg-[#f5f5f7] text-background hover:bg-[#e8e8ed] rounded-full px-7 py-5 font-semibold text-xs tracking-tight transition-colors flex items-center gap-2 group w-full sm:w-auto"
               >
-                {user ? "Enter Console" : "Launch Free Console"}
+                Launch Free Console
+                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
               </Button>
-            </motion.div>
-            <a
-              href="#features"
-              className="text-[#86868b] hover:text-primary transition-colors flex items-center gap-1 text-xs group"
-            >
-              <span>Explore capabilities</span>
-              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
-            </a>
-          </motion.div>
-        </motion.div>
+              
+              <a
+                href="#demo"
+                className="text-[#86868b] hover:text-[#f5f5f7] transition-colors flex items-center gap-1.5 text-xs font-semibold py-2"
+              >
+                <Play className="w-3 h-3 text-primary fill-primary/10" />
+                Watch active simulation
+              </a>
+            </div>
 
-        {/* Clean, Floating Product Screen Showcase with backlighting */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.2, duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-16 md:mt-24 max-w-4xl mx-auto relative rounded-xl overflow-hidden shadow-2xl shadow-blue-500/5 bg-card border border-border/40"
-        >
-          {/* Subtle backdrop backlight */}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.06)_0%,transparent_50%)] pointer-events-none" />
-          <img
-            src="/dashboard_mockup.png"
-            className="w-full h-auto object-contain opacity-95 relative z-10"
-            alt="CloudPilot AI Platform"
-          />
-        </motion.div>
+            {/* Render 3D Logo floating beneath */}
+            <div className="pt-8 hidden lg:block">
+              <ThreeDLogo />
+            </div>
+          </div>
+
+          {/* Right Interactive Console Column */}
+          <div className="lg:col-span-6 w-full" id="demo">
+            <div className="relative">
+              {/* Backlight halo */}
+              <div className="absolute inset-0 bg-primary/10 blur-3xl rounded-full scale-105 pointer-events-none" />
+              <AnimatedConsole />
+            </div>
+          </div>
+        </div>
       </section>
 
-      {/* Capabilities Section */}
-      <section id="features" className="py-32 border-t border-border/40 bg-background relative z-10">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="max-w-2xl mb-24">
-            <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-[#f5f5f7]">Designed for professionals.</h2>
-            <p className="text-[#86868b] text-base font-normal mt-3 leading-relaxed">
-              No simulated states. Every finding and path analysis maps directly to real-time AWS API client transactions.
+      {/* 3D Logo For Mobile / Tablet */}
+      <div className="lg:hidden py-10">
+        <ThreeDLogo />
+      </div>
+
+      {/* Capabilities Feature Grid */}
+      <section id="features" className="py-24 border-t border-border/10 bg-[#030712] relative z-10">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="max-w-2xl mb-16 text-center lg:text-left">
+            <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-[#f5f5f7]">Engineered for cloud experts.</h2>
+            <p className="text-[#86868b] text-sm font-normal mt-2 leading-relaxed">
+              No simulated states, guesses, or assumptions. Every query generates real AWS SDK/CLI requests executed dynamically.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-x-16 gap-y-16">
-            {features.map((feat) => (
-              <div key={feat.title} className="space-y-3">
-                <h3 className="text-sm font-semibold text-[#f5f5f7]">{feat.title}</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              {
+                icon: Shield,
+                title: "Zero Simulation",
+                desc: "Every assessment, vulnerability finding, and configuration check pulls directly from live AWS API calls. Zero assumptions."
+              },
+              {
+                icon: Cpu,
+                title: "Smart Intent Routing",
+                desc: "Classifies your natural security prompt to load only the specific tool permissions necessary for execution."
+              },
+              {
+                icon: RefreshCw,
+                title: "Stateless Security",
+                desc: "Ephemeral 1-hour session credentials reside strictly in memory. We never store your AWS secret keys in a database."
+              },
+              {
+                icon: Database,
+                title: "WORM Compliance Log",
+                desc: "Write-Once-Read-Many logging archives all actions securely, producing immutable compliance audit logs inside S3."
+              }
+            ].map((feat, i) => (
+              <div key={i} className="border border-border/10 rounded-xl bg-[#090d1a]/50 p-5 hover:border-primary/20 transition-all group duration-300">
+                <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
+                  <feat.icon className="w-5 h-5 text-primary" />
+                </div>
+                <h3 className="text-sm font-semibold text-white mb-2">{feat.title}</h3>
                 <p className="text-[#86868b] text-xs font-normal leading-relaxed">{feat.desc}</p>
               </div>
             ))}
@@ -241,49 +456,27 @@ export const Landing = () => {
         </div>
       </section>
 
-      {/* How it Works (Apple style - simple numbers and space) */}
-      <section id="how-it-works" className="py-32 border-t border-border/40 bg-background/50 relative z-10">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="max-w-2xl mb-24">
-            <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-[#f5f5f7]">How it works.</h2>
-            <p className="text-[#86868b] text-base font-normal mt-3 leading-relaxed">
-              CloudPilot runs as a stateless client routing agent, executing ephemeral session calls without persistent DB key storage.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-4 gap-12">
-            {steps.map((step) => (
-              <div key={step.num} className="space-y-4 group">
-                <div className="text-4xl md:text-5xl font-light text-[#1d1d1f] group-hover:text-primary/30 transition-colors">{step.num}</div>
-                <h3 className="text-xs font-semibold text-[#f5f5f7]">{step.title}</h3>
-                <p className="text-[#86868b] text-xs font-normal leading-relaxed">{step.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Security is our Core Foundation (Apple style) */}
-      <section id="security" className="py-32 border-t border-border/40 bg-background relative z-10">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="grid md:grid-cols-12 gap-12 items-center">
-            {/* Left Info */}
-            <div className="md:col-span-7 space-y-6">
-              <h2 className="text-3xl md:text-5xl font-semibold tracking-tight text-[#f5f5f7] leading-tight">
-                Your credentials.<br />Strictly in memory.
+      {/* Security Architecture */}
+      <section id="security" className="py-24 border-t border-border/10 bg-[#040816]/50 relative z-10">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="grid lg:grid-cols-12 gap-12 items-center">
+            <div className="lg:col-span-7 space-y-6">
+              <h2 className="text-3xl md:text-5xl font-semibold tracking-tight text-white leading-tight">
+                Stateless Memory isolation.<br />
+                Your credentials are secure.
               </h2>
-              <p className="text-[#86868b] text-sm font-normal leading-relaxed">
-                CloudPilot never stores raw AWS keys. Short-lived tokens are exchanged on-the-fly via TLS to maintain credential isolation, governed by serverless firewalls.
+              <p className="text-[#86868b] text-sm leading-relaxed">
+                CloudPilot exchanges temporary AWS Security Token Service (STS) credentials on-the-fly inside local sandbox environments. Your raw secret keys reside exclusively in the client's secure local context.
               </p>
               <div className="space-y-3 pt-2">
                 {[
-                  "No persistent database storage of AWS keys",
-                  "Temporary STS session configuration with 1-hour limits",
-                  "Write-Once-Read-Many (WORM) audit histories",
-                  "Automated pre-flight blocklists for toxic actions"
-                ].map((item) => (
-                  <div key={item} className="flex items-center gap-3 text-xs text-[#86868b]">
-                    <Check className="w-3.5 h-3.5 text-primary shrink-0" />
+                  "Stateless memory isolation (no persistent key databases)",
+                  "Short-lived session limits matching standard security principles",
+                  "Fully verified and compliant WORM logs",
+                  "Integrated pre-flight blocklists preventing toxic actions"
+                ].map((item, i) => (
+                  <div key={i} className="flex items-center gap-3 text-xs text-[#86868b]">
+                    <Check className="w-4 h-4 text-primary shrink-0" />
                     <span>{item}</span>
                   </div>
                 ))}
@@ -291,142 +484,34 @@ export const Landing = () => {
               <div className="pt-2">
                 <Link
                   to="/security"
-                  className="text-primary hover:text-primary/90 text-xs font-medium inline-flex items-center gap-0.5"
+                  className="text-primary hover:text-primary/80 text-xs font-semibold inline-flex items-center gap-0.5"
                 >
-                  Verify our full security architecture <ChevronRight className="w-3 h-3" />
+                  Verify our full security architecture <ChevronRight className="w-3.5 h-3.5" />
                 </Link>
               </div>
             </div>
 
-            {/* Right Graphic Console Mockup */}
-            <div className="md:col-span-5 p-6 rounded-xl bg-card border border-border/40 space-y-4 relative">
-              <div className="flex items-center justify-between border-b border-border/60 pb-3">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] font-mono text-neutral-400">POLICY: ACTIVE</span>
-                </div>
-                <span className="text-[10px] font-mono text-emerald-500">SECURE</span>
-              </div>
-              <div className="space-y-2 font-mono text-[9px]">
-                <div className="flex justify-between p-1.5 rounded bg-background border border-border/20">
-                  <span className="text-neutral-500">RULE_01: s3:PutBucketPolicy</span>
-                  <span className="text-emerald-500">ALLOW</span>
-                </div>
-                <div className="flex justify-between p-1.5 rounded bg-background border border-border/20">
-                  <span className="text-neutral-500">RULE_02: iam:DeactivateAccessKey</span>
-                  <span className="text-amber-500">CONFIRM</span>
-                </div>
-                <div className="flex justify-between p-1.5 rounded bg-background border border-border/20">
-                  <span className="text-neutral-500">RULE_03: deleteOrganization</span>
-                  <span className="text-rose-500">BLOCKED</span>
-                </div>
+            <div className="lg:col-span-5 border border-border/10 rounded-xl bg-[#090d1a] p-6 space-y-4">
+              <h3 className="text-sm font-semibold text-white">Trust & Isolation Principles</h3>
+              <p className="text-xs text-[#86868b] leading-relaxed">
+                CloudPilot has been built from the ground up for maximum separation of duties. Our servers never store persistent administrative credentials. All auditing operations run as client-initiated sandbox transactions.
+              </p>
+              <div className="p-3.5 rounded-lg bg-[#0d142b]/60 border border-primary/20 text-[10px] font-mono text-primary leading-relaxed">
+                🔒 Security Checkpoint: Local isolation verified. Local Ollama integration isolates all security scanning operations within your local network sandbox boundary.
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Pricing / Tiers Section (Apple Column Style) */}
-      <section id="pricing" className="py-32 border-t border-border/40 bg-background/50 relative z-10">
-        <div className="max-w-5xl mx-auto px-6">
-          <div className="text-center space-y-3 mb-24">
-            <h2 className="text-3xl font-semibold tracking-tight text-[#f5f5f7]">Choose your tier.</h2>
-            <p className="text-[#86868b] text-sm font-normal">Transparent tiers mapping to your operational scale.</p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-x-12 gap-y-16 items-start">
-            {plans.map((plan) => (
-              <div key={plan.name} className="space-y-8">
-                <div className="space-y-3">
-                  <h3 className="text-base font-semibold text-[#f5f5f7]">{plan.name}</h3>
-                  <p className="text-[#86868b] text-xs font-normal leading-relaxed min-h-8">{plan.desc}</p>
-                </div>
-
-                <div className="flex items-baseline gap-1 text-2xl md:text-3xl font-semibold text-[#f5f5f7]">
-                  <span>{plan.price === "0" ? "Free" : `$${plan.price}`}</span>
-                  {plan.price !== "0" && <span className="text-xs text-[#86868b] font-normal"> / mo</span>}
-                </div>
-
-                <ul className="space-y-3 pt-6 border-t border-border/40">
-                  {plan.features.map((feat) => (
-                    <li key={feat} className="flex items-center gap-2.5 text-xs text-[#86868b]">
-                      <Check className="w-3.5 h-3.5 text-primary shrink-0" />
-                      <span>{feat}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}>
-                  <Button
-                    onClick={handleLaunch}
-                    className={`w-full rounded-full text-xs font-medium py-5 transition-colors ${
-                      plan.highlighted
-                        ? "bg-[#f5f5f7] text-background hover:bg-[#e8e8ed]"
-                        : "bg-muted text-[#f5f5f7] hover:bg-[#2d2d2f]"
-                    }`}
-                  >
-                    Select Plan
-                  </Button>
-                </motion.div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Apple-style Footer Notes and Site Map */}
-      <footer className="border-t border-border/40 bg-background z-10 relative text-[#86868b]">
-        <div className="max-w-5xl mx-auto px-6 py-16 space-y-12">
-          {/* Footnotes */}
-          <div className="space-y-3 text-[10px] leading-relaxed font-light border-b border-border/40 pb-10">
-            <p>1. Daily API execution limits reset at 00:00 UTC. Free plan users are limited to 5 successful role-auditing requests per calendar day.</p>
-            <p>2. VPC Routing utilizes standard Deno sandbox runtime configurations. High-throughput performance and isolated transit routing thresholds require Pro or Enterprise seat registrations.</p>
-            <p>3. CloudPilot AI stateless processing exchanges credentials directly using transient AWS Security Token Service (STS) assumes. Raw API keys reside only in client browser context memory and are transmitted strictly via HTTPS/TLS 1.3 encryption protocols.</p>
-          </div>
-
-          {/* Directory Map */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-[11px]">
-            <div className="space-y-3">
-              <h4 className="text-white font-medium">Explore</h4>
-              <ul className="space-y-2 font-light">
-                <li><a href="#features" className="hover:text-white transition-colors">Capabilities</a></li>
-                <li><a href="#how-it-works" className="hover:text-white transition-colors">Timeline</a></li>
-                <li><a href="#pricing" className="hover:text-white transition-colors">Plans</a></li>
-              </ul>
-            </div>
-            <div className="space-y-3">
-              <h4 className="text-white font-medium">Security</h4>
-              <ul className="space-y-2 font-light">
-                <li><Link to="/security" className="hover:text-white transition-colors">Disclosure Center</Link></li>
-                <li><a href="#security" className="hover:text-white transition-colors">STS Token exchange</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Isolation sandboxes</a></li>
-              </ul>
-            </div>
-            <div className="space-y-3">
-              <h4 className="text-white font-medium">Resource</h4>
-              <ul className="space-y-2 font-light">
-                <li><a href="https://github.com/ritvikindupuri/aws-ai-agent" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">GitHub Repository</a></li>
-                <li><a href="https://github.com/ritvikindupuri/aws-ai-agent/blob/main/TECHNICAL_DOCUMENTATION.md" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Documentation</a></li>
-                <li><a href="https://github.com/ritvikindupuri/aws-ai-agent/issues" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Support</a></li>
-              </ul>
-            </div>
-            <div className="space-y-3">
-              <h4 className="text-white font-medium">CloudPilot</h4>
-              <ul className="space-y-2 font-light">
-                <li><span className="text-neutral-500 font-mono">Console v1.0</span></li>
-                <li><span className="text-neutral-500">Security Operations</span></li>
-              </ul>
-            </div>
-          </div>
-
-          {/* Copyright line */}
-          <div className="pt-4 flex flex-col md:flex-row justify-between items-center text-[10px] font-light gap-4">
-            <p>© 2026 CloudPilot AI. Built for AWS cloud security operations.</p>
-            <div className="flex gap-4">
-              <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
-              <a href="#" className="hover:text-white transition-colors">Terms of Use</a>
-              <a href="#" className="hover:text-white transition-colors">Legal Disclosures</a>
-            </div>
+      {/* Footer */}
+      <footer className="border-t border-border/10 bg-[#030712] py-8 text-center text-xs text-muted-foreground">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p>© 2026 CloudPilot AI. All rights reserved.</p>
+          <div className="flex gap-4">
+            <a href="#features" className="hover:text-foreground transition-colors">Features</a>
+            <Link to="/security" className="hover:text-foreground transition-colors">Security</Link>
+            <a href="#" className="hover:text-foreground transition-colors">Privacy Policy</a>
           </div>
         </div>
       </footer>
