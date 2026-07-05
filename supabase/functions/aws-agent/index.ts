@@ -6138,7 +6138,12 @@ export const handler = async (req: Request): Promise<Response> => {
               responseMessage.tool_calls = [{
                 id: `call_${crypto.randomUUID().replace(/-/g, "")}`,
                 type: "function",
-                function: parsed
+                function: {
+                  name: parsed.name,
+                  arguments: typeof parsed.arguments === "string" 
+                    ? parsed.arguments 
+                    : JSON.stringify(parsed.arguments)
+                }
               }];
             }
           }

@@ -64,7 +64,7 @@ async function loadAwsModule(service: string): Promise<any> {
   if (_awsModuleCache[service]) return _awsModuleCache[service];
   const pkg = _awsSvcMap[service];
   if (!pkg) throw new Error(`Unsupported AWS service: ${service}`);
-  const specifier = "npm:@aws-sdk/client-" + pkg + "@3.744.0";
+  const specifier = "npm:@aws-sdk/client-" + pkg;
   const mod = await import(specifier);
   _awsModuleCache[service] = mod;
   return mod;
