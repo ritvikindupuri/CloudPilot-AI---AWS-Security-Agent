@@ -1241,28 +1241,14 @@ async function classifyIntent(
     // Include last 3 messages for context
     const contextMessages = messages.slice(-3).map((m) => `${m.role}: ${m.content}`).join("\n");
 
-    const useOllama = !geminiApiKey || geminiApiKey === "ollama" || geminiApiKey.startsWith("ollama");
-    const isLovable = !useOllama && geminiApiKey.startsWith("sk_");
-    const gatewayUrl = useOllama
-      ? "http://localhost:11434/v1/chat/completions"
-      : isLovable
-        ? "https://ai.gateway.lovable.dev/v1/chat/completions"
-        : `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions?key=${geminiApiKey}`;
-    const classifierModel = useOllama
-      ? (Deno.env.get("OLLAMA_MODEL") || "llama3.2")
-      : isLovable
-        ? "google/gemini-2.5-flash-lite"
-        : "gemini-1.5-flash";
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    if (isLovable) {
-      headers["Authorization"] = `Bearer ${geminiApiKey}`;
-    }
+    const gatewayUrl = "http://localhost:11434/v1/chat/completions";
+    const classifierModel = Deno.env.get("OLLAMA_MODEL") || "qwen2.5-coder";
 
     const resp = await fetch(gatewayUrl, {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         model: classifierModel,
         messages: [
@@ -6101,28 +6087,14 @@ export const handler = async (req: Request): Promise<Response> => {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const toolChoice = i === 0 ? "required" : "auto";
 
-      const useOllama = !resolvedGeminiKey || resolvedGeminiKey === "ollama" || resolvedGeminiKey.startsWith("ollama");
-      const isLovable = !useOllama && resolvedGeminiKey.startsWith("sk_");
-      const gatewayUrl = useOllama
-        ? "http://localhost:11434/v1/chat/completions"
-        : isLovable
-          ? "https://ai.gateway.lovable.dev/v1/chat/completions"
-          : `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions?key=${resolvedGeminiKey}`;
-      const agentModel = useOllama
-        ? (Deno.env.get("OLLAMA_MODEL") || "llama3.2")
-        : isLovable
-          ? "google/gemini-2.5-flash"
-          : "gemini-1.5-pro";
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      if (isLovable) {
-        headers["Authorization"] = `Bearer ${resolvedGeminiKey}`;
-      }
+      const gatewayUrl = "http://localhost:11434/v1/chat/completions";
+      const agentModel = Deno.env.get("OLLAMA_MODEL") || "qwen2.5-coder";
 
       const response = await fetch(gatewayUrl, {
         method: "POST",
-        headers,
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           model: agentModel,
           messages: apiMessages,
