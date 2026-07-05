@@ -25,8 +25,13 @@ const ChatInterface = () => {
   const navigate = useNavigate();
   const [input, setInput] = useState("");
   const [credentials, setCredentials] = useState<AwsCredentials | null>(() => {
-    const saved = sessionStorage.getItem("cloudpilot-aws-credentials");
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = sessionStorage.getItem("cloudpilot-aws-credentials");
+      return saved && saved !== "undefined" ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.error("Failed to parse credentials from session storage", e);
+      return null;
+    }
   });
   const [showSidebar, setShowSidebar] = useState(true);
   const [currentConvId, setCurrentConvId] = useState<string | null>(null);
