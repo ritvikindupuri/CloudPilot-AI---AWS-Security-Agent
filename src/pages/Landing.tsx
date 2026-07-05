@@ -459,13 +459,7 @@ const Landing = () => {
             <ThreeDLogo />
           </motion.div>
 
-          {/* Badge (Removed Cpu/Bug icon) */}
-          <motion.div 
-            variants={fadeUp}
-            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-mono tracking-wider uppercase font-semibold"
-          >
-            100% Stateless Security Engine
-          </motion.div>
+
 
           {/* Centered Main Headline */}
           <motion.h1 
