@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowRight, ChevronRight, Check, Shield, Cpu, RefreshCw, Database } from "lucide-react";
+import { ArrowRight, ChevronRight, Check, Shield, Cpu, RefreshCw, Database, Terminal } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import CloudPilotLogo from "@/components/CloudPilotLogo";
