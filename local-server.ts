@@ -87,6 +87,7 @@ const { handler: awsAgentOps } = await import("./supabase/functions/aws-agent-op
 const { handler: awsExecutor } = await import("./supabase/functions/aws-executor/index.ts");
 const { handler: awsExchange } = await import("./supabase/functions/aws-exchange-credentials/index.ts");
 const { handler: awsCredentialVault } = await import("./supabase/functions/aws-credential-vault/index.ts");
+const { handler: webhookNotify } = await import("./supabase/functions/webhook-notify/index.ts");
 console.log("[CloudPilot Local Gateway] Modules successfully loaded.");
 
 const corsHeaders = {
@@ -361,6 +362,8 @@ serve(async (req) => {
       response = await awsExchange(req);
     } else if (path.endsWith("/aws-credential-vault")) {
       response = await awsCredentialVault(req);
+    } else if (path.endsWith("/webhook-notify")) {
+      response = await webhookNotify(req);
     } else {
       response = new Response(JSON.stringify({ error: `Not found: ${path}` }), {
         status: 404,

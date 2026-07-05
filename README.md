@@ -171,7 +171,8 @@ Follow these steps to run the application locally.
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) & npm installed (or [Bun](https://bun.sh/) as an alternative package manager).
+- [Node.js](https://nodejs.org/) (v18+) & npm installed (or [Bun](https://bun.sh/) as an alternative package manager).
+- [Ollama](https://ollama.com) installed and running locally on your machine.
 - No database setup or Docker installation is needed! Everything runs locally on your machine.
 
 ### 1. Clone & Install Dependencies
@@ -187,19 +188,37 @@ npm install
 bun install
 ```
 
-### 2. Configure Environment Variables
+### 2. Ollama Local LLM Setup
 
-Create a `.env` file in the root directory (if not present) and specify your local model (e.g. `OLLAMA_MODEL="qwen2.5-coder"`). Ensure your local Ollama server is running.
+Since CloudPilot AI executes all operations and intent classifications 100% offline, you must configure Ollama to serve the AI model locally:
 
-### 3. Start the Development Server
+1. **Download Ollama**: Visit [ollama.com](https://ollama.com) and download the app for Windows, macOS, or Linux.
+2. **Download Model**: Pull the default `qwen2.5-coder` coding and security model:
+   ```sh
+   ollama pull qwen2.5-coder:latest
+   ```
+3. **Verify Running**: Start the Ollama server (e.g. check the tray icon or run `ollama list` in your terminal to ensure it is responsive).
+
+### 3. Configure Environment Variables
+
+Create a `.env` file in the root directory (if not present) and specify your local model:
+
+```env
+OLLAMA_MODEL="qwen2.5-coder"
+```
+
+### 4. Start the Development Server
+
+The development command launches both the React Vite frontend and the local Deno server gateway emulating the Supabase API endpoints internally on port 54321:
 
 ```sh
-# Start the Vite development server with auto-reloading
+# Start the dev environment (Vite frontend + Deno mock backend)
 npm run dev
 # or
 bun run dev
 ```
-Open your browser to the local URL provided (usually `http://localhost:8080`).
+
+Open your browser to the local URL provided (usually `http://localhost:8080`). All database states will be persisted in your local `cloudpilot.db` SQLite file.
 
 ---
 
