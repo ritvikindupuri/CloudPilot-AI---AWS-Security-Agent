@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ChatMessageData, MessageRole, MessageStatus } from "@/components/ChatMessage";
 import type { AwsCredentials } from "@/components/AwsCredentialsPanel";
@@ -68,14 +68,25 @@ export const useChat = (conversationId: string | null, notificationEmail?: strin
   const [auditSummary, setAuditSummary] = useState<AuditSummary | null>(null);
   const [liveRunbook, setLiveRunbook] = useState<LiveRunbookExecution | null>(null);
 
+  const currentMessagesConvIdRef = useRef<string | null>(conversationId);
+
   // Load messages from DB when active conversation changes
   useEffect(() => {
     if (!conversationId) {
-      setMessages((prev) => prev.length > 0 && prev[0].status === "complete" ? [] : prev);
+      setMessages([]);
       setAuditSummary(null);
       setLiveRunbook(null);
+      currentMessagesConvIdRef.current = null;
       return;
     }
+
+    currentMessagesConvIdRef.current = conversationId;
+    
+    // Clear transient states and previous conversation messages immediately to avoid flicker
+    setMessages([]);
+    setAuditSummary(null);
+    setLiveRunbook(null);
+
     (supabase
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .from("messages" as any)
@@ -85,24 +96,21 @@ export const useChat = (conversationId: string | null, notificationEmail?: strin
       .order("created_at", { ascending: true }) as any)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .then(({ data }: { data: any[] | null }) => {
+        // If the conversation was switched again while fetching, ignore this old response
+        if (currentMessagesConvIdRef.current !== conversationId) return;
+
         if (data) {
-          // Merge fetched data with any optimistic messages we already have locally
-          setMessages((prev) => {
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             const fetchedIds = new Set(data.map((m: any) => m.id));
-             const optimisticMessages = prev.filter((m) => !fetchedIds.has(m.id));
-             return [
-               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-               ...data.map((m: any) => ({
-                 id: m.id,
-                 role: m.role as MessageRole,
-                 content: m.content,
-                 status: "complete" as MessageStatus,
-                 timestamp: new Date(m.created_at),
-               })),
-               ...optimisticMessages
-             ];
-          });
+          setMessages(
+            data.map((m: any) => ({
+              id: m.id,
+              role: m.role as MessageRole,
+              content: m.content,
+              status: "complete" as MessageStatus,
+              timestamp: new Date(m.created_at),
+            }))
+          );
+        } else {
+          setMessages([]);
         }
       });
   }, [conversationId]);

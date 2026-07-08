@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { motion } from "framer-motion";
-import { ArrowRight, ChevronRight, Check, Shield, Cpu, RefreshCw, Database, Terminal } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowRight, ChevronRight, Check, Shield, Cpu, RefreshCw, Database, Terminal, User, Loader2, Send, MessageSquare } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import CloudPilotLogo from "@/components/CloudPilotLogo";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 // 3D Tilt interactive Glassmorphic Logo
 const ThreeDLogo = () => {
@@ -144,7 +146,7 @@ const AnimatedConsole = () => {
             if (active) setPhase("routing");
           }, 800);
         }
-      }, 50);
+      }, 55);
 
       return () => {
         active = false;
@@ -175,7 +177,7 @@ const AnimatedConsole = () => {
             if (active) setPhase("response");
           }, 800);
         }
-      }, 600);
+      }, 500);
 
       return () => {
         active = false;
@@ -200,9 +202,9 @@ const AnimatedConsole = () => {
               setCycleIndex((prev) => (prev + 1) % DEMO_CYCLES.length);
               setPhase("typing");
             }
-          }, 6000);
+          }, 7000);
         }
-      }, 15);
+      }, 12);
 
       return () => {
         active = false;
@@ -212,65 +214,128 @@ const AnimatedConsole = () => {
   }, [phase, cycleIndex]);
 
   return (
-    <div className="w-full max-w-2xl mx-auto rounded-xl border border-border/50 bg-[#070b19]/80 shadow-2xl backdrop-blur-md overflow-hidden text-left font-mono text-xs text-muted-foreground flex flex-col h-[380px]">
-      <div className="bg-[#0f1530] border-b border-border/40 px-4 py-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
-          <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/60" />
-          <span className="w-2.5 h-2.5 rounded-full bg-green-500/60" />
-        </div>
-        <div className="flex items-center gap-2 text-[10px] text-muted-foreground/60 font-semibold tracking-wider uppercase">
-          <Terminal className="w-3.5 h-3.5 text-primary" />
-          Interactive Live Agent Stream
-        </div>
-        <div className="w-8" />
-      </div>
-
-      <div className="flex-1 p-5 overflow-y-auto space-y-4 scrollbar-thin select-none">
-        <div className="flex items-start gap-2.5">
-          <span className="text-primary font-bold">user@cloudpilot:~$</span>
-          <span className="text-foreground font-semibold leading-relaxed">
-            {typedQuery}
-            {phase === "typing" && <span className="animate-pulse bg-primary/70 text-primary w-1 h-3.5 ml-0.5 inline-block" />}
+    <div className="w-full max-w-2xl mx-auto rounded-xl border border-border/50 bg-[#080c1d]/90 shadow-2xl backdrop-blur-md overflow-hidden text-left flex flex-col h-[420px]">
+      {/* Header */}
+      <div className="bg-[#0f1430] border-b border-border/40 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center">
+            <CloudPilotLogo className="w-3.5 h-3.5 text-primary" />
+          </div>
+          <span className="text-sm font-semibold text-white tracking-wide">CloudPilot Assistant</span>
+          <span className="flex h-1.5 w-1.5 relative ml-1">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
           </span>
         </div>
+        <div className="text-[9px] text-muted-foreground/60 font-mono tracking-widest font-bold uppercase bg-[#141b3d] px-2 py-0.5 rounded border border-border/30">
+          STATELESS SECURITY ENGINE
+        </div>
+      </div>
 
-        {(phase === "routing" || phase === "terminal" || phase === "response") && (
-          <div className="space-y-1 pl-4 border-l border-primary/20 py-1 bg-primary/5 rounded-r">
-            <p className="text-[10px] text-primary/70 uppercase tracking-widest font-bold">⚡ Stateless Router</p>
-            <p className="text-foreground/90">
-              Router: Classified intent → <span className="text-blue-400 font-bold">{currentData.classification}</span>
-            </p>
-            <p className="text-muted-foreground">Loaded execution isolation workspace.</p>
-          </div>
-        )}
+      {/* Chat Area */}
+      <div className="flex-1 p-5 overflow-y-auto space-y-4 scrollbar-thin select-none bg-gradient-to-b from-[#090d20] to-[#040715] flex flex-col justify-end">
+        <div className="space-y-4">
+          {/* User Message Bubble */}
+          {(phase === "typing" || phase === "routing" || phase === "terminal" || phase === "response") && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="flex gap-3 justify-end items-start"
+            >
+              <div className="rounded-xl px-4 py-3 text-[13px] leading-relaxed bg-[#1b2244] border border-border/60 max-w-[80%] text-foreground font-sans">
+                {typedQuery}
+                {phase === "typing" && <span className="animate-pulse bg-primary/70 text-primary w-1 h-3.5 ml-0.5 inline-block" />}
+              </div>
+              <div className="flex-shrink-0">
+                <div className="w-7 h-7 rounded-lg bg-[#1b2244] border border-border/40 flex items-center justify-center">
+                  <User className="w-3.5 h-3.5 text-muted-foreground" />
+                </div>
+              </div>
+            </motion.div>
+          )}
 
-        {(phase === "terminal" || phase === "response") && (
-          <div className="space-y-1.5 pl-4 border-l border-border/50 py-1">
-            {visibleLogs.map((log, i) => (
-              <p key={i} className={log.startsWith("✔") ? "text-green-400/90" : log.startsWith("⚠") ? "text-yellow-400" : "text-muted-foreground"}>
-                {log}
-              </p>
-            ))}
-            {phase === "terminal" && (
-              <span className="animate-spin inline-block text-primary ml-1">
-                <RefreshCw className="w-3 h-3" />
-              </span>
-            )}
-          </div>
-        )}
+          {/* Thinking/Routing State */}
+          {(phase === "routing" || phase === "terminal") && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="flex gap-3 items-start"
+            >
+              <div className="flex-shrink-0">
+                <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/25 flex items-center justify-center">
+                  <CloudPilotLogo className="w-4 h-4 text-primary" />
+                </div>
+              </div>
+              <div className="rounded-xl px-4 py-2.5 text-[12px] leading-relaxed bg-[#0f142c] border border-border/40 flex items-center gap-2 text-muted-foreground font-mono">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                {phase === "routing" ? (
+                  <span>Routing request to stateless agent...</span>
+                ) : (
+                  <span>Executing: {visibleLogs[visibleLogs.length - 1]?.slice(2) || "AWS API queries..."}</span>
+                )}
+              </div>
+            </motion.div>
+          )}
 
-        {phase === "response" && (
-          <div className="pl-4 border-l-2 border-green-500/40 py-2.5 bg-green-500/5 rounded-r text-foreground space-y-2 prose prose-invert max-w-none text-xs">
-            <div className="flex items-center gap-1.5 text-green-400 font-bold uppercase text-[10px] tracking-wider">
-              <Shield className="w-3.5 h-3.5" />
-              Agent Findings
-            </div>
-            <div className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
-              {responseText}
-            </div>
-          </div>
-        )}
+          {/* Assistant Response Bubble */}
+          {phase === "response" && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="flex gap-3 items-start"
+            >
+              <div className="flex-shrink-0">
+                <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/25 flex items-center justify-center">
+                  <CloudPilotLogo className="w-4 h-4 text-primary" />
+                </div>
+              </div>
+              <div className="flex-1 min-w-0 bg-[#0f142c] border border-[#1b2244] rounded-xl px-4 py-3.5 text-[13px] leading-relaxed text-foreground font-sans">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  className="
+                    prose max-w-none prose-invert
+                    [&_p]:text-[12.5px] [&_p]:leading-[1.75] [&_p]:text-muted-foreground [&_p]:my-1.5
+                    [&_ul]:my-2 [&_ul]:pl-4 [&_ul]:space-y-0.5
+                    [&_li]:text-[12.5px] [&_li]:text-muted-foreground
+                    [&_strong]:font-bold [&_strong]:text-foreground
+                    [&_h3]:text-primary [&_h3]:text-[12px] [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1 [&_h3]:uppercase [&_h3]:tracking-wide
+                    [&_code]:font-mono [&_code]:bg-[#1b2244] [&_code]:border [&_code]:border-border/30 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-primary [&_code]:text-[11px]
+                    [&_pre]:bg-[#090d20] [&_pre]:border [&_pre]:border-border/40 [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:text-[11px] [&_pre]:overflow-x-auto [&_pre]:my-2
+                    [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:border-0 [&_pre_code]:text-foreground
+                    [&_table]:w-full [&_table]:text-[11px] [&_table]:border-collapse [&_table]:my-2 [&_table]:rounded-lg [&_table]:overflow-hidden
+                    [&_thead]:bg-[#1b2244]/50
+                    [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left [&_th]:text-[10px] [&_th]:font-semibold [&_th]:text-muted-foreground [&_th]:uppercase [&_th]:border [&_th]:border-border/30
+                    [&_td]:px-3 [&_td]:py-1.5 [&_td]:border [&_td]:border-border/30 [&_td]:text-foreground
+                    [&_tr:nth-child(even)_td]:bg-[#1b2244]/20
+                  "
+                >
+                  {responseText}
+                </ReactMarkdown>
+                
+                {/* Under the hood transaction confirmation badge */}
+                <div className="mt-3 pt-2.5 border-t border-[#1b2244] flex flex-wrap gap-2 text-[10px] font-mono text-muted-foreground/60">
+                  <span className="bg-[#1b2244] px-1.5 py-0.5 rounded border border-border/40 text-emerald-400 font-semibold flex items-center gap-1">
+                    <Check className="w-2.5 h-2.5" /> Stateless Scan Done
+                  </span>
+                  <span className="bg-[#1b2244] px-1.5 py-0.5 rounded border border-border/40">100% Offline</span>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </div>
+      </div>
+
+      {/* Input Box Mock */}
+      <div className="bg-[#0f1430] border-t border-border/40 p-3 flex items-center gap-2">
+        <div className="flex-1 bg-[#090d20] border border-border/60 rounded-lg px-3 py-2 text-[12px] text-muted-foreground/50 select-none font-sans">
+          {phase === "typing" ? "User is typing..." : "Ask about your AWS environment..."}
+        </div>
+        <Button variant="terminal" size="icon" className="h-8 w-8 flex-shrink-0 rounded-md bg-[#1b2244] hover:bg-[#232b55] text-primary" disabled>
+          <Send className="w-3 h-3" />
+        </Button>
       </div>
     </div>
   );
