@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, ChevronRight, Check, Shield, Cpu, RefreshCw, Database, Terminal, User, Loader2, Send, MessageSquare } from "lucide-react";
@@ -157,6 +157,13 @@ const AnimatedConsole = () => {
   const [typedQuery, setTypedQuery] = useState("");
   const [phase, setPhase] = useState<"typing" | "routing" | "terminal" | "response">("typing");
   const [visibleLogs, setVisibleLogs] = useState<string[]>([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [typedQuery, visibleLogs, phase]);
 
   const currentData = DEMO_CYCLES[cycleIndex];
 
@@ -248,13 +255,10 @@ const AnimatedConsole = () => {
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
           </span>
         </div>
-        <div className="text-[9px] text-muted-foreground/60 font-mono tracking-widest font-bold uppercase bg-[#141b3d] px-2 py-0.5 rounded border border-border/30">
-          STATELESS SECURITY ENGINE
-        </div>
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 p-5 overflow-y-auto space-y-4 scrollbar-thin select-none bg-gradient-to-b from-[#090d20] to-[#040715] flex flex-col justify-end">
+      <div ref={scrollRef} className="flex-1 p-5 overflow-y-auto space-y-4 scrollbar-thin bg-gradient-to-b from-[#090d20] to-[#040715] flex flex-col">
         <div className="space-y-4">
           {/* User Message Bubble */}
           {(phase === "typing" || phase === "routing" || phase === "terminal" || phase === "response") && (
