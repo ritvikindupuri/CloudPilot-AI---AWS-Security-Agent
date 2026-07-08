@@ -26,10 +26,10 @@ const ChatInterface = () => {
   const [input, setInput] = useState("");
   const [credentials, setCredentials] = useState<AwsCredentials | null>(() => {
     try {
-      const saved = sessionStorage.getItem("cloudpilot-aws-credentials");
+      const saved = localStorage.getItem("cloudpilot-aws-credentials");
       return saved && saved !== "undefined" ? JSON.parse(saved) : null;
     } catch (e) {
-      console.error("Failed to parse credentials from session storage", e);
+      console.error("Failed to parse credentials from local storage", e);
       return null;
     }
   });
@@ -88,7 +88,7 @@ const ChatInterface = () => {
   } = useChatHistory(user);
 
   const handleSignOut = async () => {
-    sessionStorage.removeItem("cloudpilot-aws-credentials");
+    localStorage.removeItem("cloudpilot-aws-credentials");
     await signOut();
   };
 
@@ -105,13 +105,12 @@ const ChatInterface = () => {
   };
 
   const handleSelectConversation = (id: string) => {
-    console.log("[ChatInterface] handleSelectConversation:", id);
     setCurrentConvId(id);
   };
 
   const handleCredentialsSave = (creds: AwsCredentials) => {
     setCredentials(creds);
-    sessionStorage.setItem("cloudpilot-aws-credentials", JSON.stringify(creds));
+    localStorage.setItem("cloudpilot-aws-credentials", JSON.stringify(creds));
     if (vpcRoutingStatus === "inactive") {
       setShowVpcDialog(true);
     }

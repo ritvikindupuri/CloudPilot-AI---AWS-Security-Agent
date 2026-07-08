@@ -252,12 +252,35 @@ serve(async (req) => {
       const tableName = path.slice("/rest/v1/".length);
       console.log(`[CloudPilot SQL Database] ${req.method} ${path}`);
 
+      const tryParseJson = (val: any) => {
+        if (typeof val === "string") {
+          const trimmed = val.trim();
+          if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+            try {
+              return JSON.parse(trimmed);
+            } catch {
+              return val;
+            }
+          }
+        }
+        return val;
+      };
+
       // GET: Query rows
       if (req.method === "GET") {
         ensureTableAndColumns(tableName, null, url);
         const { where, params, limit, order } = parseFilters(url);
         const queryStr = `SELECT * FROM ${tableName} ${where} ${order} ${limit}`;
-        const rows = [...db.queryEntries(queryStr, params)];
+        const rawRows = [...db.queryEntries(queryStr, params)];
+
+        // Parse any JSON strings back to objects
+        const rows = rawRows.map((row) => {
+          const parsedRow: any = {};
+          for (const [key, val] of Object.entries(row)) {
+            parsedRow[key] = tryParseJson(val);
+          }
+          return parsedRow;
+        });
 
         const acceptHeader = req.headers.get("accept") || "";
         const wantSingle = acceptHeader.includes("application/vnd.pgrst.object+json");
@@ -295,7 +318,14 @@ serve(async (req) => {
           const placeholders = keys.map(() => "?").join(",");
           const insertSql = `INSERT INTO ${tableName} (${keys.join(",")}) VALUES (${placeholders})`;
 
-          db.query(insertSql, Object.values(merged));
+          const bindValues = Object.values(merged).map((val) => {
+            if (val !== null && typeof val === "object") {
+              return JSON.stringify(val);
+            }
+            return val;
+          });
+
+          db.query(insertSql, bindValues);
           results.push(merged);
         }
 
@@ -316,7 +346,8 @@ serve(async (req) => {
         for (const [key, val] of Object.entries(body)) {
           if (key === "id" || key === "created_at") continue;
           updates.push(`${key} = ?`);
-          updateParams.push(val);
+          const sanitizedVal = (val !== null && typeof val === "object") ? JSON.stringify(val) : val;
+          updateParams.push(sanitizedVal);
         }
 
         updates.push(`updated_at = ?`);
