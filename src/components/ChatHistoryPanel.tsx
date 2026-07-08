@@ -20,11 +20,24 @@ const groupByDate = (conversations: Conversation[]) => {
   const older: Conversation[] = [];
 
   conversations.forEach((c) => {
-    const date = parseISO(c.updated_at);
-    if (isToday(date)) today.push(c);
-    else if (isYesterday(date)) yesterday.push(c);
-    else if (Date.now() - date.getTime() < 7 * 24 * 60 * 60 * 1000) thisWeek.push(c);
-    else older.push(c);
+    if (!c.updated_at) {
+      older.push(c);
+      return;
+    }
+    try {
+      const date = parseISO(c.updated_at);
+      if (isNaN(date.getTime())) {
+        older.push(c);
+        return;
+      }
+      if (isToday(date)) today.push(c);
+      else if (isYesterday(date)) yesterday.push(c);
+      else if (Date.now() - date.getTime() < 7 * 24 * 60 * 60 * 1000) thisWeek.push(c);
+      else older.push(c);
+    } catch (e) {
+      console.warn("Failed to parse conversation timestamp:", c.updated_at, e);
+      older.push(c);
+    }
   });
 
   if (today.length) groups.push({ label: "Today", items: today });
