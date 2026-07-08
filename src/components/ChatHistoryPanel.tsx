@@ -93,7 +93,10 @@ const ChatHistoryPanel = ({
                       ? "bg-primary/10 border border-primary/20"
                       : "hover:bg-muted/60 border border-transparent"
                   }`}
-                  onClick={() => onSelect(conv.id)}
+                  onClick={() => {
+                    console.log("[ChatHistoryPanel] Clicked conversation item:", conv.id);
+                    onSelect(conv.id);
+                  }}
                 >
                   <MessageSquare
                     className={`w-3 h-3 flex-shrink-0 ${

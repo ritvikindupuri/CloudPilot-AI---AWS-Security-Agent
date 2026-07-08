@@ -80,6 +80,7 @@ export const useChat = (conversationId: string | null, notificationEmail?: strin
       return;
     }
 
+    console.log("[useChat] useEffect conversationId changed:", conversationId);
     currentMessagesConvIdRef.current = conversationId;
     
     // Clear transient states and previous conversation messages immediately to avoid flicker
@@ -95,9 +96,13 @@ export const useChat = (conversationId: string | null, notificationEmail?: strin
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .order("created_at", { ascending: true }) as any)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .then(({ data }: { data: any[] | null }) => {
+      .then(({ data, error }: { data: any[] | null; error: any }) => {
+        console.log("[useChat] supabase messages fetch returned:", { data, error });
         // If the conversation was switched again while fetching, ignore this old response
-        if (currentMessagesConvIdRef.current !== conversationId) return;
+        if (currentMessagesConvIdRef.current !== conversationId) {
+          console.log("[useChat] stale conversationId branch ignored:", conversationId);
+          return;
+        }
 
         if (data) {
           setMessages(

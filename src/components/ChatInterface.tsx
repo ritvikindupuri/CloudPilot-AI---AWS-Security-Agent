@@ -105,6 +105,7 @@ const ChatInterface = () => {
   };
 
   const handleSelectConversation = (id: string) => {
+    console.log("[ChatInterface] handleSelectConversation:", id);
     setCurrentConvId(id);
   };
 
