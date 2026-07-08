@@ -649,61 +649,43 @@ const Landing = () => {
 
       {/* Security Architecture */}
       <section id="security" className="py-20 border-t border-border/10 bg-[#040816]/50 relative z-10">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="grid lg:grid-cols-12 gap-12 items-center">
-            <motion.div 
-              initial={{ opacity: 0, x: -15 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5 }}
-              className="lg:col-span-7 space-y-6"
-            >
-              <h2 className="text-3xl md:text-5xl font-semibold tracking-tight text-white leading-tight">
-                Stateless isolation.<br />
-                Your credentials stay yours.
-              </h2>
-              <p className="text-[#86868b] text-sm leading-relaxed">
-                CloudPilot exchanges temporary AWS Security Token Service (STS) credentials inside local sandbox environments. Your raw secret keys reside exclusively in the client's secure local context.
-              </p>
-              <div className="space-y-3 pt-2">
-                {[
-                  "Stateless memory isolation (no persistent key databases)",
-                  "Short-lived session limits matching standard security principles",
-                  "Fully verified and compliant WORM logs",
-                  "Integrated pre-flight blocklists preventing toxic actions"
-                ].map((item, i) => (
-                  <div key={i} className="flex items-center gap-3 text-xs text-[#86868b]">
-                    <Check className="w-4 h-4 text-primary shrink-0" />
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="pt-2">
-                <Link
-                  to="/security"
-                  className="text-primary hover:text-primary/80 text-xs font-semibold inline-flex items-center gap-0.5"
-                >
-                  Verify our full security architecture <ChevronRight className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-            </motion.div>
-
-            <motion.div 
-              initial={{ opacity: 0, x: 15 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5 }}
-              className="lg:col-span-5 border border-border/10 rounded-xl bg-[#090d1a] p-6 space-y-4"
-            >
-              <h3 className="text-sm font-semibold text-white">Trust & Isolation Principles</h3>
-              <p className="text-xs text-[#86868b] leading-relaxed">
-                CloudPilot has been built from the ground up for maximum separation of duties. Our servers never store persistent administrative credentials. All auditing operations run as client-initiated sandbox transactions.
-              </p>
-              <div className="p-3.5 rounded-lg bg-[#0d142b]/60 border border-primary/20 text-[10px] font-mono text-primary leading-relaxed">
-                🔒 Security Checkpoint: Local isolation verified. Local Ollama integration isolates all security scanning operations within your local network sandbox boundary.
-              </div>
-            </motion.div>
-          </div>
+        <div className="max-w-3xl mx-auto px-6 text-center">
+          <motion.div 
+            initial={{ opacity: 0, y: 15 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="space-y-6"
+          >
+            <h2 className="text-3xl md:text-5xl font-semibold tracking-tight text-white leading-tight">
+              Stateless isolation.<br />
+              Your credentials stay yours.
+            </h2>
+            <p className="text-[#86868b] text-sm leading-relaxed max-w-2xl mx-auto">
+              CloudPilot exchanges temporary AWS Security Token Service (STS) credentials inside local sandbox environments. Your raw secret keys reside exclusively in the client's secure local context.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto pt-4 text-left">
+              {[
+                "Stateless memory isolation (no persistent key databases)",
+                "Short-lived session limits matching standard security principles",
+                "Fully verified and compliant WORM logs",
+                "Integrated pre-flight blocklists preventing toxic actions"
+              ].map((item, i) => (
+                <div key={i} className="flex items-center gap-3 text-xs text-[#86868b] border border-border/10 rounded-lg bg-[#090d1a] p-3">
+                  <Check className="w-4 h-4 text-primary shrink-0" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
+            <div className="pt-4">
+              <Link
+                to="/security"
+                className="text-primary hover:text-primary/80 text-xs font-semibold inline-flex items-center gap-0.5"
+              >
+                Verify our full security architecture <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </motion.div>
         </div>
       </section>
 
