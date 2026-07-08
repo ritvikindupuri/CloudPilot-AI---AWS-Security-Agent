@@ -6124,31 +6124,79 @@ export const handler = async (req: Request): Promise<Response> => {
       // Fallback: parse raw text content as tool call if formatted as JSON by the model
       if (!responseMessage.tool_calls && responseMessage.content) {
         try {
-          let text = responseMessage.content.trim();
-          const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/;
-          const match = text.match(codeBlockRegex);
-          if (match) {
-            text = match[1].trim();
-          }
-
-          if (text.startsWith("{") && text.endsWith("}")) {
-            const parsed = JSON.parse(text);
-            if (parsed.name && parsed.arguments) {
-              console.log("[CloudPilot Agent] Parsed tool call from text content fallback:", parsed);
-              responseMessage.tool_calls = [{
-                id: `call_${crypto.randomUUID().replace(/-/g, "")}`,
-                type: "function",
-                function: {
-                  name: parsed.name,
-                  arguments: typeof parsed.arguments === "string" 
-                    ? parsed.arguments 
-                    : JSON.stringify(parsed.arguments)
+          const text = responseMessage.content;
+          const toolCalls: any[] = [];
+          
+          // 1. Try finding markdown code blocks
+          const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/g;
+          let match;
+          while ((match = codeBlockRegex.exec(text)) !== null) {
+            try {
+              const content = match[1].trim();
+              const parsed = JSON.parse(content);
+              if (parsed.name && parsed.arguments) {
+                toolCalls.push(parsed);
+              } else if (Array.isArray(parsed)) {
+                for (const item of parsed) {
+                  if (item.name && item.arguments) {
+                    toolCalls.push(item);
+                  }
                 }
-              }];
+              }
+            } catch {
+              // Ignore invalid JSON in code blocks
             }
           }
-        } catch {
-          // Not a JSON tool call, continue normally
+
+          // 2. If no code blocks had valid tool calls, scan raw text for JSON objects starting with {"name"
+          if (toolCalls.length === 0) {
+            let index = 0;
+            while ((index = text.indexOf("{", index)) !== -1) {
+              let braceCount = 0;
+              let endIndex = -1;
+              for (let i = index; i < text.length; i++) {
+                if (text[i] === "{") braceCount++;
+                else if (text[i] === "}") {
+                  braceCount--;
+                  if (braceCount === 0) {
+                    endIndex = i;
+                    break;
+                  }
+                }
+              }
+
+              if (endIndex !== -1) {
+                const candidate = text.slice(index, endIndex + 1);
+                try {
+                  const parsed = JSON.parse(candidate);
+                  if (parsed.name && parsed.arguments) {
+                    toolCalls.push(parsed);
+                    index = endIndex + 1; // Advance past the matched object
+                    continue;
+                  }
+                } catch {
+                  // Not valid JSON, try next '{'
+                }
+              }
+              index++;
+            }
+          }
+
+          if (toolCalls.length > 0) {
+            console.log(`[CloudPilot Agent] Parsed ${toolCalls.length} tool calls from text content fallback:`, toolCalls);
+            responseMessage.tool_calls = toolCalls.map((tc) => ({
+              id: `call_${crypto.randomUUID().replace(/-/g, "")}`,
+              type: "function",
+              function: {
+                name: tc.name,
+                arguments: typeof tc.arguments === "string" 
+                  ? tc.arguments 
+                  : JSON.stringify(tc.arguments)
+              }
+            }));
+          }
+        } catch (err) {
+          console.warn("[CloudPilot Agent] Fallback tool call parser error:", err);
         }
       }
 
