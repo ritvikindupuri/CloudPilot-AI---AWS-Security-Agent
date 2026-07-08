@@ -5,8 +5,6 @@ import { ArrowRight, ChevronRight, Check, Shield, Cpu, RefreshCw, Database, Term
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import CloudPilotLogo from "@/components/CloudPilotLogo";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 // 3D Tilt interactive Glassmorphic Logo
 const ThreeDLogo = () => {
@@ -78,19 +76,45 @@ const DEMO_CYCLES = [
       "» CALL  s3:GetBucketPublicAccessBlock --bucket cp-staging-assets",
       "⚠ RESP  BlockPublicPolicy=false -- Public configuration exposed!",
     ],
-    agentResponse: `### S3 Public Access Scan Results
+    renderResponse: () => (
+      <div className="space-y-3 font-sans text-xs">
+        <h3 className="text-sm font-semibold text-white border-b border-border/20 pb-1.5 mt-2">S3 Public Access Scan Results</h3>
+        <p className="text-muted-foreground">Audited <strong className="text-foreground">3 buckets</strong> in your default account and detected <strong className="text-foreground">1 public exposure gap</strong>:</p>
+        
+        <div className="overflow-hidden border border-border/30 rounded-lg bg-[#070b19]">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-[#1b2244]/50 border-b border-border/30 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                <th className="px-3 py-2">Bucket Name</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Recommendation</th>
+                <th className="px-3 py-2 text-right">Risk</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="text-foreground border-b border-border/20 text-[11px]">
+                <td className="px-3 py-2 font-medium">cp-staging-assets</td>
+                <td className="px-3 py-2 text-rose-400 font-bold">EXPOSED</td>
+                <td className="px-3 py-2 text-muted-foreground">Restrict public policy</td>
+                <td className="px-3 py-2 text-right"><span className="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-1.5 py-0.5 rounded text-[9px] font-bold">HIGH</span></td>
+              </tr>
+              <tr className="text-muted-foreground/80 text-[11px] bg-[#1b2244]/10">
+                <td className="px-3 py-2">cp-prod-db-backups</td>
+                <td className="px-3 py-2 text-emerald-400 font-semibold">SECURE</td>
+                <td className="px-3 py-2">—</td>
+                <td className="px-3 py-2 text-right">—</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-Audited **3 buckets** in your default account and detected **1 public exposure gap**:
-
-| Bucket Name | Status | Recommendation | Risk Level |
-| :--- | :--- | :--- | :--- |
-| **cp-staging-assets** | **EXPOSED** | Restrict public bucket policy | **HIGH** |
-
-**Auto-Fix Blueprint:**
-\`\`\`bash
-aws s3api put-public-access-block --bucket cp-staging-assets \\
-  --public-access-block-configuration "BlockPublicPolicy=true"
-\`\`\``
+        <p className="font-semibold text-foreground mt-3">Auto-Fix Blueprint:</p>
+        <pre className="bg-[#090d20] border border-border/40 rounded-lg p-3 text-[11px] font-mono text-foreground overflow-x-auto">
+{`aws s3api put-public-access-block --bucket cp-staging-assets \\
+  --public-access-block-configuration "BlockPublicPolicy=true"`}
+        </pre>
+      </div>
+    )
   },
   {
     query: "Audit my security groups for public SSH open ports.",
@@ -102,17 +126,29 @@ aws s3api put-public-access-block --bucket cp-staging-assets \\
       "» EVAL  Parsing ingress permission rules for 0.0.0.0/0 source...",
       "⚠ ALERT Port 22 (SSH) open to public on group sg-98cf11",
     ],
-    agentResponse: `### Security Group Audit
+    renderResponse: () => (
+      <div className="space-y-3 font-sans text-xs">
+        <h3 className="text-sm font-semibold text-white border-b border-border/20 pb-1.5 mt-2">Security Group Audit</h3>
+        <p className="text-muted-foreground">I evaluated <strong className="text-foreground">8 security groups</strong> and found <strong className="text-foreground">1 critical vulnerability</strong>:</p>
+        
+        <div className="p-3.5 rounded-lg bg-[#1b2244]/20 border border-border/40 space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="font-semibold text-foreground">Default SG (sg-98cf11)</span>
+            <span className="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-1.5 py-0.5 rounded text-[9px] font-bold">HIGH RISK</span>
+          </div>
+          <ul className="space-y-1 pl-4 list-disc text-muted-foreground">
+            <li><strong className="text-foreground">Issue:</strong> Port 22 (SSH) is open to all IPs (0.0.0.0/0).</li>
+            <li><strong className="text-foreground">Risk:</strong> High vulnerability to automated brute-force attacks.</li>
+          </ul>
+        </div>
 
-I evaluated **8 security groups** and found **1 critical vulnerability**:
-
-* **Default SG** (\`sg-98cf11\`):
-  * **Issue**: Port **22** is open to all IPs (\`0.0.0.0/0\`).
-  * **Risk**: High vulnerability to automated brute-force attacks.
-  * **Command to run**:
-  \`\`\`bash
-  aws ec2 revoke-security-group-ingress --group-id sg-98cf11 --protocol tcp --port 22 --cidr 0.0.0.0/0
-  \`\`\``
+        <p className="font-semibold text-foreground mt-3">Remediation Command:</p>
+        <pre className="bg-[#090d20] border border-border/40 rounded-lg p-3 text-[11px] font-mono text-foreground overflow-x-auto">
+{`aws ec2 revoke-security-group-ingress --group-id sg-98cf11 \\
+  --protocol tcp --port 22 --cidr 0.0.0.0/0`}
+        </pre>
+      </div>
+    )
   }
 ];
 
@@ -121,7 +157,6 @@ const AnimatedConsole = () => {
   const [typedQuery, setTypedQuery] = useState("");
   const [phase, setPhase] = useState<"typing" | "routing" | "terminal" | "response">("typing");
   const [visibleLogs, setVisibleLogs] = useState<string[]>([]);
-  const [responseText, setResponseText] = useState("");
 
   const currentData = DEMO_CYCLES[cycleIndex];
 
@@ -132,7 +167,6 @@ const AnimatedConsole = () => {
       let charIdx = 0;
       setTypedQuery("");
       setVisibleLogs([]);
-      setResponseText("");
       
       const interval = setInterval(() => {
         if (!active) return;
@@ -186,29 +220,16 @@ const AnimatedConsole = () => {
     }
 
     if (phase === "response") {
-      let charIdx = 0;
-      const text = currentData.agentResponse;
-      const step = 4;
-      
-      const interval = setInterval(() => {
-        if (!active) return;
-        if (charIdx < text.length) {
-          setResponseText(text.slice(0, charIdx + step));
-          charIdx += step;
-        } else {
-          clearInterval(interval);
-          setTimeout(() => {
-            if (active) {
-              setCycleIndex((prev) => (prev + 1) % DEMO_CYCLES.length);
-              setPhase("typing");
-            }
-          }, 7000);
+      const timeout = setTimeout(() => {
+        if (active) {
+          setCycleIndex((prev) => (prev + 1) % DEMO_CYCLES.length);
+          setPhase("typing");
         }
-      }, 12);
+      }, 8000);
 
       return () => {
         active = false;
-        clearInterval(interval);
+        clearTimeout(timeout);
       };
     }
   }, [phase, cycleIndex]);
@@ -293,27 +314,7 @@ const AnimatedConsole = () => {
                 </div>
               </div>
               <div className="flex-1 min-w-0 bg-[#0f142c] border border-[#1b2244] rounded-xl px-4 py-3.5 text-[13px] leading-relaxed text-foreground font-sans">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  className="
-                    prose max-w-none prose-invert
-                    [&_p]:text-[12.5px] [&_p]:leading-[1.75] [&_p]:text-muted-foreground [&_p]:my-1.5
-                    [&_ul]:my-2 [&_ul]:pl-4 [&_ul]:space-y-0.5
-                    [&_li]:text-[12.5px] [&_li]:text-muted-foreground
-                    [&_strong]:font-bold [&_strong]:text-foreground
-                    [&_h3]:text-primary [&_h3]:text-[12px] [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1 [&_h3]:uppercase [&_h3]:tracking-wide
-                    [&_code]:font-mono [&_code]:bg-[#1b2244] [&_code]:border [&_code]:border-border/30 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-primary [&_code]:text-[11px]
-                    [&_pre]:bg-[#090d20] [&_pre]:border [&_pre]:border-border/40 [&_pre]:rounded-lg [&_pre]:p-3 [&_pre]:text-[11px] [&_pre]:overflow-x-auto [&_pre]:my-2
-                    [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:border-0 [&_pre_code]:text-foreground
-                    [&_table]:w-full [&_table]:text-[11px] [&_table]:border-collapse [&_table]:my-2 [&_table]:rounded-lg [&_table]:overflow-hidden
-                    [&_thead]:bg-[#1b2244]/50
-                    [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left [&_th]:text-[10px] [&_th]:font-semibold [&_th]:text-muted-foreground [&_th]:uppercase [&_th]:border [&_th]:border-border/30
-                    [&_td]:px-3 [&_td]:py-1.5 [&_td]:border [&_td]:border-border/30 [&_td]:text-foreground
-                    [&_tr:nth-child(even)_td]:bg-[#1b2244]/20
-                  "
-                >
-                  {responseText}
-                </ReactMarkdown>
+                {currentData.renderResponse()}
                 
                 {/* Under the hood transaction confirmation badge */}
                 <div className="mt-3 pt-2.5 border-t border-[#1b2244] flex flex-wrap gap-2 text-[10px] font-mono text-muted-foreground/60">
