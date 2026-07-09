@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Plus, PanelRightOpen, PanelRightClose, LogOut, History, FileText, Gauge, Settings2, Users, CreditCard, ClipboardCheck } from "lucide-react";
+import { Send, Plus, PanelRightOpen, PanelRightClose, LogOut, History, FileText, Gauge, Settings2, Users, CreditCard, ClipboardCheck, MessageSquare } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import ChatMessage from "@/components/ChatMessage";
@@ -396,7 +396,7 @@ const ChatInterface = () => {
         {/* Chat area */}
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex-1 overflow-y-auto scrollbar-thin">
-            {!hasMessages ? (
+            {!hasMessages && !currentConvId ? (
               <div className="flex flex-col items-center justify-center h-full px-6 py-12 max-w-2xl mx-auto">
                 <div className="text-center space-y-5 mb-8">
                   <div className="w-20 h-20 rounded-2xl bg-primary/10 border border-primary/25 flex items-center justify-center mx-auto glow-primary">
@@ -474,18 +474,25 @@ const ChatInterface = () => {
               </div>
             ) : (
               <div className="py-2">
-                {messages.map((msg) => (
-                  <ChatMessage
-                    key={msg.id}
-                    message={msg}
-                    onAddToS3={handleAddToS3}
-                    onTeardownVpc={() =>
-                      handleQuickAction(
-                        "Tear down and completely delete every VPC resource you previously created for routing — including all routes, internet gateway detachment + deletion, subnets, route tables, security groups, NAT gateways, released elastic IPs, and finally the VPC itself. Walk dependencies in the correct order so nothing is left behind that could incur charges. Confirm each deletion and return a final summary of what was removed."
-                      )
-                    }
-                  />
-                ))}
+                {messages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-[50vh] text-center space-y-3">
+                    <MessageSquare className="w-10 h-10 text-muted-foreground/35 animate-pulse" />
+                    <p className="text-xs text-muted-foreground">This session has no message history.</p>
+                  </div>
+                ) : (
+                  messages.map((msg) => (
+                    <ChatMessage
+                      key={msg.id}
+                      message={msg}
+                      onAddToS3={handleAddToS3}
+                      onTeardownVpc={() =>
+                        handleQuickAction(
+                          "Tear down and completely delete every VPC resource you previously created for routing — including all routes, internet gateway detachment + deletion, subnets, route tables, security groups, NAT gateways, released elastic IPs, and finally the VPC itself. Walk dependencies in the correct order so nothing is left behind that could incur charges. Confirm each deletion and return a final summary of what was removed."
+                        )
+                      }
+                    />
+                  ))
+                )}
                 {showThinking && <ThinkingIndicator />}
                 <div ref={bottomRef} />
               </div>
