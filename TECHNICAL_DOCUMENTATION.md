@@ -6,11 +6,11 @@
 ---
 
 > [!IMPORTANT]
-> ## ARCHITECTURAL UPDATE: Self-Contained Local Mode (No Supabase or Qwen2.5-Coder Cloud Required)
-> CloudPilot AI runs in a 100% local, self-contained architecture:
+> ## ARCHITECTURAL UPDATE: Self-Contained Local Mode (No Supabase or Cloud Database Required)
+> CloudPilot AI runs in a local, self-contained developer architecture:
 > 1. **Local Relational Database**: All tables (conversations, messages, runbooks, compliance baselines) are persisted in a real local SQLite database (`cloudpilot.db`) on your machine.
 > 2. **Local Deno Server Gateway**: A local Deno gateway (`local-server.ts`) runs on port `54321`. It mounts and executes all edge function logic locally with zero Docker or cloud database setup.
-> 3. **100% Offline AI Model**: Integrates with local **Ollama** using the open-source **`qwen2.5-coder`** security model. No cloud API keys or external developer accounts are required.
+> 3. **High-Fidelity AI Model**: Integrates with **Anthropic's Claude** (`claude-sonnet-4-6`) via `ANTHROPIC_API_KEY` for high-fidelity reasoning, safety auditing, and intent classification.
 
 
 ## Executive Summary
@@ -19,7 +19,7 @@ CloudPilot AI is an elite AWS cloud security operations agent designed explicitl
 
 Unlike traditional cloud security posture management (CSPM) tools or purely generative AI assistants, CloudPilot AI employs a strict **"Zero Simulation Tolerance"** policy. Every insight, security finding, and configuration analysis provided by the agent is backed by real, authenticated AWS API calls executed securely on behalf of the user. This guarantees that the intelligence is accurate, contextual, and actionable.
 
-The application is built on a modern, highly responsive stack. The frontend leverages React, Vite, Tailwind CSS, and shadcn-ui for a seamless user experience, incorporating features like real-time chat, AWS credential management (including **Pre-Flight IAM Boundary Checks** that render a capability checklist), chat history persistence, and actionable finding panels. The backend is orchestrated by Supabase Edge Functions running on Deno, which seamlessly broker communications between the React client, Local Qwen2.5-Coder (via Ollama API), and the user's AWS account via the AWS SDK. A lightweight **Intent Router** powered by Qwen2.5-Coder classifies each query before the main agent loop, selecting only the relevant tool subset to reduce token usage and improve accuracy.
+The application is built on a modern, highly responsive stack. The frontend leverages React, Vite, Tailwind CSS, and shadcn-ui for a seamless user experience, incorporating features like real-time chat, AWS credential management (including **Pre-Flight IAM Boundary Checks** that render a capability checklist), chat history persistence, and actionable finding panels. The backend is orchestrated by Supabase Edge Functions running on Deno, which seamlessly broker communications between the React client, Anthropic Claude API, and the user's AWS account via the AWS SDK. A lightweight **Intent Router** powered by Claude classifies each query before the main agent loop, selecting only the relevant tool subset to reduce token usage and improve accuracy.
 
 For security operations with absolute privacy requirements, the backend supports configurations to use **PrivateLink / VPC Endpoints**, ensuring that AWS API calls never route over the public internet. By configuring Private DNS in your VPC endpoints, the AWS SDK will automatically route traffic locally. Additionally, all API tool executions perform **WORM Audit Logging**, directly streaming request payloads into an immutable S3 bucket configured for Write-Once-Read-Many storage.
 
@@ -278,7 +278,7 @@ This sequence diagram traces the exact lifecycle of a typical user query ("Audit
 
 5. **First AI Invocation — Forced Tool Call (EF -> AI):** The edge function constructs the full context: a system prompt enforcing Zero Simulation Tolerance (including all 15 tool usage protocols), the sanitized conversation history, the credential context string (masked key + region), and 15 tool definitions. On iteration 0, `tool_choice` is set to `"required"`, forcing the AI to make at least one tool call before generating text.
 
-6. **Tool Call Routing (EF -> Router -> Scanner/Ops -> Executor -> AWS):** When Qwen2.5-Coder returns tool calls, `aws-agent` batches them all into a single POST to `aws-agent-tools`. The router classifies each call: scanner tools (`execute_aws_api`, `run_unified_audit`, `run_cost_anomaly_scan`, `manage_cost_rule`, `manage_drift_baseline`, `run_drift_detection`) go to `aws-agent-scanner`; ops tools (`manage_runbook_execution`, `manage_event_response_policy`, `replay_cloudtrail_events`, `run_org_query`, `manage_org_operation`, `manage_security_group_rule`, `manage_iam_access`, `run_attack_simulation`, `run_evasion_test`) go to `aws-agent-ops`. Both scanner and ops functions delegate actual AWS SDK calls to `aws-executor`, which dynamically loads the appropriate `@aws-sdk/client-*` package and executes the command.
+6. **Tool Call Routing (EF -> Router -> Scanner/Ops -> Executor -> AWS):** When the agent returns tool calls, `aws-agent` batches them all into a single POST to `aws-agent-tools`. The router classifies each call: scanner tools (`execute_aws_api`, `run_unified_audit`, `run_cost_anomaly_scan`, `manage_cost_rule`, `manage_drift_baseline`, `run_drift_detection`) go to `aws-agent-scanner`; ops tools (`manage_runbook_execution`, `manage_event_response_policy`, `replay_cloudtrail_events`, `run_org_query`, `manage_org_operation`, `manage_security_group_rule`, `manage_iam_access`, `run_attack_simulation`, `run_evasion_test`) go to `aws-agent-ops`. Both scanner and ops functions delegate actual AWS SDK calls to `aws-executor`, which dynamically loads the appropriate `@aws-sdk/client-*` package and executes the command.
 
 7. **Agentic Loop (up to 15 iterations):** This tool-call cycle can repeat up to 15 times. From iteration 2 onward, `tool_choice` switches to `"auto"`, allowing the AI to decide when it has gathered sufficient data.
 
@@ -3294,7 +3294,7 @@ This section tracks the enterprise readiness status of each major capability are
 
 ## 45. Conclusion
 
-CloudPilot AI represents a significant advancement in applied generative AI for cloud security operations. By bridging the reasoning capabilities of Google's Qwen2.5-Coder with the strict, deterministic execution of real AWS APIs across 35+ services, it eliminates the "hallucination" problem common in standard chat assistants through its uncompromising Zero Simulation Tolerance policy. The two-model architecture — Qwen2.5-Coder for intent classification and Qwen2.5-Coder for the main agent — optimizes for both speed and accuracy, reducing token usage by 40-70% on focused queries.
+CloudPilot AI represents a significant advancement in applied generative AI for cloud security operations. By bridging the reasoning capabilities of Anthropic's Claude with the strict, deterministic execution of real AWS APIs across 35+ services, it eliminates the "hallucination" problem common in standard chat assistants through its uncompromising Zero Simulation Tolerance policy. The two-model architecture — Claude for intent classification and Claude for the main agent — optimizes for both speed and accuracy, reducing token usage by 40-70% on focused queries.
 
 The architecture is meticulously designed for security at every layer: STS credential exchange ensures raw keys never reach the agent (Section 4); AES-256-GCM encryption with PBKDF2-derived per-user keys protects stored credentials at rest (Section 34); six defense-in-depth gates validate every tool call (Section 10); IAM blocked actions prevent privilege escalation through automation (Section 11); triple-sink audit logging provides forensic-grade accountability (Section 12); and TOTP-based MFA enrollment adds a second authentication factor (Section 36).
 
