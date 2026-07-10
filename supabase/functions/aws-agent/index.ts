@@ -1245,7 +1245,7 @@ async function classifyIntent(
     const contextMessages = messages.slice(-3).map((m) => `${m.role}: ${m.content}`).join("\n");
 
     const gatewayUrl = "http://localhost:11434/v1/chat/completions";
-    const classifierModel = Deno.env.get("OLLAMA_MODEL") || "qwen2.5-coder";
+    const classifierModel = Deno.env.get("OLLAMA_MODEL") || "gpt-oss:20b";
 
     const resp = await fetch(gatewayUrl, {
       method: "POST",
@@ -6091,7 +6091,7 @@ export const handler = async (req: Request): Promise<Response> => {
       const toolChoice = i === 0 ? "required" : "auto";
 
       const gatewayUrl = "http://localhost:11434/v1/chat/completions";
-      const agentModel = Deno.env.get("OLLAMA_MODEL") || "qwen2.5-coder";
+      const agentModel = Deno.env.get("OLLAMA_MODEL") || "gpt-oss:20b";
 
       const response = await fetch(gatewayUrl, {
         method: "POST",
