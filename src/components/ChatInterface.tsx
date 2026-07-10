@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Plus, PanelRightOpen, PanelRightClose, LogOut, History, FileText, Gauge, Settings2, Users, CreditCard, ClipboardCheck, MessageSquare } from "lucide-react";
+import { Send, Plus, PanelRightOpen, PanelRightClose, LogOut, History, FileText, Gauge, Settings2, Users, CreditCard, ClipboardCheck, MessageSquare, Check, Key, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import ChatMessage from "@/components/ChatMessage";
@@ -15,6 +15,7 @@ import NotificationSettings from "@/components/NotificationSettings";
 import OnboardingWizard from "@/components/OnboardingWizard";
 import MfaSetup from "@/components/MfaSetup";
 import WebhookSettings from "@/components/WebhookSettings";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { useChat } from "@/hooks/useChat";
 import { useAuth } from "@/hooks/useAuth";
 import { useChatHistory } from "@/hooks/useChatHistory";
@@ -389,80 +390,214 @@ const ChatInterface = () => {
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex-1 overflow-y-auto scrollbar-thin">
             {!hasMessages && !currentConvId ? (
-              <div className="flex flex-col items-center justify-center h-full px-6 py-12 max-w-2xl mx-auto">
-                <div className="text-center space-y-5 mb-8">
-                  <div className="w-20 h-20 rounded-2xl bg-primary/10 border border-primary/25 flex items-center justify-center mx-auto glow-primary">
-                    <CloudPilotLogo className="w-12 h-12 text-primary" />
+              <div className="flex flex-col items-center justify-start h-full px-6 py-8 max-w-3xl mx-auto space-y-8 scrollbar-thin overflow-y-auto">
+                
+                {/* Header */}
+                <div className="text-center space-y-4 mt-2">
+                  <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto glow-primary">
+                    <CloudPilotLogo className="w-10 h-10 text-primary" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-foreground tracking-tight mb-2">CloudPilot AI</h2>
-                    <p className="text-sm text-muted-foreground leading-relaxed max-w-sm mx-auto">
-                      Real-time AWS security operations. Connect your credentials to audit, investigate, and remediate cloud infrastructure.
+                    <h2 className="text-2xl font-bold text-foreground tracking-tight">CloudPilot Getting Started</h2>
+                    <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1 leading-relaxed">
+                      Follow these three simple interactive steps to analyze, secure, and monitor your AWS cloud infrastructure.
                     </p>
                   </div>
                 </div>
 
-                {!credentials && (
-                  <div className="w-full max-w-sm mb-8">
-                    <AwsCredentialsPanel credentials={credentials} onSave={handleCredentialsSave} />
-                  </div>
-                )}
-
-                {credentials && (
-                  <div className="w-full animate-fade-in-up space-y-4">
-                    <div className="border border-border rounded-xl bg-card/60 p-4">
-                      <div className="flex items-start justify-between gap-3">
+                {/* Interactive Steps Grid */}
+                <div className="w-full grid gap-4">
+                  
+                  {/* STEP 1: Connect AWS Account */}
+                  <div className={`border rounded-xl p-4 transition-all duration-200 bg-card/60 ${
+                    credentials ? 'border-green-500/20 bg-green-500/[0.01]' : 'border-border'
+                  }`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex gap-3">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                          credentials ? 'bg-green-500/10 text-green-400' : 'bg-primary/10 text-primary'
+                        }`}>
+                          {credentials ? <Check className="w-4 h-4" /> : <Key className="w-4 h-4" />}
+                        </div>
                         <div>
-                          <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Account Health</p>
-                          <div className="flex items-end gap-2 mt-1">
-                            <span className={`text-3xl font-bold ${scoreColor}`}>
-                              {auditSummary ? auditSummary.accountHealthScore : "—"}
-                            </span>
-                            <span className="text-sm text-muted-foreground mb-1">/ 100</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {auditSummary
-                              ? `${auditSummary.totals.overallRisk} overall risk across ${auditSummary.totals.findings} findings`
-                              : "Run the Unified Audit quick action to populate the live score and findings summary."}
+                          <h3 className="text-sm font-semibold flex items-center gap-1.5 flex-wrap">
+                            Step 1: Connect your AWS Account
+                            {credentials && <span className="text-[10px] bg-green-500/10 text-green-400 px-1.5 py-0.5 rounded font-mono">Connected</span>}
+                          </h3>
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                            {credentials 
+                              ? `Active session using Access Key ID ${credentials.displayKeyPrefix || "role"}... in region ${credentials.region}.`
+                              : "Enter temporary session tokens or an IAM role. Raw credentials are never stored or exposed."}
                           </p>
                         </div>
-                        <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-                          <Gauge className="w-5 h-5 text-primary" />
-                        </div>
                       </div>
-
-                      <div className="grid grid-cols-4 gap-2 mt-4">
-                        {[
-                          { label: "CRIT", value: auditSummary?.totals.severityCounts.CRITICAL ?? 0, className: "text-destructive" },
-                          { label: "HIGH", value: auditSummary?.totals.severityCounts.HIGH ?? 0, className: "text-severity-high" },
-                          { label: "MED", value: auditSummary?.totals.severityCounts.MEDIUM ?? 0, className: "text-severity-medium" },
-                          { label: "LOW", value: auditSummary?.totals.severityCounts.LOW ?? 0, className: "text-severity-low" },
-                        ].map((item) => (
-                          <div key={item.label} className="rounded-lg border border-border bg-muted/40 px-3 py-2">
-                            <p className={`text-sm font-bold ${item.className}`}>{item.value}</p>
-                            <p className="text-[10px] font-mono text-muted-foreground mt-0.5">{item.label}</p>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="mt-4 grid gap-1.5 text-[11px] text-muted-foreground">
-                        <p>Quick queries:</p>
-                        <button onClick={() => handleQuickAction("Show me everything wrong with my AWS account. Run a formal unified audit across IAM, S3, security groups, EC2, and cost exposure. Return a neatly formatted report with an executive summary, top three issues, recommended fix order, and notable patterns.")} className="text-left hover:text-primary transition-colors">show me everything wrong</button>
-                        <button onClick={() => handleQuickAction("What are my security issues? Run a formal unified audit focused on IAM, S3, security groups, and EC2 exposure, and return a neatly formatted report.")} className="text-left hover:text-primary transition-colors">what are my security issues</button>
-                        <button onClick={() => handleQuickAction("Where am I wasting money? Run a formal unified audit focused on cost and EC2 waste, and return a neatly formatted report.")} className="text-left hover:text-primary transition-colors">where am I wasting money</button>
-                        <button onClick={() => handleQuickAction("Am I SOC2 ready? Run a formal compliance-focused unified audit covering IAM, S3, security groups, EC2, encryption, and logging gaps, and return a checklist-style report.")} className="text-left hover:text-primary transition-colors">am I SOC2 ready</button>
-                      </div>
-
-                      {auditSummary && (
-                        <p className="text-[10px] text-muted-foreground font-mono mt-4">
-                          Cache: {auditSummary.cache.status} · Last refreshed {new Date(auditSummary.cache.lastRefreshedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </p>
+                      
+                      {credentials && (
+                        <button 
+                          onClick={() => {
+                            localStorage.removeItem("cloudpilot-aws-credentials");
+                            setCredentials(null);
+                            toast.success("Disconnected from AWS account.");
+                          }}
+                          className="text-[10px] text-muted-foreground hover:text-destructive border border-border px-2.5 py-1 rounded-md transition-all hover:border-destructive/30 flex-shrink-0"
+                        >
+                          Disconnect
+                        </button>
                       )}
                     </div>
 
-                    <QuickActions onAction={handleQuickAction} disabled={isLoading} credentials={credentials} />
+                    {!credentials && (
+                      <div className="mt-4 pt-3 border-t border-border/40 max-w-md">
+                        <AwsCredentialsPanel credentials={credentials} onSave={handleCredentialsSave} />
+                      </div>
+                    )}
                   </div>
-                )}
+
+                  {/* STEP 2: Run Security Scan */}
+                  <div className={`border rounded-xl p-4 transition-all duration-200 ${
+                    !credentials 
+                      ? 'border-border/30 opacity-50 bg-muted/5' 
+                      : auditSummary 
+                        ? 'border-green-500/20 bg-green-500/[0.01]' 
+                        : 'border-border bg-card/60'
+                  }`}>
+                    <div className="flex gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        !credentials 
+                          ? 'bg-muted text-muted-foreground' 
+                          : auditSummary 
+                            ? 'bg-green-500/10 text-green-400' 
+                            : 'bg-primary/10 text-primary'
+                      }`}>
+                        {auditSummary ? <Check className="w-4 h-4" /> : <Gauge className="w-4 h-4" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold flex items-center gap-1.5 flex-wrap">
+                          Step 2: Run first security audit
+                          {auditSummary && <span className="text-[10px] bg-green-500/10 text-green-400 px-1.5 py-0.5 rounded font-mono">Score: {auditSummary.accountHealthScore}/100</span>}
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                          Analyze your AWS configurations across IAM, S3, Security Groups, and Costs to map compliance and compute your health score.
+                        </p>
+
+                        {credentials && !auditSummary && (
+                          <div className="mt-3">
+                            <Button 
+                              variant="terminal" 
+                              size="xs" 
+                              onClick={() => handleQuickAction("Show me everything wrong with my AWS account. Run a formal unified audit across IAM, S3, security groups, EC2, and cost exposure. Return a neatly formatted report with an executive summary, top three issues, recommended fix order, and notable patterns.")}
+                              disabled={isLoading}
+                              className="font-mono text-xs"
+                            >
+                              Run Account Security Scan
+                            </Button>
+                          </div>
+                        )}
+
+                        {auditSummary && (
+                          <div className="mt-4 pt-3 border-t border-border/40 space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Account Health Score</p>
+                                <div className="flex items-baseline gap-1">
+                                  <span className={`text-2xl font-black ${scoreColor}`}>
+                                    {auditSummary.accountHealthScore}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">/ 100</span>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-4 gap-1.5">
+                                {[
+                                  { label: "CRIT", value: auditSummary.totals.severityCounts.CRITICAL, className: "text-destructive" },
+                                  { label: "HIGH", value: auditSummary.totals.severityCounts.HIGH, className: "text-severity-high" },
+                                  { label: "MED", value: auditSummary.totals.severityCounts.MEDIUM, className: "text-severity-medium" },
+                                  { label: "LOW", value: auditSummary.totals.severityCounts.LOW, className: "text-severity-low" },
+                                ].map((item) => (
+                                  <div key={item.label} className="rounded border border-border/80 bg-muted/40 px-2 py-1 text-center min-w-[50px]">
+                                    <p className={`text-xs font-black ${item.className}`}>{item.value}</p>
+                                    <p className="text-[8px] font-mono text-muted-foreground">{item.label}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            
+                            <p className="text-[10px] text-muted-foreground leading-normal font-mono">
+                              Findings: {auditSummary.totals.findings} total · Overall Risk: {auditSummary.totals.overallRisk} · Refreshed {new Date(auditSummary.cache.lastRefreshedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* STEP 3: Ask & Remediate */}
+                  <div className={`border rounded-xl p-4 transition-all duration-200 ${
+                    !auditSummary 
+                      ? 'border-border/30 opacity-50 bg-muted/5' 
+                      : 'border-border bg-card/60'
+                  }`}>
+                    <div className="flex gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        !auditSummary ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary'
+                      }`}>
+                        <MessageSquare className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold">Step 3: Analyze results & remediate</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                          Ask CloudPilot any security questions, or use quick actions to inspect S3 exposure, evaluate IAM privilege escalation, or generate CLI remedies.
+                        </p>
+
+                        {auditSummary && (
+                          <div className="mt-4 pt-3 border-t border-border/40 space-y-4">
+                            <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Curated Query Templates</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {[
+                                { text: "Am I SOC2 ready?", q: "Am I SOC2 ready? Run a formal compliance-focused unified audit covering IAM, S3, security groups, EC2, encryption, and logging gaps, and return a checklist-style report." },
+                                { text: "Find cost anomalies", q: "Find cost anomalies in my AWS account. Pull the recent cost breakdown, identify spikes or accelerating trends, check for idle EC2 instances, and return a formal summary with recommended actions." },
+                                { text: "Enforce IMDSv2", q: "Enforce IMDSv2 across all EC2 instances using real API calls. Query all instances and their MetadataOptions (HttpTokens setting). For each instance with HttpTokens=optional (IMDSv1 enabled), provide the exact AWS CLI command to enforce IMDSv2." },
+                                { text: "Check S3 exposure", q: "Query all S3 buckets in the account using real AWS API calls. For each bucket check: public access block settings, bucket ACL, bucket policy (identify external principals), default encryption, versioning status, access logging, and replication." }
+                              ].map((item) => (
+                                <button
+                                  key={item.text}
+                                  onClick={() => handleQuickAction(item.q)}
+                                  disabled={isLoading}
+                                  className="text-left border border-border rounded-lg p-2.5 hover:bg-muted/40 hover:text-primary transition-all text-xs font-medium flex items-center justify-between gap-2 min-w-0"
+                                >
+                                  <span className="truncate">{item.text}</span>
+                                  <ChevronRight className="w-3.5 h-3.5 opacity-60 flex-shrink-0" />
+                                </button>
+                              ))}
+                            </div>
+
+                            <div className="pt-2 flex justify-start">
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="outline" size="sm" className="font-mono text-xs">
+                                    Browse all 35+ Quick Actions
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+                                  <DialogHeader>
+                                    <DialogTitle>CloudPilot Quick Actions Catalog</DialogTitle>
+                                    <DialogDescription>
+                                      Select any pre-built security audit, compliance mapping, or attack simulation playbooks to run on your AWS account.
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <div className="mt-4">
+                                    <QuickActions onAction={handleQuickAction} disabled={isLoading} credentials={credentials} />
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
               </div>
             ) : (
               <div className="py-2">
