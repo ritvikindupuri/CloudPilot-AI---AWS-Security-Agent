@@ -6255,6 +6255,7 @@ export const handler = async (req: Request): Promise<Response> => {
     let isStreamable = false;
     let latestUnifiedAuditSummary: Record<string, any> | null = null;
     const liveExecutionLogs: Array<{ step: string; status: "info" | "success" | "warning" | "error"; message: string }> = [];
+    let blockedAuditsCount = 0;
 
     // ── Intent-based routing ─────────────────────────────────────────────────
     liveExecutionLogs.push({ step: "Router", status: "info", message: "Classifying query intent..." });
@@ -6377,6 +6378,7 @@ export const handler = async (req: Request): Promise<Response> => {
 
         const safetyAudit = await runSafetyAudit(responseMessage.tool_calls, apiMessages);
         if (!safetyAudit.approved) {
+          blockedAuditsCount++;
           console.warn("[CloudPilot Safety Gate] Action BLOCKED by Safety Gate Judge:", safetyAudit.reason);
           liveExecutionLogs.push({ step: "Safety Gate", status: "error", message: `Safety Gate Judge: BLOCKED. Reason: ${safetyAudit.reason}` });
           liveExecutionLogs.push({ step: "Agent", status: "warning", message: "Agent: Rejection received, initiating self-correction loop..." });
@@ -6446,7 +6448,11 @@ export const handler = async (req: Request): Promise<Response> => {
     }
 
     if (!isStreamable) {
-      finalResponseText = "Agent reached the maximum number of API iterations. Try narrowing your request.";
+      if (blockedAuditsCount > 0) {
+        finalResponseText = `Agent reached the maximum number of execution iterations. The proposed actions were blocked ${blockedAuditsCount} time(s) by the Safety Gate Judge (rejections are typically triggered by vague user intent, missing resource context, or security restrictions). Please try narrowing your request, specifying exact resource names (e.g., bucket names), or providing explicit confirmation for the actions.`;
+      } else {
+        finalResponseText = "Agent reached the maximum number of execution iterations. Try narrowing your request or breaking it into smaller steps.";
+      }
     }
 
     const stream = new ReadableStream({
