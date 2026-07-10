@@ -102,10 +102,11 @@ graph TB
         D[Supabase Auth]
     end
 
-    subgraph "AI Layer"
-        E[Local Ollama API]
-        F[Qwen2.5-Coder - Main Agent]
-        F2[Qwen2.5-Coder - Intent Classifier]
+    subgraph "AI Layer (Anthropic)"
+        E[Anthropic API Gateway]
+        F[Claude 3.5 Sonnet - Main Agent]
+        F2[Claude 3.5 Sonnet - Intent Classifier]
+        F3[Claude 3.5 Sonnet - Safety Gate Judge]
     end
 
     subgraph "AWS Layer"
@@ -116,12 +117,15 @@ graph TB
     A -- "HTTPS" --> B6
     A -- "Auth State" --> D
     A -- "CRUD via RLS" --> C
-    B -- "API Key Auth" --> E
+    B -- "x-api-key Auth" --> E
     E --> F2
     F2 -- "Intent classification" --> B
     E --> F
-    F -- "Tool Calls" --> B
-    B -- "Batch tool dispatch" --> B2
+    F -- "Proposed Tool Calls" --> B
+    E --> F3
+    B -- "Audit proposed tool calls" --> F3
+    F3 -- "Audit verdict" --> B
+    B -- "Batch tool dispatch (if approved)" --> B2
     B2 -- "Scanner tools" --> B3
     B2 -- "Ops tools" --> B4
     B3 -- "AWS SDK proxy" --> B5
@@ -144,7 +148,7 @@ This diagram illustrates the complete four-layer architecture of CloudPilot AI a
 - **Client Layer:** The React frontend communicates with three backend services. It sends user queries and AWS session credentials to the `aws-agent` edge function over HTTPS with a Bearer token. It reads and writes chat history (conversations and messages) directly to the Supabase Database, protected by Row-Level Security (RLS) policies that scope all queries to the authenticated user. It manages authentication state through Supabase Auth. It also calls `aws-exchange-credentials` directly for STS credential exchange before any agent interaction.
 
 - **Backend Layer:** Ten edge functions collaborate to deliver the full feature set:
-  - **`aws-agent`** (1,337 lines) — The central orchestrator. Receives the user query, classifies intent using an LLM-based router (Qwen2.5-Coder), selects only the relevant tool subset for the classified intent, manages the agentic loop with the main AI model (Qwen2.5-Coder), dispatches tool calls to `aws-agent-tools`, and streams the final response back as SSE.
+  - **`aws-agent`** (1,337 lines) — The central orchestrator. Receives the user query, classifies intent using an LLM-based router (Claude 3.5 Sonnet), selects only the relevant tool subset for the classified intent, manages the agentic loop with the main AI model (Claude 3.5 Sonnet), dispatches tool calls to `aws-agent-tools` once approved by the Safety Gate Judge, and streams the final response back as SSE.
   - **`aws-agent-tools`** (75 lines) — A thin router that classifies incoming tool calls and dispatches them in parallel to either `aws-agent-scanner` or `aws-agent-ops`.
   - **`aws-agent-scanner`** (2,987 lines) — Handles `run_unified_audit`, `run_cost_anomaly_scan`, `manage_cost_rule`, `manage_drift_baseline`, `run_drift_detection`, and `execute_aws_api`. Contains the unified audit engine, cost anomaly detection, drift detection, and raw AWS API execution logic.
   - **`aws-agent-ops`** (4,572 lines) — Handles `manage_runbook_execution`, `manage_event_response_policy`, `replay_cloudtrail_events`, `run_org_query`, `manage_org_operation`, `manage_security_group_rule`, `manage_iam_access`, `run_attack_simulation`, and `run_evasion_test`. Contains the operational automation, org-wide queries, security group mutations, IAM automation, attack simulation, and evasion testing logic.
@@ -155,11 +159,11 @@ This diagram illustrates the complete four-layer architecture of CloudPilot AI a
   - **`aws-credential-vault`** (170 lines) — The AES-256-GCM credential encryption/decryption service. Uses PBKDF2 with 100,000 iterations to derive per-user encryption keys from the service role key. Handles `encrypt_and_store` (for client credential submission) and `decrypt` (for guardian-scheduler autonomous scans). See Section 34 for full details.
   - **`webhook-notify`** (250 lines) — The external notification dispatcher. Sends Guardian alerts, auto-fix notifications, drift events, and cost anomalies to Slack (Block Kit), PagerDuty (Events API v2), or generic webhook endpoints. Manages webhook registration, listing, and deletion. See Section 36 for full details.
 
-- **AI Layer:** The Local Ollama API receives requests for two Local Qwen2.5-Coder models. The **Intent Classifier** uses Qwen2.5-Coder (fastest, cheapest) for a single classification call that determines which tool subset to activate. The **Main Agent** uses Qwen2.5-Coder (balanced speed and capability) for the multi-iteration agentic loop with tool calling. This two-model architecture reduces token usage by 40-70% on focused queries by excluding irrelevant tools from the context.
+- **AI Layer:** The Anthropic API Gateway processes requests for three model personas: the **Intent Classifier** (for single-shot classification), the **Main Agent** (for tool-call reasoning), and the **Safety Gate Judge** (for action auditing). This minimizes token overhead and guarantees security boundaries on execution.
 
 - **AWS Layer:** The user's real AWS account, accessed via AWS SDK v3 through the `aws-executor` proxy using temporary session credentials. The agent can interact with 35+ security-relevant services.
 
-- **Data Flow:** Queries flow from the client to `aws-agent` to the AI Gateway to Qwen2.5-Coder. When Qwen2.5-Coder returns tool calls, `aws-agent` batches them to `aws-agent-tools`, which routes them to `aws-agent-scanner` or `aws-agent-ops`. These functions call `aws-executor` for any AWS SDK operations. Real API responses flow back through the chain to Qwen2.5-Coder for analysis. The final Markdown response is streamed to the client via SSE.
+- **Data Flow:** Queries flow from the client to `aws-agent` to the Anthropic API Gateway to Claude 3.5 Sonnet. When Claude returns tool calls, they are checked by the Safety Gate Judge. If approved, `aws-agent` batches them to `aws-agent-tools`, which routes them to `aws-agent-scanner` or `aws-agent-ops`. These functions call `aws-executor` for any AWS SDK operations. Real API responses flow back through the chain to Claude for analysis. The final Markdown response is streamed to the client via SSE.
 
 ### Component Responsibilities
 
@@ -176,7 +180,7 @@ This diagram illustrates the complete four-layer architecture of CloudPilot AI a
 | `guardian-event-processor` | Deno Edge Function (499 lines) | Real-time CloudTrail event reaction and auto-fix |
 | Supabase Auth | Supabase Auth (email/password) | User registration, login, session management |
 | Supabase Database | PostgreSQL + RLS | Chat history, audit logs, cache, idempotency keys |
-| Local Ollama API | Model API | Serves Qwen2.5-Coder (intent classifier) and Qwen2.5-Coder (main agent) |
+| Anthropic API Gateway | Model API Gateway | Serves Claude 3.5 Sonnet (intent classifier, main agent, safety gate judge) |
 | AWS Account | AWS SDK v3 (35+ services) | Real infrastructure data, configuration states, resource management |
 
 ---
@@ -191,10 +195,11 @@ sequenceDiagram
     participant UI as React Frontend
     participant DB as Supabase Database
     participant EF as aws-agent
+    participant Judge as Safety Gate Judge (Claude)
     participant Router as aws-agent-tools
     participant Scanner as aws-agent-scanner
     participant Executor as aws-executor
-    participant AI as Qwen2.5-Coder via AI Gateway
+    participant AI as Claude 3.5 Sonnet via Anthropic API
     participant AWS as User AWS Account
 
     Note over User,AWS: Example - Audit all S3 buckets for public access
@@ -211,6 +216,9 @@ sequenceDiagram
 
     AI-->>EF: Tool call execute_aws_api - S3 listBuckets
 
+    EF->>Judge: Audit proposed execute_aws_api tool calls
+    Judge-->>EF: Returns audit verdict (Approved)
+
     EF->>Router: POST aws-agent-tools with toolCalls, awsConfig, userId
     Router->>Scanner: Dispatch scanner tools
     Scanner->>Executor: POST aws-executor - S3 ListBucketsCommand
@@ -225,6 +233,9 @@ sequenceDiagram
     AI-->>EF: Tool call execute_aws_api - S3 getBucketAcl for my-bucket
 
     Note over EF: Iterations 2+ use tool_choice auto
+
+    EF->>Judge: Audit proposed tool calls
+    Judge-->>EF: Returns audit verdict (Approved)
 
     EF->>Router: Dispatch tool call
     Router->>Scanner: execute_aws_api
