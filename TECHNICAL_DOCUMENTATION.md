@@ -56,13 +56,13 @@ By tightly coupling LLM reasoning capabilities with strict, restricted, and audi
 25. [Security Group Automation — Risk-Gated Mutations](#25-security-group-automation--risk-gated-mutations)
 26. [Cost Automation — Rules, Anomalies, and Remediation](#26-cost-automation--rules-anomalies-and-remediation)
 27. [Drift Detection — Baselines, Diffs, and Morning Digests](#27-drift-detection--baselines-diffs-and-morning-digests)
-28. [Guardian Automation — Scheduler and Event Processor](#28-guardian-automation--scheduler-and-event-processor)
+28. [Security Audit Mode — Pure On-Demand Interactive Auditing](#28-security-audit-mode--pure-on-demand-interactive-auditing)
 29. [AWS Organizations Automation](#29-aws-organizations-automation)
 30. [Runbook Execution Engine](#30-runbook-execution-engine)
 31. [Operations Control Plane](#31-operations-control-plane)
 32. [Dual Approval Workflow — Governed High-Risk Execution](#32-dual-approval-workflow--governed-high-risk-execution)
 33. [Compliance Evidence Exports & Immutable Audit Timeline](#33-compliance-evidence-exports--immutable-audit-timeline)
-34. [AES-256-GCM Credential Vault](#34-aes-256-gcm-credential-vault)
+34. [Zero-Storage Architecture — Browser Session Credentials](#34-zero-storage-architecture--browser-session-credentials)
 35. [RBAC & Multi-Tenant Organization System](#35-rbac--multi-tenant-organization-system)
 36. [Multi-Factor Authentication (MFA) Enrollment](#36-multi-factor-authentication-mfa-enrollment)
 37. [Edge Function Rate Limiting](#37-edge-function-rate-limiting)
@@ -71,7 +71,7 @@ By tightly coupling LLM reasoning capabilities with strict, restricted, and audi
 40. [End-to-End Test Suite](#40-end-to-end-test-suite)
 41. [Team Management UI](#41-team-management-ui)
 42. [SSO/SAML Integration Preparation](#42-ssosaml-integration-preparation)
-43. [Billing & Subscription System — Stripe Integration](#43-billing--subscription-system--stripe-integration)
+43. [Open & Free Console Access](#43-open--free-console-access)
 44. [Production Readiness Roadmap](#44-production-readiness-roadmap)
 45. [Conclusion](#45-conclusion)
 
@@ -79,12 +79,12 @@ By tightly coupling LLM reasoning capabilities with strict, restricted, and audi
 
 ## 1. System Architecture
 
-The architecture of CloudPilot AI is designed to ensure strict separation of concerns, secure handling of credentials, and responsive streaming of AI-generated insights. The system is organized into four distinct layers: Client, Backend, AI, and AWS. Each layer has clearly defined responsibilities and communicates with its neighbors through authenticated, encrypted channels.
+CloudPilot AI features a decoupled web architecture designed to isolate agent reasoning logic, credentials management, database telemetry, and AWS API operations.
 
 ```mermaid
-graph TB
-    subgraph "Client Layer"
-        A[React Frontend - Vite + Tailwind + shadcn/ui]
+graph TD
+    subgraph "Frontend Layer (User Browser)"
+        A[React App]
     end
 
     subgraph "Backend Layer"
@@ -94,9 +94,6 @@ graph TB
         B4[aws-agent-ops - Ops Edge Function]
         B5[aws-executor - AWS SDK Proxy]
         B6[aws-exchange-credentials - STS Exchange]
-        B7[guardian-scheduler - Scheduled Automation]
-        B8[guardian-event-processor - CloudTrail Reactor]
-        B9[aws-credential-vault - AES-256-GCM Encryption]
         B10[webhook-notify - Slack/PagerDuty Dispatcher]
         C[(Supabase Database)]
         D[Supabase Auth]
@@ -109,61 +106,63 @@ graph TB
         F3[Claude 3.5 Sonnet - Safety Gate Judge]
     end
 
-    subgraph "AWS Layer"
-        G[User AWS Account - 35+ Services]
+    subgraph "AWS Cloud Account"
+        G[User AWS Account APIs]
     end
 
-    A -- "HTTPS + Bearer Token" --> B
-    A -- "HTTPS" --> B6
-    A -- "Auth State" --> D
-    A -- "CRUD via RLS" --> C
-    B -- "x-api-key Auth" --> E
-    E --> F2
-    F2 -- "Intent classification" --> B
-    E --> F
-    F -- "Proposed Tool Calls" --> B
-    E --> F3
-    B -- "Audit proposed tool calls" --> F3
-    F3 -- "Audit verdict" --> B
-    B -- "Batch tool dispatch (if approved)" --> B2
-    B2 -- "Scanner tools" --> B3
-    B2 -- "Ops tools" --> B4
-    B3 -- "AWS SDK proxy" --> B5
-    B4 -- "AWS SDK proxy" --> B5
-    B5 -- "AWS SDK v3" --> G
-    B7 -- "Scheduled polling" --> B3
-    B8 -- "CloudTrail events" --> G
-    G -- "Real API Responses" --> B5
-    B -- "SSE Stream" --> A
+    A -->|1. Sign In / JWT| D
+    A -->|2. Exchange Keys| B6
+    B6 -->|3. Call STS| G
+    B6 -->|4. Return Temp Session Token| A
+    A -->|5. Send Query + Token| B
+    B -->|6. Check Intent| E
+    E -->|7. Route Intent| F2
+    B -->|8. Batch Approved Tool Calls| B2
+    B2 -->|9a. Audit/Scanner| B3
+    B2 -->|9b. Operations/Mutations| B4
+    B3 -->|10a. Invoke SDK| B5
+    B4 -->|10b. Invoke SDK| B5
+    B5 -->|11. Execute Real AWS API| G
+    B4 -->|12. Dispatch Alerts| B10
+    B10 -->|13. Post Alerts| G
+    B -->|14. Query Logs / History| C
+    A -->|15. Read History| C
+
+    style A fill:#1a1a2e,stroke:#00d4ff,color:#e0e0e0
+    style B fill:#1a1a2e,stroke:#00d4ff,color:#e0e0e0
+    style B2 fill:#1a1a2e,stroke:#00d4ff,color:#e0e0e0
+    style B3 fill:#1a1a2e,stroke:#00d4ff,color:#e0e0e0
+    style B4 fill:#1a1a2e,stroke:#00d4ff,color:#e0e0e0
+    style B5 fill:#1a1a2e,stroke:#00d4ff,color:#e0e0e0
+    style B6 fill:#1a1a2e,stroke:#00d4ff,color:#e0e0e0
+    style B10 fill:#1a1a2e,stroke:#00d4ff,color:#e0e0e0
+    style C fill:#1a1a2e,stroke:#00ff88,color:#e0e0e0
+    style D fill:#1a1a2e,stroke:#00ff88,color:#e0e0e0
+    style E fill:#1a1a2e,stroke:#f0c040,color:#e0e0e0
+    style F fill:#1a1a2e,stroke:#f0c040,color:#e0e0e0
+    style F2 fill:#1a1a2e,stroke:#f0c040,color:#e0e0e0
+    style F3 fill:#1a1a2e,stroke:#f0c040,color:#e0e0e0
+    style G fill:#1a1a2e,stroke:#9b5de5,color:#e0e0e0
 ```
 
-<div align="center">
-  <em>Figure 1.1: CloudPilot AI High-Level System Architecture — All Eight Edge Functions and Four Layers</em>
-</div>
+<p align="center">
+  <em>Figure 1.1: System Architecture — Decoherent layers separating frontend browser client, edge orchestrators, LLMs, and real cloud endpoints</em>
+</p>
 
 **Figure 1.1 Explanation:**
-
-This diagram illustrates the complete four-layer architecture of CloudPilot AI and the data flow between all components:
-
-- **Client Layer:** The React frontend communicates with three backend services. It sends user queries and AWS session credentials to the `aws-agent` edge function over HTTPS with a Bearer token. It reads and writes chat history (conversations and messages) directly to the Supabase Database, protected by Row-Level Security (RLS) policies that scope all queries to the authenticated user. It manages authentication state through Supabase Auth. It also calls `aws-exchange-credentials` directly for STS credential exchange before any agent interaction.
-
-- **Backend Layer:** Ten edge functions collaborate to deliver the full feature set:
+*   **Frontend Layer:** The React Single Page Application (SPA). Manages client states, hosts active browser session credentials (temporary STS keys), and handles local storage cache.
+*   **Backend Layer:** Seven edge functions collaborate to deliver the full feature set:
   - **`aws-agent`** (1,337 lines) — The central orchestrator. Receives the user query, classifies intent using an LLM-based router (Claude 3.5 Sonnet), selects only the relevant tool subset for the classified intent, manages the agentic loop with the main AI model (Claude 3.5 Sonnet), dispatches tool calls to `aws-agent-tools` once approved by the Safety Gate Judge, and streams the final response back as SSE.
   - **`aws-agent-tools`** (75 lines) — A thin router that classifies incoming tool calls and dispatches them in parallel to either `aws-agent-scanner` or `aws-agent-ops`.
   - **`aws-agent-scanner`** (2,987 lines) — Handles `run_unified_audit`, `run_cost_anomaly_scan`, `manage_cost_rule`, `manage_drift_baseline`, `run_drift_detection`, and `execute_aws_api`. Contains the unified audit engine, cost anomaly detection, drift detection, and raw AWS API execution logic.
   - **`aws-agent-ops`** (4,572 lines) — Handles `manage_runbook_execution`, `manage_event_response_policy`, `replay_cloudtrail_events`, `run_org_query`, `manage_org_operation`, `manage_security_group_rule`, `manage_iam_access`, `run_attack_simulation`, and `run_evasion_test`. Contains the operational automation, org-wide queries, security group mutations, IAM automation, attack simulation, and evasion testing logic.
   - **`aws-executor`** (104 lines) — A dedicated AWS SDK v3 proxy that dynamically loads any of the 35+ `@aws-sdk/client-*` packages on demand. Both `aws-agent-scanner` and `aws-agent-ops` delegate all AWS API calls to this function via `fetch`, avoiding bundle timeout issues that would occur if each function imported all SDK clients directly.
   - **`aws-exchange-credentials`** (255 lines) — Handles the STS credential exchange protocol. Validates raw user credentials, calls `STS:GetCallerIdentity` and `STS:GetSessionToken` (or `STS:AssumeRole`), performs pre-flight IAM boundary checks via `SimulatePrincipalPolicy`, and returns only temporary session credentials.
-  - **`guardian-scheduler`** (850+ lines) — The scheduled automation engine with AES-256-GCM credential decryption and token-bucket rate limiting. Authenticated via `GUARDIAN_AUTOMATION_WEBHOOK_SECRET`, it runs cost anomaly scans, drift detection, and alert dispatch on a schedule triggered by `pg_cron` (PostgreSQL-native cron). Contains full cost data fetching, anomaly detection, idle EC2 analysis, and drift scanning logic. The `pg_cron` job executes hourly using `pg_net` to POST to the function endpoint.
-  - **`guardian-event-processor`** (499 lines) — The real-time CloudTrail event reactor. Enriches incoming CloudTrail events, scores risk, matches against built-in and user-defined policies, and executes auto-fix actions (e.g., restoring S3 public access blocks, restarting CloudTrail logging, revoking world-open security group rules). Also triggers runbook executions and records drift events.
-  - **`aws-credential-vault`** (170 lines) — The AES-256-GCM credential encryption/decryption service. Uses PBKDF2 with 100,000 iterations to derive per-user encryption keys from the service role key. Handles `encrypt_and_store` (for client credential submission) and `decrypt` (for guardian-scheduler autonomous scans). See Section 34 for full details.
-  - **`webhook-notify`** (250 lines) — The external notification dispatcher. Sends Guardian alerts, auto-fix notifications, drift events, and cost anomalies to Slack (Block Kit), PagerDuty (Events API v2), or generic webhook endpoints. Manages webhook registration, listing, and deletion. See Section 36 for full details.
+  - **`webhook-notify`** (250 lines) — The external notification dispatcher. Sends auto-fix notifications, drift events, and cost anomalies to Slack (Block Kit), PagerDuty (Events API v2), or generic webhook endpoints. Manages webhook registration, listing, and deletion.
 
 - **AI Layer:** The Anthropic API Gateway processes requests for three model personas: the **Intent Classifier** (for single-shot classification), the **Main Agent** (for tool-call reasoning), and the **Safety Gate Judge** (for action auditing). This minimizes token overhead and guarantees security boundaries on execution.
 
 - **AWS Layer:** The user's real AWS account, accessed via AWS SDK v3 through the `aws-executor` proxy using temporary session credentials. The agent can interact with 35+ security-relevant services.
-
-- **Data Flow:** Queries flow from the client to `aws-agent` to the Anthropic API Gateway to Claude 3.5 Sonnet. When Claude returns tool calls, they are checked by the Safety Gate Judge. If approved, `aws-agent` batches them to `aws-agent-tools`, which routes them to `aws-agent-scanner` or `aws-agent-ops`. These functions call `aws-executor` for any AWS SDK operations. Real API responses flow back through the chain to Claude for analysis. The final Markdown response is streamed to the client via SSE.
 
 ### Component Responsibilities
 
@@ -176,8 +175,6 @@ This diagram illustrates the complete four-layer architecture of CloudPilot AI a
 | `aws-agent-ops` | Deno Edge Function (4,572 lines) | IAM/SG automation, runbooks, org queries, attack simulation, evasion testing |
 | `aws-executor` | Deno Edge Function (104 lines) | AWS SDK v3 dynamic loader and proxy |
 | `aws-exchange-credentials` | Deno Edge Function (255 lines) | STS credential exchange, IAM boundary checks |
-| `guardian-scheduler` | Deno Edge Function (598 lines) | Scheduled cost/drift polling and alerting |
-| `guardian-event-processor` | Deno Edge Function (499 lines) | Real-time CloudTrail event reaction and auto-fix |
 | Supabase Auth | Supabase Auth (email/password) | User registration, login, session management |
 | Supabase Database | PostgreSQL + RLS | Chat history, audit logs, cache, idempotency keys |
 | Anthropic API Gateway | Model API Gateway | Serves Claude 3.5 Sonnet (intent classifier, main agent, safety gate judge) |
@@ -1793,228 +1790,6 @@ The drift lifecycle begins with baseline capture: `manage_drift_baseline` snapsh
 
 ---
 
-## 28. Guardian Automation — Scheduler, Event Processor, and Autonomous Scanning
-
-Drift detection (Section 27) operates on-demand or on a schedule. This section describes the two Guardian edge functions that enable proactive, automated security operations, the stored credential system that powers autonomous scanning, and the auto-fix guardrail that governs remediation decisions.
-
-### Stored AWS Credentials and Encryption Scheme
-
-To enable fully autonomous scanning without manual credential injection, CloudPilot AI provides a credential storage system backed by the `stored_aws_credentials` table.
-
-#### Table Schema
-
-| Column | Type | Purpose |
-|--------|------|---------|
-| `user_id` | uuid | Owner of the credential set |
-| `label` | text | Human-readable label (default: "Default") |
-| `region` | text | AWS region (default: us-east-1) |
-| `encrypted_access_key_id` | text | XOR-encrypted AWS access key ID |
-| `encrypted_secret_access_key` | text | XOR-encrypted AWS secret access key |
-| `encrypted_session_token` | text | XOR-encrypted session token (optional) |
-| `credential_method` | text | `access_key` or `assume_role` |
-| `role_arn` | text | IAM role ARN for assume-role method |
-| `account_id` | text | AWS account ID (resolved during exchange) |
-| `guardian_enabled` | boolean | Whether autonomous scanning is active |
-| `scan_mode` | text | `cost`, `drift`, or `all` |
-| `notification_email` | text | Email for SNS alert dispatch |
-| `last_scan_at` | timestamptz | Timestamp of most recent scan |
-| `last_scan_status` | text | Result of the last scan (success or error detail) |
-
-#### Credential Encryption
-
-Credentials are encrypted server-side using **AES-256-GCM** via the `aws-credential-vault` edge function (see Section 34 for full details):
-
-1. **Server-side encryption** (`aws-credential-vault`): The `AwsCredentialsPanel` sends raw credentials over TLS to the vault edge function, which derives a per-user AES-256 key using PBKDF2 (100,000 iterations) from the `SERVICE_ROLE_KEY` and a user-specific salt (`cloudpilot-vault-{user_id}`). Each credential field is encrypted with a random 12-byte IV and stored as `base64(IV || ciphertext)`.
-
-2. **Server-side decryption** (`guardian-scheduler/index.ts`): Uses the identical PBKDF2 derivation to reconstruct the AES-256 key and decrypt each credential field during autonomous scans.
-
-3. **Integrity verification**: AES-256-GCM provides authenticated encryption — any tampering with the ciphertext is detected via the 16-byte authentication tag.
-
-4. **RLS protection**: The `stored_aws_credentials` table enforces row-level security so users can only access their own credentials. The `service_role` has full access for the autonomous scanner.
-
-```mermaid
-flowchart TD
-    A[User enters AWS credentials] --> B[AwsCredentialsPanel sends to aws-credential-vault]
-    B --> C[PBKDF2 key derivation from SERVICE_ROLE_KEY + user salt]
-    C --> D[AES-256-GCM encryption with random IV]
-    D --> E[Store base64 IV+ciphertext in stored_aws_credentials]
-    E --> F[RLS ensures user isolation]
-    F --> G[pg_cron triggers guardian-scheduler]
-    G --> H[Service role fetches all guardian_enabled rows]
-    H --> I[PBKDF2 key derivation + AES-256-GCM decryption]
-    I --> J[Build AWS config]
-    J --> K[Execute cost and drift scans]
-    K --> L[Update last_scan_at and last_scan_status]
-```
-
-<div align="center">
-  <em>Figure 28.1: Stored Credential Lifecycle — AES-256-GCM Encryption, Storage, and Autonomous Decryption</em>
-</div>
-
-**Figure 28.1 Explanation:**
-
-The credential lifecycle spans two environments. On the client side, the `AwsCredentialsPanel` sends raw AWS keys over TLS to the `aws-credential-vault` edge function, which authenticates the caller via JWT, derives a per-user AES-256 key using PBKDF2, and encrypts each credential field with AES-256-GCM before storing them in the database. On the server side, the `guardian-scheduler` edge function—running with `service_role` privileges—fetches all rows where `guardian_enabled = true`, derives the same AES-256 key via PBKDF2, decrypts each credential, builds valid AWS SDK configurations, and executes the configured scan mode (cost, drift, or both). After each scan, it updates `last_scan_at` and `last_scan_status` to reflect the outcome.
-
-#### UI Integration
-
-The `AwsCredentialsPanel` component provides a toggle labeled **"Enable Guardian Scheduling"**. When activated:
-- The credential set is encrypted and stored in `stored_aws_credentials` via upsert (keyed on `user_id` + `label`).
-- An optional notification email can be configured for SNS alerts.
-- The `scan_mode` defaults to `all` (both cost and drift).
-
-### Guardian Scheduler (`guardian-scheduler`, 821 lines)
-
-The scheduler operates in two modes: **manual** (single-user, credentials in request body) and **autonomous** (multi-user, credentials from database).
-
-#### Manual Mode
-
-Triggered by authenticated users or the automation webhook with explicit credentials:
-
-1. **Authentication:** Validates Bearer token or `x-guardian-secret` header.
-2. **Cost anomaly scanning:** Full 14-day cost data fetch, z-score anomaly detection (threshold: 2.5 sigma), idle EC2 identification (CPU < 2% over 24h).
-3. **Drift detection:** Captures live snapshots of security groups, IAM users, and S3 buckets. Compares against stored baselines via SHA-256 fingerprints.
-4. **Alert dispatch:** Publishes alerts via SNS to the user's configured email.
-5. **Audit logging:** Records the scan in `agent_audit_log` and `automation_runs`.
-
-#### Autonomous Mode
-
-Triggered by `pg_cron` with no credentials in the request body. The scheduler detects this condition and enters autonomous mode:
-
-1. **Detection:** If `body.credentials` is absent and either `x-guardian-secret` matches or `body.autonomous === true`, the function enters autonomous mode.
-2. **Credential fetch:** Queries `stored_aws_credentials` for all rows where `guardian_enabled = true`.
-3. **Per-user scanning:** Iterates over each stored credential set, decrypts it, builds an AWS config, and executes the configured `scan_mode`.
-4. **Error isolation:** Each user's scan is wrapped in a try/catch so a single failure does not abort the entire batch.
-5. **Status tracking:** Updates `last_scan_at` and `last_scan_status` for each credential row after scanning.
-
-```mermaid
-flowchart TD
-    A[pg_cron hourly trigger] --> B[pg_net HTTP POST to guardian-scheduler]
-    B --> C{Credentials in body?}
-    C -- Yes --> D[Manual mode: single user scan]
-    C -- No --> E[Autonomous mode]
-    E --> F[Fetch all guardian_enabled credentials]
-    F --> G[Decrypt each credential set]
-    G --> H[For each user: run configured scans]
-    H --> I{Scan mode}
-    I -- cost --> J[Cost anomaly detection]
-    I -- drift --> K[Drift baseline comparison]
-    I -- all --> L[Both cost and drift]
-    J --> M[Update last_scan_status]
-    K --> M
-    L --> M
-    M --> N[Record in automation_runs and audit_log]
-```
-
-<div align="center">
-  <em>Figure 28.2: Guardian Scheduler — Dual-Mode Architecture with Autonomous Credential Resolution</em>
-</div>
-
-**Figure 28.2 Explanation:**
-
-The scheduler's dual-mode design allows both interactive and fully automated operation. In autonomous mode, triggered hourly by `pg_cron`, the function iterates over all stored credential sets, performing cost and drift scans independently for each user. This eliminates the need for users to be online or to manually trigger scans. Each scan result is persisted to `last_scan_status` (success or failure detail) and recorded across both the `agent_audit_log` and `automation_runs` tables for full traceability.
-
-### Guardian Event Processor (`guardian-event-processor`, 581 lines)
-
-The event processor receives real-time CloudTrail events forwarded via EventBridge + Lambda:
-
-```mermaid
-flowchart TD
-    A[CloudTrail Event] --> B[EventBridge Rule]
-    B --> C[Lambda Forwarder]
-    C --> D[guardian-event-processor]
-    D --> E[Enrich event]
-    E --> F[Score risk]
-    F --> G{Actor is Guardian}
-    G -- Yes --> H[Skip to prevent loops]
-    G -- No --> I[Match against policies]
-    I --> J{Matching policies}
-    J -- No --> K[No action]
-    J -- Yes --> L{Response type}
-    L -- auto_fix --> M3[Check auto-fix guardrail]
-    L -- notify --> N[Publish SNS alert]
-    L -- runbook --> O[Create runbook execution]
-    L -- all --> P[All three actions]
-    M3 --> Q{Guardrail pass}
-    Q -- Yes --> R[Execute auto-fix]
-    Q -- No --> S[Suppress and log reason]
-    R --> T[Record in guardian_event_activity]
-    S --> T
-    N --> T
-    O --> T
-```
-
-<div align="center">
-  <em>Figure 28.3: Guardian Event Processor — Real-Time CloudTrail Event Reaction Pipeline with Auto-Fix Guardrail</em>
-</div>
-
-**Figure 28.3 Explanation:**
-
-The event processor implements a complete reactive security pipeline:
-
-1. **Event Enrichment:** Extracts actor ARN, actor type (root, iam_user, assumed_role, service), resource ID/type, source IP, requested ports, source CIDRs. Detects Guardian-originated events to prevent feedback loops.
-
-2. **Risk Scoring:** Rule-based scoring with CRITICAL for root usage, world-open SG rules, S3 public access block removal, CloudTrail disable, MFA deactivation. HIGH for `AdministratorAccess` attachment and IAM user creation.
-
-3. **Policy Matching:** Matches against built-in policies and user-defined policies from the `event_response_policies` table. Built-in policies: auto-block public S3 access, flag root usage.
-
-4. **Auto-Fix Guardrail:** Before executing any automatic remediation, the `canAutoFixEvent` function enforces two conditions:
-   - The event must be **CRITICAL** severity. Non-critical events are suppressed.
-   - The event must be in the **reversible critical allowlist** (`AUTO_FIXABLE_CRITICAL_EVENTS`), which includes only: `DeleteBucketPublicAccessBlock`, `DeleteBucketEncryption`, `DeleteTrail`, `StopLogging`, `AuthorizeSecurityGroupIngress`.
-   
-   If either condition fails, the auto-fix is suppressed and a structured reason is recorded alongside the event activity.
-
-5. **Auto-Fix Actions:** Implemented fixes include:
-   - `DeleteBucketPublicAccessBlock` -> `PutPublicAccessBlock` (restore all four blocks)
-   - `DeleteBucketEncryption` -> `PutBucketEncryption` (restore AES-256)
-   - `StopLogging`/`DeleteTrail` -> `StartLogging` (restart CloudTrail)
-   - `AuthorizeSecurityGroupIngress` (world-open) -> `RevokeSecurityGroupIngress` (revoke the rule)
-
-6. **Activity Recording:** Every processed event is recorded in the `guardian_event_activity` table with full context: matched policies, auto-fix results (including suppression reasons), notification outcomes, and runbook triggers. This powers the live event feed in the Operations Control Plane.
-
-### Scheduling via pg_cron
-
-The guardian-scheduler is invoked automatically via PostgreSQL's `pg_cron` extension, which runs inside the database itself. This eliminates the need for external schedulers like AWS EventBridge or Lambda.
-
-```mermaid
-flowchart TD
-    A[pg_cron Extension - Hourly Schedule] --> B[pg_net HTTP POST]
-    B --> C[guardian-scheduler Edge Function]
-    C --> D{x-guardian-secret validation}
-    D -- Valid --> E[Autonomous mode: all stored credentials]
-    D -- Invalid --> F[400 Unauthorized]
-    E --> G[Cost and drift scans per user]
-    G --> H[SNS alerts for anomalies]
-    G --> I[Update scan status in DB]
-```
-
-<div align="center">
-  <em>Figure 28.4: pg_cron Scheduling — Autonomous Multi-User Scan Trigger</em>
-</div>
-
-**Figure 28.4 Explanation:**
-
-The scheduling is implemented entirely within PostgreSQL using two extensions:
-
-1. **`pg_cron`** — A PostgreSQL extension that provides cron-style job scheduling. The job `guardian-scheduler-hourly` runs at the top of every hour (`0 * * * *`).
-
-2. **`pg_net`** — A PostgreSQL extension that enables HTTP requests from within the database. The cron job uses `net.http_post()` to invoke the guardian-scheduler edge function endpoint with the appropriate authentication header.
-
-3. **Authentication:** The `x-guardian-secret` header carries the `GUARDIAN_AUTOMATION_WEBHOOK_SECRET` value, which the edge function validates before processing.
-
-This approach is simpler and more reliable than external scheduling because:
-- No AWS EventBridge rules or Lambda functions needed
-- The scheduler runs as close to the data as possible
-- No external service dependencies for scheduling
-- The cron job persists across deployments
-
-### Authentication
-
-Both Guardian functions use dual authentication:
-- **Bearer token:** Standard Supabase auth for manual/UI invocation
-- **Webhook secret:** `GUARDIAN_AUTOMATION_WEBHOOK_SECRET` via `x-guardian-secret` header for automated pg_cron invocation
-
----
-
 ## 29. AWS Organizations Automation
 
 The per-account automation in Sections 24–28 extends to multi-account operations through AWS Organizations support.
@@ -2427,84 +2202,20 @@ This unified view transforms disparate operational data into a coherent narrativ
 
 ---
 
-## 34. AES-256-GCM Credential Vault
+## 34. Zero-Storage Architecture — Browser Session Credentials
 
-The `aws-credential-vault` edge function replaces the earlier client-side XOR cipher with a production-grade AES-256-GCM encryption scheme for stored AWS credentials. This is a critical security upgrade: XOR encryption is trivially reversible if the key is known, while AES-256-GCM provides authenticated encryption with integrity verification.
+To guarantee maximum security and compliance, CloudPilot AI implements a **Zero-Storage Architecture** for AWS credentials:
 
-### Key Derivation
+### 1. Ephemeral Connection
+* AWS credentials entered by the user are never persisted in any database table, file cache, or permanent storage.
+* Credentials exist solely in the user's active browser session memory and are garbage-collected immediately when the tab is closed.
 
-The encryption key is derived server-side using **PBKDF2** with 100,000 iterations:
+### 2. Client-Side Security
+* Active credentials are used locally by the browser to fetch temporary security tokens from the STS credentials exchange handler.
+* All backend operations are authenticated using these temporary session tokens (lifetime: 1 hour) via the `aws-exchange-credentials` handler.
 
-- **Key Material:** The Supabase `SERVICE_ROLE_KEY` (never exposed to the client).
-- **Salt:** A user-specific string `cloudpilot-vault-{user_id}`, ensuring each user's credentials are encrypted with a unique derived key.
-- **Algorithm:** PBKDF2-SHA-256 producing a 256-bit AES key.
-
-This means even if the encrypted ciphertext is exfiltrated from the database, it cannot be decrypted without both the service role key AND the user ID.
-
-```mermaid
-flowchart LR
-    A[User enters AWS keys in browser] --> B[AwsCredentialsPanel calls aws-credential-vault]
-    B --> C[Edge Function authenticates user via JWT]
-    C --> D[PBKDF2 derives AES-256 key from SERVICE_ROLE_KEY + user_id salt]
-    D --> E[AES-256-GCM encrypts each credential field with random 12-byte IV]
-    E --> F[Base64 encoded IV+ciphertext stored in stored_aws_credentials table]
-    F --> G[guardian-scheduler decrypts using same derivation for autonomous scans]
-```
-
-<div align="center">
-  <em>Figure 34.1: AES-256-GCM Credential Encryption Flow</em>
-</div>
-
-**Figure 34.1 Explanation:**
-
-Raw AWS credentials never persist on the client. When the user opts into Guardian scheduling, the `AwsCredentialsPanel` sends the raw keys to the `aws-credential-vault` edge function over TLS. The function authenticates the caller via their JWT, derives a user-specific AES-256 key using PBKDF2, encrypts each credential field (access key ID, secret access key, optional session token) with AES-256-GCM using a cryptographically random 12-byte IV, and stores the result as `base64(IV || ciphertext)` in the `stored_aws_credentials` table. The `guardian-scheduler` uses the identical PBKDF2 derivation to decrypt credentials during autonomous scans.
-
-### Encryption Format
-
-Each encrypted field is stored as a Base64 string containing:
-
-| Bytes | Content |
-|-------|---------|
-| 0–11 | Random IV (12 bytes, unique per encryption) |
-| 12–N | AES-256-GCM ciphertext (includes 16-byte auth tag) |
-
-### Security Properties
-
-| Property | Guarantee |
-|----------|-----------|
-| Confidentiality | AES-256-GCM with 256-bit key |
-| Integrity | GCM authentication tag prevents tampering |
-| Key Isolation | Per-user derived keys — compromising one user's key does not affect others |
-| IV Uniqueness | Cryptographically random 12-byte IV per encryption operation |
-| Key Stretching | 100,000 PBKDF2 iterations resist brute-force attacks |
-| Server-Only | Raw keys never stored client-side; encryption/decryption happens exclusively in edge functions |
-
-### `stored_aws_credentials` Table Schema
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | UUID | Primary key |
-| `user_id` | UUID | Owner (references `auth.users`) |
-| `label` | TEXT | User-assigned label (default: "Default") |
-| `region` | TEXT | AWS region (default: us-east-1) |
-| `encrypted_access_key_id` | TEXT | AES-256-GCM encrypted, Base64-encoded |
-| `encrypted_secret_access_key` | TEXT | AES-256-GCM encrypted, Base64-encoded |
-| `encrypted_session_token` | TEXT | AES-256-GCM encrypted (nullable) |
-| `credential_method` | TEXT | "access_key" or "assume_role" |
-| `role_arn` | TEXT | IAM role ARN for assume_role method |
-| `account_id` | TEXT | AWS account ID resolved during exchange |
-| `notification_email` | TEXT | Email for SNS Guardian alerts |
-| `guardian_enabled` | BOOLEAN | Whether autonomous scanning is active |
-| `scan_mode` | TEXT | "all", "cost", or "drift" |
-| `org_id` | UUID | Organization for multi-tenant isolation |
-| `last_scan_at` | TIMESTAMPTZ | Timestamp of last Guardian scan |
-| `last_scan_status` | TEXT | Result of last scan (success/failed) |
-
-### RLS Policies
-
-- **Authenticated users:** Can only CRUD their own credentials (`auth.uid() = user_id`).
-- **Service role:** Full access for Guardian scheduler autonomous scans.
-- **Unique constraint:** `(user_id, label)` prevents duplicate credential entries per user.
+### 3. Server-Side Safety
+* Since the background scheduler and database-level vaults have been removed, there is no risk of master-key compromise or cross-tenant data leak from a backend security breach.
 
 ---
 
@@ -3066,195 +2777,15 @@ The following infrastructure is already in place to support SSO:
 
 - **SSO + MFA**: Organizations can enforce SSO for primary authentication while the IdP handles MFA, or use CloudPilot's built-in TOTP as a secondary factor.
 - **Session binding**: SSO sessions are bound to the same JWT infrastructure, ensuring RLS policies and audit logging work identically regardless of auth method.
-- **JIT provisioning guardrails**: When a user authenticates via SSO for the first time, they should be added to the correct organization as a `member` role by default. Elevated roles require explicit assignment by an owner or admin through the Team Management UI.
 
----
 
-## 43. Billing & Subscription System — Stripe Integration
+## 43. Open & Free Console Access
 
-CloudPilot AI implements a fully functional billing and subscription system powered by Stripe. This section details the architecture, payment flow, and subscription lifecycle management that enables seat-based pricing for organizations.
+CloudPilot AI does not implement any subscription plan limits, credit checks, or payment gateways. All features—including unified auditing, cost anomaly detection, drift comparison, runbook automation, and team collaboration—are open and free to execute on connected credentials.
 
-### Architecture Overview
-
-The billing system consists of three layers: the Stripe API (payment processor), two dedicated edge functions (`stripe-checkout` and `stripe-webhook`), and two database tables (`subscriptions` and `payment_history`) that maintain local subscription state.
-
-```mermaid
-graph TD
-    A[Billing Page UI] --> B[stripe-checkout Edge Function]
-    B --> C[Stripe API]
-    C --> D[Stripe Checkout Session]
-    D --> E[Customer Completes Payment]
-    E --> F[Stripe Webhook Event]
-    F --> G[stripe-webhook Edge Function]
-    G --> H[(subscriptions Table)]
-    G --> I[(payment_history Table)]
-    H --> A
-    I --> A
-
-    style A fill:#1a1a2e,stroke:#00d4ff,color:#e0e0e0
-    style B fill:#1a1a2e,stroke:#00d4ff,color:#e0e0e0
-    style C fill:#1a1a2e,stroke:#f0c040,color:#e0e0e0
-    style D fill:#1a1a2e,stroke:#f0c040,color:#e0e0e0
-    style G fill:#1a1a2e,stroke:#00d4ff,color:#e0e0e0
-    style H fill:#1a1a2e,stroke:#00ff88,color:#e0e0e0
-    style I fill:#1a1a2e,stroke:#00ff88,color:#e0e0e0
-```
-
-<p align="center">
-  <em>Figure 43.1: Billing System Architecture — End-to-end payment flow from UI through Stripe to database</em>
-</p>
-
-### Subscription Plans
-
-| Plan | Price | Billing | Target Audience |
-|------|-------|---------|-----------------|
-| **Free** | $0 | Auto-assigned on signup | New users evaluating the platform |
-| **Pro** | $49/seat/month | Monthly recurring | Individual engineers, small teams |
-| **Enterprise** | $199/seat/month | Monthly recurring | Large organizations, regulated industries |
-
-**Free** is auto-assigned to every new organization via the `handle_new_user_org` database trigger. It includes 5 API executions per day, single AWS account support, basic security scans, and community support. **Pro** includes unlimited API execution, basic policy sets, real-time SSE streaming, single account audit, and email notifications. **Enterprise** adds SSO/SAML integration, cross-account role auditing, custom event policies, priority support, and immutable audit trails.
-
-### Edge Function: `stripe-checkout`
-
-This function handles three actions:
-
-| Action | Purpose | Auth Required |
-|--------|---------|---------------|
-| `create_checkout` | Creates a Stripe Checkout Session and returns the redirect URL | Owner only |
-| `create_portal` | Creates a Stripe Customer Portal session for subscription management | Owner only |
-| `get_subscription` | Retrieves current subscription and payment history for an org | Any org member |
-
-The `create_checkout` action enforces that only organization owners can initiate billing changes. It creates or reuses a Stripe customer record, then generates a Checkout Session with the selected plan's pricing. The session includes `metadata` tags for `org_id`, `user_id`, and `plan_id` that flow through to the webhook for accurate record-keeping.
-
-```mermaid
-sequenceDiagram
-    participant U as Org Owner
-    participant UI as Billing Page
-    participant EF as stripe-checkout
-    participant S as Stripe API
-    participant DB as Database
-
-    U->>UI: Click "Subscribe to Pro"
-    UI->>EF: POST {action: create_checkout, plan_id: pro, org_id}
-    EF->>EF: Verify JWT + check org ownership
-    EF->>DB: Check for existing Stripe customer
-    alt No existing customer
-        EF->>S: stripe.customers.create()
-    end
-    EF->>S: stripe.checkout.sessions.create()
-    S-->>EF: Session URL
-    EF-->>UI: {url: "https://checkout.stripe.com/..."}
-    UI->>U: Redirect to Stripe Checkout
-    U->>S: Complete payment
-    S-->>U: Redirect to success URL
-```
-
-<p align="center">
-  <em>Figure 43.2: Checkout Flow — From subscription selection through Stripe payment to redirect</em>
-</p>
-
-### Edge Function: `stripe-webhook`
-
-The webhook handler processes five Stripe event types to maintain local subscription state:
-
-| Event | Action |
-|-------|--------|
-| `checkout.session.completed` | Creates/upserts subscription record with plan and customer IDs |
-| `customer.subscription.updated` | Updates status, billing period dates, and cancellation flags |
-| `customer.subscription.deleted` | Marks subscription as canceled |
-| `invoice.payment_succeeded` | Records successful payment in `payment_history` |
-| `invoice.payment_failed` | Records failed payment and marks subscription as `past_due` |
-
-Webhook signature verification uses `STRIPE_WEBHOOK_SECRET` when configured. In development mode, events are parsed directly without signature validation.
-
-```mermaid
-graph LR
-    A[Stripe Event] --> B{Event Type}
-    B --> C[checkout.session.completed]
-    B --> D[subscription.updated]
-    B --> E[subscription.deleted]
-    B --> F[invoice.payment_succeeded]
-    B --> G[invoice.payment_failed]
-
-    C --> H[Upsert subscription]
-    D --> I[Update status/period]
-    E --> J[Mark canceled]
-    F --> K[Record payment ✓]
-    G --> L[Record failure + past_due]
-
-    style A fill:#1a1a2e,stroke:#f0c040,color:#e0e0e0
-    style H fill:#1a1a2e,stroke:#00ff88,color:#e0e0e0
-    style I fill:#1a1a2e,stroke:#00ff88,color:#e0e0e0
-    style J fill:#1a1a2e,stroke:#ff4444,color:#e0e0e0
-    style K fill:#1a1a2e,stroke:#00ff88,color:#e0e0e0
-    style L fill:#1a1a2e,stroke:#ff4444,color:#e0e0e0
-```
-
-<p align="center">
-  <em>Figure 43.3: Webhook Event Processing — How Stripe events update local subscription state</em>
-</p>
-
-### Database Schema
-
-**`subscriptions` table:**
-
-| Column | Type | Purpose |
-|--------|------|---------|
-| `user_id` | UUID | The org owner who initiated the subscription |
-| `org_id` | UUID (FK → organizations) | Organization this subscription belongs to |
-| `stripe_customer_id` | TEXT | Stripe Customer ID for portal access |
-| `stripe_subscription_id` | TEXT (UNIQUE) | Stripe Subscription ID for webhook correlation |
-| `stripe_price_id` | TEXT | Active Stripe Price ID |
-| `plan_name` | TEXT | Human-readable plan name (pro/enterprise) |
-| `status` | TEXT | Stripe status: active, past_due, canceled, trialing |
-| `current_period_start/end` | TIMESTAMPTZ | Current billing period boundaries |
-| `cancel_at_period_end` | BOOLEAN | Whether cancellation is scheduled |
-| `seats` | INTEGER | Number of seats purchased |
-
-**`payment_history` table:**
-
-| Column | Type | Purpose |
-|--------|------|---------|
-| `org_id` | UUID (FK → organizations) | Organization charged |
-| `stripe_invoice_id` | TEXT | Stripe Invoice ID for reconciliation |
-| `amount_cents` | INTEGER | Payment amount in cents |
-| `currency` | TEXT | ISO currency code (default: usd) |
-| `status` | TEXT | succeeded or failed |
-| `description` | TEXT | Human-readable description from Stripe |
-
-### RLS Policies
-
-| Table | Policy | Rule |
-|-------|--------|------|
-| `subscriptions` | Org members can view | `is_org_member(auth.uid(), org_id)` |
-| `subscriptions` | Org owners can manage | `get_org_role(auth.uid(), org_id) = 'owner'` |
-| `payment_history` | Org members can view | `is_org_member(auth.uid(), org_id)` |
-| Both tables | Service role full access | For webhook processing |
-
-### Billing UI
-
-The Billing page (`/billing`) provides:
-
-1. **Current Subscription Banner** — Shows active plan name, status badge (active/past_due/canceled), renewal date, and a "Manage Subscription" button that opens the Stripe Customer Portal
-2. **Plan Cards** — Two-column grid displaying Pro and Enterprise plans with feature lists and pricing. The active plan shows a "CURRENT PLAN" badge; inactive plans show "Subscribe" or "Switch" buttons
-3. **Payment History Table** — Chronological list of the 10 most recent payments with date, description, status (Paid/Failed), and formatted currency amount
-4. **Stripe Customer Portal** — One-click access to Stripe's hosted portal where users can update payment methods, switch plans, cancel subscriptions, and view invoices
-
-### Stripe Configuration
-
-To receive real money, the following must be configured:
-
-1. **`STRIPE_SECRET_KEY`** — Your Stripe secret key (already configured as a backend secret)
-2. **`STRIPE_WEBHOOK_SECRET`** — Webhook signing secret from Stripe Dashboard → Developers → Webhooks (already configured)
-3. **Stripe Webhook Endpoint** — In Stripe Dashboard, create a webhook pointing to `https://<project-ref>.supabase.co/functions/v1/stripe-webhook` and subscribe to events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`
-4. **Stripe Customer Portal** — Enable the Customer Portal in Stripe Dashboard → Settings → Customer Portal to allow self-service subscription management
-
-### Security Considerations
-
-- The `stripe-checkout` function validates JWT claims and verifies org ownership before creating checkout sessions
-- The `stripe-webhook` function uses `verify_jwt = false` in config.toml because Stripe webhooks are authenticated via signature verification, not JWTs
-- Stripe customer IDs are stored locally but all payment processing occurs on Stripe's PCI-compliant infrastructure
-- No credit card numbers or sensitive payment data ever touch CloudPilot servers
+### Design Decisions
+1. **No Paywalls:** All references to free vs. pro tiers have been removed from the application UI and backend handlers.
+2. **Standard Limits Only:** API request size checks and the 15-iteration loop safety guardrails are retained purely for server performance, not for monetization purposes.
 
 ---
 

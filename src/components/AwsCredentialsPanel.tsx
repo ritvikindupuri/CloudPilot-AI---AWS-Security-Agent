@@ -54,8 +54,6 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
   const [sessionToken, setSessionToken] = useState("");
   const [showSecret, setShowSecret] = useState(false);
   const [exchanging, setExchanging] = useState(false);
-  const [storeForGuardian, setStoreForGuardian] = useState(false);
-  const [notificationEmail, setNotificationEmail] = useState("");
 
   const handleSave = async () => {
     setExchanging(true);
@@ -116,41 +114,6 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
       setIsOpen(false);
       toast.success(`Connected to AWS account ${data.identity?.account || ""}`);
 
-      if (storeForGuardian && method === "access_key") {
-        try {
-          const vaultResp = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aws-credential-vault`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${session.access_token}`,
-              },
-              body: JSON.stringify({
-                action: "encrypt_and_store",
-                accessKeyId: normalizedAccessKeyId,
-                secretAccessKey: normalizedSecretAccessKey,
-                sessionToken: normalizedSessionToken || undefined,
-                region: normalizedRegion,
-                label: "Default",
-                accountId: data.identity?.account || null,
-                notificationEmail: notificationEmail || null,
-                scanMode: "all",
-                credentialMethod: method,
-              }),
-            }
-          );
-          const vaultData = await vaultResp.json();
-          if (!vaultResp.ok) {
-            console.error("Vault store failed:", vaultData.error);
-            toast.error("Connected but failed to store for Guardian scheduling.");
-          } else {
-            toast.success("Credentials stored (AES-256-GCM) for autonomous Guardian scans.");
-          }
-        } catch (guardianErr) {
-          console.error("Guardian store error:", guardianErr);
-        }
-      }
 
       localStorage.removeItem("cloudpilot-gemini-api-key");
 
@@ -313,47 +276,10 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
                 </div>
               )}
 
-              {method === "access_key" && (
-                <div className="flex items-center justify-between px-2.5 py-2 bg-secondary/30 rounded border border-border">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-3 h-3 text-primary flex-shrink-0" />
-                    <div>
-                      <p className="text-[10px] text-foreground font-medium">Enable Guardian Scheduling</p>
-                      <p className="text-[9px] text-muted-foreground">Store encrypted credentials for autonomous hourly cost & drift scans</p>
-                    </div>
-                  </div>
-                  <Switch
-                    checked={storeForGuardian}
-                    onCheckedChange={setStoreForGuardian}
-                    className="scale-75"
-                  />
-                </div>
-              )}
-
-              {storeForGuardian && (
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">Notification Email <span className="text-muted-foreground/50">for alerts</span></Label>
-                  <Input
-                    type="email"
-                    value={notificationEmail}
-                    onChange={(e) => setNotificationEmail(e.target.value)}
-                    placeholder="alerts@example.com"
-                    className="font-mono text-xs h-8 bg-muted border-border focus:border-primary/40"
-                  />
-                </div>
-              )}
-
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2 px-2.5 py-2 bg-destructive/10 rounded border border-destructive/20">
-                  <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
-                  <p className="text-[10px] text-destructive leading-tight font-medium">
-                    Strict Warning: Never use production credentials or AdministratorAccess with this tool. Only use scoped-down roles in sandbox or audit accounts.
-                  </p>
-                </div>
                 <div className="flex items-center gap-2 px-2.5 py-2 bg-muted rounded border border-border">
                   <Lock className="w-3 h-3 text-primary flex-shrink-0" />
                   <p className="text-[10px] text-muted-foreground leading-tight">
-                    Raw keys are validated and used only for this browser session so IAMFullAccess can attach per-service policies when a prompt needs them. Keys are never stored unless Guardian Scheduling is enabled.
+                    Raw keys are validated and used only for this browser session so IAMFullAccess can attach per-service policies when a prompt needs them. Keys are never stored.
                   </p>
                 </div>
 
@@ -407,7 +333,6 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
                     </div>
                   </details>
                 </div>
-              </div>
 
               {credentials?.permissions && Object.keys(credentials.permissions).length > 0 && (
                 <div className="space-y-1.5 pt-2 border-t border-border mt-2">

@@ -20,45 +20,32 @@ const STEPS = [
     tips: [
       "Every query executes real AWS API calls — no simulations",
       "Raw keys are exchanged for temporary STS tokens immediately",
-      "Guardian can run autonomous scans on a schedule",
+      "Dynamic policy attachment expands permissions safely as needed",
     ],
   },
   {
     id: "credentials",
     icon: Key,
     title: "Connect Your AWS Account",
-    subtitle: "Step 1 of 3",
+    subtitle: "Step 1 of 2",
     description:
       "Use the AWS Credentials panel on the left sidebar to enter your Access Key ID and Secret Access Key. CloudPilot will exchange these for temporary session tokens via STS — your raw keys are never stored or sent to the AI agent.",
     tips: [
       "Use a scoped-down IAM role — never AdministratorAccess",
-      "Enable 'Guardian Scheduling' to store encrypted credentials for hourly autonomous scans",
-      "Credentials are encrypted with AES-256-GCM server-side",
-    ],
-  },
-  {
-    id: "guardian",
-    icon: Shield,
-    title: "Enable Guardian Automation",
-    subtitle: "Step 2 of 3",
-    description:
-      "Guardian runs cost and drift scans autonomously every hour. When you connect credentials, toggle 'Enable Guardian Scheduling' to opt in. Add a notification email to receive SNS alerts for anomalies.",
-    tips: [
-      "Visit the Operations page to see scan history and policies",
-      "Configure event response policies for CloudTrail events",
-      "Auto-fix is only applied for reversible, critical-severity findings",
+      "Attach SecurityAudit and IAMFullAccess for optimal permission scaling",
+      "Credentials are validated and used only for the active browser session",
     ],
   },
   {
     id: "ready",
     icon: Bell,
     title: "You're All Set!",
-    subtitle: "Step 3 of 3",
+    subtitle: "Step 2 of 2",
     description:
       "Start by running a quick audit. Type 'show me everything wrong with my AWS account' or use the Quick Actions panel. CloudPilot will perform a comprehensive security assessment and return actionable findings.",
     tips: [
       "Use the Reports page to view and export past audit reports",
-      "Set up Slack or PagerDuty webhooks in Operations for external alerts",
+      "Interact with findings directly to remediate cloud exposures",
       "Try 'am I SOC2 ready?' for compliance-focused auditing",
     ],
   },

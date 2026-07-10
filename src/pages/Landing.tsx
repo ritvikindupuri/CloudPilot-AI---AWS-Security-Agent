@@ -562,7 +562,7 @@ const Landing = () => {
               onClick={handleLaunch}
               className="bg-[#f5f5f7] text-background hover:bg-[#e8e8ed] rounded-full px-8 py-5 font-semibold text-xs tracking-tight transition-colors flex items-center gap-2 group w-full sm:w-auto"
             >
-              Launch Free Console
+              Launch Console
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
             </Button>
           </motion.div>
