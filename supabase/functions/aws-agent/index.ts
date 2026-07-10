@@ -6256,6 +6256,7 @@ export const handler = async (req: Request): Promise<Response> => {
     let latestUnifiedAuditSummary: Record<string, any> | null = null;
     const liveExecutionLogs: Array<{ step: string; status: "info" | "success" | "warning" | "error"; message: string }> = [];
     let blockedAuditsCount = 0;
+    let lastBlockedCallDetails = "";
 
     // ── Intent-based routing ─────────────────────────────────────────────────
     liveExecutionLogs.push({ step: "Router", status: "info", message: "Classifying query intent..." });
@@ -6379,6 +6380,42 @@ export const handler = async (req: Request): Promise<Response> => {
         const safetyAudit = await runSafetyAudit(responseMessage.tool_calls, apiMessages);
         if (!safetyAudit.approved) {
           blockedAuditsCount++;
+          if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+            try {
+              const firstCall = responseMessage.tool_calls[0];
+              const name = firstCall.function.name;
+              const args = typeof firstCall.function.arguments === "string"
+                ? JSON.parse(firstCall.function.arguments)
+                : firstCall.function.arguments;
+              
+              let resourceInfo = "";
+              if (args) {
+                const resKeys = ["Bucket", "GroupId", "VpcId", "SubnetId", "InstanceId", "RoleName", "PolicyArn", "PolicyName", "QueueUrl", "TopicArn"];
+                const foundKey = Object.keys(args).find(k => resKeys.includes(k));
+                if (foundKey) {
+                  resourceInfo = ` on ${args[foundKey]}`;
+                } else if (args.service && args.operation) {
+                  const params = args.params;
+                  if (params) {
+                    const paramKey = Object.keys(params).find(k => resKeys.includes(k) || k.toLowerCase().includes("name") || k.toLowerCase().includes("id") || k.toLowerCase().includes("arn"));
+                    if (paramKey) {
+                      resourceInfo = ` on ${params[paramKey]}`;
+                    }
+                  }
+                }
+              }
+              
+              if (name === "execute_aws_api") {
+                const op = args?.operation || "AWS API command";
+                const srv = args?.service || "AWS";
+                lastBlockedCallDetails = `Please execute the proposed ${srv} ${op}${resourceInfo}`;
+              } else {
+                lastBlockedCallDetails = `Please run ${name}${resourceInfo}`;
+              }
+            } catch (err) {
+              console.warn("Failed to extract blocked call details for suggestion:", err);
+            }
+          }
           console.warn("[CloudPilot Safety Gate] Action BLOCKED by Safety Gate Judge:", safetyAudit.reason);
           liveExecutionLogs.push({ step: "Safety Gate", status: "error", message: `Safety Gate Judge: BLOCKED. Reason: ${safetyAudit.reason}` });
           liveExecutionLogs.push({ step: "Agent", status: "warning", message: "Agent: Rejection received, initiating self-correction loop..." });
@@ -6449,9 +6486,13 @@ export const handler = async (req: Request): Promise<Response> => {
 
     if (!isStreamable) {
       if (blockedAuditsCount > 0) {
-        finalResponseText = `Agent reached the maximum number of execution iterations. The proposed actions were blocked ${blockedAuditsCount} time(s) by the Safety Gate Judge (rejections are typically triggered by vague user intent, missing resource context, or security restrictions). Please try narrowing your request, specifying exact resource names (e.g., bucket names), or providing explicit confirmation for the actions.`;
+        let suggestionBlock = "";
+        if (lastBlockedCallDetails) {
+          suggestionBlock = `\n\n**Suggested message to send next (copy and paste this to authorize and proceed):**\n\`\`\`\n${lastBlockedCallDetails}\n\`\`\``;
+        }
+        finalResponseText = `The proposed actions were blocked by the Safety Gate Judge because the request is too vague or lacks necessary security details. Please try again with a more specific query, specifying the exact resource names or IDs you want to manage, or confirm your intent explicitly.${suggestionBlock}`;
       } else {
-        finalResponseText = "Agent reached the maximum number of execution iterations. Try narrowing your request or breaking it into smaller steps.";
+        finalResponseText = "The agent could not complete the request within the execution limit. Please try breaking your request down into smaller, more specific steps.";
       }
     }
 
