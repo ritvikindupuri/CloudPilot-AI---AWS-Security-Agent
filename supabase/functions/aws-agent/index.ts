@@ -1257,7 +1257,7 @@ async function classifyIntent(
         "content-type": "application/json"
       },
       body: JSON.stringify({
-        model: Deno.env.get("ANTHROPIC_MODEL") || "claude-3-5-sonnet-20241022",
+        model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6",
         max_tokens: 100,
         system: INTENT_CLASSIFIER_PROMPT,
         messages: [
@@ -1347,7 +1347,7 @@ async function getLLMResponse(
       "content-type": "application/json"
     },
     body: JSON.stringify({
-      model: Deno.env.get("ANTHROPIC_MODEL") || "claude-3-5-sonnet-20241022",
+      model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6",
       max_tokens: 4000,
       system: systemMessage,
       messages: formattedMessages,
@@ -1420,7 +1420,7 @@ Return your response strictly in the following JSON format:
         "content-type": "application/json"
       },
       body: JSON.stringify({
-        model: Deno.env.get("ANTHROPIC_MODEL") || "claude-3-5-sonnet-20241022",
+        model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6",
         max_tokens: 500,
         system: "You are a strict, automated JSON-only security auditor. Return ONLY a single raw JSON object matching the requested schema. Do not output any markdown formatting, wrappers, or conversational explanations.",
         messages: [

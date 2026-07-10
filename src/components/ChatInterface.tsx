@@ -142,6 +142,10 @@ const ChatInterface = () => {
 
   const handleVpcRemove = async () => {
     const prompt = "Please remove the AWS VPC setup that was created to route the agent. Take down the VPC, subnets, and security groups to avoid any charges.";
+    
+    setVpcRoutingStatus("inactive");
+    localStorage.removeItem("cloudpilot-vpc-status");
+
     let convId = currentConvId;
     if (!convId && user) {
       try {
@@ -150,9 +154,11 @@ const ChatInterface = () => {
         setCurrentConvId(convId);
       } catch {}
     }
-    await sendMessage(prompt, credentials, convId);
-    setVpcRoutingStatus("inactive");
-    localStorage.removeItem("cloudpilot-vpc-status");
+    try {
+      await sendMessage(prompt, credentials, convId);
+    } catch (err) {
+      console.error("VPC removal request failed:", err);
+    }
   };
 
   const handleDeleteConversation = async (id: string) => {
