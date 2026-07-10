@@ -737,7 +737,8 @@ This flowchart details the decision logic inside the agentic loop:
 
 5. **Batched Tool Dispatch:** Once approved by the Judge, all tool calls in the response are dispatched in parallel to `aws-agent-tools`.
 
-6. **Loop Termination:** Normal exit when Claude returns content without tool calls. Max iterations returns: "Agent reached the maximum number of API iterations. Try narrowing your request."
+6. **Loop Termination:** Normal exit occurs when the agent returns text content without making any further tool calls. If the loop hits the security ceiling of 15 iterations (`MAX_ITERATIONS`), it terminates and returns a friendly error message.
+   * **Why it loops internally:** The agent is designed to be autonomous. When a proposed tool call is rejected by the Safety Gate Judge, the system does not fail immediately. Instead, it injects the Judge's rejection reason (e.g., security block or missing context) back into the agent's memory as a mock tool response, saying: *"The proposed action was blocked for this reason; self-correct."* The agent then tries to find an alternative way to complete the request (e.g., trying a different AWS operation, checking config parameters, or narrowing scope). If the user's intent is too vague or lacks critical safety parameters, every workaround proposed by the agent gets blocked in sequence. This back-and-forth cycle occurs automatically inside Deno up to 15 times before the execution ceiling is hit and the user is notified.
 
 ---
 
