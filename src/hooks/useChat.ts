@@ -62,13 +62,19 @@ interface LiveRunbookExecution {
   steps: LiveRunbookStep[];
 }
 
-export const useChat = (conversationId: string | null, notificationEmail?: string) => {
+export const useChat = (
+  conversationId: string | null,
+  notificationEmail?: string,
+  createConversation?: (title: string) => Promise<any>,
+  onConversationCreated?: (id: string) => void
+) => {
   const [messages, setMessages] = useState<ChatMessageData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [auditSummary, setAuditSummary] = useState<AuditSummary | null>(null);
   const [liveRunbook, setLiveRunbook] = useState<LiveRunbookExecution | null>(null);
 
   const currentMessagesConvIdRef = useRef<string | null>(conversationId);
+  const justCreatedConvRef = useRef<string | null>(null);
 
   // Load messages from DB when active conversation changes
   useEffect(() => {
@@ -77,6 +83,12 @@ export const useChat = (conversationId: string | null, notificationEmail?: strin
       setAuditSummary(null);
       setLiveRunbook(null);
       currentMessagesConvIdRef.current = null;
+      return;
+    }
+
+    if (justCreatedConvRef.current === conversationId) {
+      justCreatedConvRef.current = null;
+      currentMessagesConvIdRef.current = conversationId;
       return;
     }
 
@@ -220,7 +232,23 @@ export const useChat = (conversationId: string | null, notificationEmail?: strin
     ) => {
       if (!credentials) return;
 
-      const targetConvId = convId ?? conversationId;
+      let targetConvId = convId ?? conversationId;
+
+      if (!targetConvId && createConversation) {
+        const title = content.length > 65 ? content.slice(0, 65) + "…" : content;
+        try {
+          const conv = await createConversation(title);
+          if (conv) {
+            targetConvId = conv.id;
+            justCreatedConvRef.current = conv.id;
+            if (onConversationCreated) {
+              onConversationCreated(conv.id);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to create conversation in sendMessage:", err);
+        }
+      }
 
       const userMsg: ChatMessageData = {
         id: crypto.randomUUID(),

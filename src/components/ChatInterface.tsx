@@ -92,7 +92,12 @@ const ChatInterface = () => {
     await signOut();
   };
 
-  const { messages, isLoading, sendMessage, clearMessages, auditSummary, findings, liveRunbook } = useChat(currentConvId, notificationEmail);
+  const { messages, isLoading, sendMessage, clearMessages, auditSummary, findings, liveRunbook } = useChat(
+    currentConvId,
+    notificationEmail,
+    createConversation,
+    setCurrentConvId
+  );
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -169,26 +174,7 @@ const ChatInterface = () => {
     if (!trimmed || isLoading || !credentials?.session) return;
     setInput("");
 
-    let convId = currentConvId;
-
-    // Send message optimistically right away before DB call blocks
-    // This makes the UI feel instant for the user's message
-    const sendPromise = sendMessage(trimmed, credentials, convId);
-
-    // Create a new conversation if none is active
-    if (!convId && user) {
-      const title = trimmed.length > 65 ? trimmed.slice(0, 65) + "…" : trimmed;
-      try {
-        const conv = await createConversation(title);
-        convId = conv?.id ?? null;
-        setCurrentConvId(convId);
-      } catch {
-        // If DB unavailable, continue without persistence
-      }
-    }
-
-    // The actual sendMessage API call has been kicked off already
-    await sendPromise;
+    await sendMessage(trimmed, credentials, currentConvId);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
