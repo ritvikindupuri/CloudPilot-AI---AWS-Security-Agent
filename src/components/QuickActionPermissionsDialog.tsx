@@ -50,6 +50,11 @@ export function QuickActionPermissionsDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto pr-2 mt-4 space-y-4">
+          <div className="border border-border/80 rounded-lg bg-card/60 p-3 text-xs leading-relaxed text-muted-foreground border-blue-500/10">
+            <span className="font-bold text-foreground block mb-1">Action Description</span>
+            {prompt}
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             {/* Required Permissions */}
             <div className="border border-border rounded-lg bg-card/50 p-3">
