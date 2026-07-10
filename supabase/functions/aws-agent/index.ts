@@ -6254,8 +6254,10 @@ export const handler = async (req: Request): Promise<Response> => {
     let finalResponseText = "";
     let isStreamable = false;
     let latestUnifiedAuditSummary: Record<string, any> | null = null;
+    const liveExecutionLogs: Array<{ step: string; status: "info" | "success" | "warning" | "error"; message: string }> = [];
 
     // ── Intent-based routing ─────────────────────────────────────────────────
+    liveExecutionLogs.push({ step: "Router", status: "info", message: "Classifying query intent..." });
     const classifiedIntent = await classifyIntent(sanitizedMessages, resolvedGeminiKey);
     console.log(`[CloudPilot Router] Classified intent: ${classifiedIntent}`);
 
@@ -6264,6 +6266,7 @@ export const handler = async (req: Request): Promise<Response> => {
       ? tools
       : tools.filter((t: any) => allowedToolNames.has(t.function.name));
 
+    liveExecutionLogs.push({ step: "Router", status: "success", message: `Activated ${filteredTools.length} security tools for intent: ${classifiedIntent}` });
     console.log(`[CloudPilot Router] Using ${filteredTools.length}/${tools.length} tools for intent: ${classifiedIntent}`);
 
     const MAX_ITERATIONS = 15;
@@ -6367,9 +6370,16 @@ export const handler = async (req: Request): Promise<Response> => {
       apiMessages.push(responseMessage);
 
       if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+        const callsCount = responseMessage.tool_calls.length;
+        const callNames = responseMessage.tool_calls.map((tc: any) => tc.function.name).join(", ");
+        liveExecutionLogs.push({ step: "Safety Gate", status: "info", message: `Intercepted ${callsCount} proposed AWS command(s): [${callNames}]` });
+        liveExecutionLogs.push({ step: "Safety Gate", status: "info", message: "Safety Gate Judge: Auditing proposed payloads against security guidelines..." });
+
         const safetyAudit = await runSafetyAudit(responseMessage.tool_calls, apiMessages);
         if (!safetyAudit.approved) {
           console.warn("[CloudPilot Safety Gate] Action BLOCKED by Safety Gate Judge:", safetyAudit.reason);
+          liveExecutionLogs.push({ step: "Safety Gate", status: "error", message: `Safety Gate Judge: BLOCKED. Reason: ${safetyAudit.reason}` });
+          liveExecutionLogs.push({ step: "Agent", status: "warning", message: "Agent: Rejection received, initiating self-correction loop..." });
           for (const tc of responseMessage.tool_calls) {
             apiMessages.push({
               role: "tool",
@@ -6381,6 +6391,9 @@ export const handler = async (req: Request): Promise<Response> => {
           }
           continue;
         }
+
+        liveExecutionLogs.push({ step: "Safety Gate", status: "success", message: `Safety Gate Judge: APPROVED. Reason: ${safetyAudit.reason}` });
+        liveExecutionLogs.push({ step: "Execution", status: "info", message: `Executing AWS SDK commands on account...` });
 
         // Dispatch ALL tool calls to aws-agent-tools in a single batch
         const toolsResp = await fetch(TOOLS_URL, {
@@ -6404,6 +6417,7 @@ export const handler = async (req: Request): Promise<Response> => {
         if (!toolsResp.ok) {
           const errText = await toolsResp.text();
           console.error("[CloudPilot] Tools function error:", toolsResp.status, errText);
+          liveExecutionLogs.push({ step: "Execution", status: "error", message: `AWS API batch execution failed (${toolsResp.status}).` });
           // Push error for all tool calls so the LLM can recover
           const detailedError = `Tool execution pipeline failure (${toolsResp.status}): ${errText || "No downstream error details returned."}`;
           for (const tc of responseMessage.tool_calls) {
@@ -6413,6 +6427,7 @@ export const handler = async (req: Request): Promise<Response> => {
         }
 
         const toolResults = await toolsResp.json();
+        liveExecutionLogs.push({ step: "Execution", status: "success", message: `AWS API batch successfully executed (${toolResults.results.length} result(s) returned).` });
         for (const result of toolResults.results) {
           apiMessages.push({
             role: "tool",
@@ -6436,6 +6451,9 @@ export const handler = async (req: Request): Promise<Response> => {
 
     const stream = new ReadableStream({
       start(controller) {
+        if (liveExecutionLogs.length > 0) {
+          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ meta: { executionLogs: liveExecutionLogs } })}\n\n`));
+        }
         if (latestUnifiedAuditSummary) {
           controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ meta: { auditSummary: latestUnifiedAuditSummary } })}\n\n`));
         }

@@ -72,6 +72,7 @@ export const useChat = (
   const [isLoading, setIsLoading] = useState(false);
   const [auditSummary, setAuditSummary] = useState<AuditSummary | null>(null);
   const [liveRunbook, setLiveRunbook] = useState<LiveRunbookExecution | null>(null);
+  const [executionLogs, setExecutionLogs] = useState<any[]>([]);
 
   const currentMessagesConvIdRef = useRef<string | null>(conversationId);
   const justCreatedConvRef = useRef<string | null>(null);
@@ -82,6 +83,7 @@ export const useChat = (
       setMessages([]);
       setAuditSummary(null);
       setLiveRunbook(null);
+      setExecutionLogs([]);
       currentMessagesConvIdRef.current = null;
       return;
     }
@@ -99,6 +101,7 @@ export const useChat = (
     setMessages([]);
     setAuditSummary(null);
     setLiveRunbook(null);
+    setExecutionLogs([]);
 
     (supabase
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -306,6 +309,7 @@ export const useChat = (
           content: m.content,
         }));
         setAuditSummary(null);
+        setExecutionLogs([]);
 
         // Only send session credentials — never raw keys
         const sessionCreds = credentials.session;
@@ -376,6 +380,10 @@ export const useChat = (
               const auditMeta = parsed.meta?.auditSummary as AuditSummary | undefined;
               if (auditMeta) {
                 setAuditSummary(auditMeta);
+              }
+              const logs = parsed.meta?.executionLogs;
+              if (logs) {
+                setExecutionLogs(logs);
               }
               const delta = parsed.choices?.[0]?.delta?.content as string | undefined;
               if (delta) upsertAssistant(delta);
@@ -456,5 +464,5 @@ export const useChat = (
     fixPrompt: finding.fixPrompt,
   }));
 
-  return { messages, isLoading, sendMessage, clearMessages, auditSummary, findings, liveRunbook };
+  return { messages, isLoading, sendMessage, clearMessages, auditSummary, findings, liveRunbook, executionLogs };
 };

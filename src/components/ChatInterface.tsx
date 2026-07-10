@@ -92,7 +92,7 @@ const ChatInterface = () => {
     await signOut();
   };
 
-  const { messages, isLoading, sendMessage, clearMessages, auditSummary, findings, liveRunbook } = useChat(
+  const { messages, isLoading, sendMessage, clearMessages, auditSummary, findings, liveRunbook, executionLogs } = useChat(
     currentConvId,
     notificationEmail,
     createConversation,
@@ -485,7 +485,7 @@ const ChatInterface = () => {
                     />
                   ))
                 )}
-                {showThinking && <ThinkingIndicator />}
+                {showThinking && <ThinkingIndicator logs={executionLogs} />}
                 <div ref={bottomRef} />
               </div>
             )}
