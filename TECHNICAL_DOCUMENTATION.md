@@ -564,19 +564,20 @@ The UI follows a **"Tactical Clarity"** design philosophy—dark charcoal backgr
 
 The frontend architecture described in Section 5 communicates primarily with a single backend entry point: the `aws-agent` edge function. This section details its internal logic, system prompt engineering, and agentic loop mechanics.
 
-The `aws-agent` edge function (`supabase/functions/aws-agent/index.ts`, 1,337 lines) runs on Deno, guaranteeing ephemeral, isolated compute per request. It employs a **two-model architecture**: a fast intent classifier (Qwen2.5-Coder) determines the query domain, followed by the main agentic model (Qwen2.5-Coder) operating with only the relevant tool subset.
+The `aws-agent` edge function (`supabase/functions/aws-agent/index.ts`, 1,337 lines) runs on Deno, guaranteeing ephemeral, isolated compute per request. It employs a **two-model architecture**: a fast intent classifier (Claude 3.5 Sonnet) determines the query domain, followed by the main agentic model (Claude 3.5 Sonnet) operating with only the relevant tool subset, and a secondary Safety Gate Judge pass to audit proposed mutations.
 
 ### Core Responsibilities
 
 1. **Input Validation** — Validates message arrays (max 100), content lengths (max 50,000 chars), credential formats via regex, and requires `sessionToken`
-2. **Intent Classification** — Uses Qwen2.5-Coder for a single-shot classification of user intent into one of 9 categories, selecting only the relevant tool subset
+2. **Intent Classification** — Uses Claude 3.5 Sonnet for a single-shot classification of user intent into one of 9 categories, selecting only the relevant tool subset
 3. **System Prompt Injection** — Constructs the AI context with Zero Simulation Tolerance rules, tool usage protocols (scoped to classified intent), attack simulation lifecycle, output format mandates, S3 archival instructions, and SNS notification instructions
-4. **Agentic Tool-Call Loop** — Up to 15 iterations of AI-tool interactions using Qwen2.5-Coder with the filtered tool set, dispatching all tool calls to `aws-agent-tools` in batched requests
-5. **SSE Streaming** — Streams the final Markdown response as 30-character chunks at 8ms intervals
+4. **Agentic Tool-Call Loop** — Up to 15 iterations of AI-tool interactions using Claude 3.5 Sonnet with the filtered tool set, auditing all actions before execution
+5. **Safety Gate Judge** — Audits every proposed AWS command using Claude 3.5 Sonnet before execution to catch unauthorized or unintended mutations
+6. **SSE Streaming** — Streams the final Markdown response as 30-character chunks at 8ms intervals
 
 ### Intent Router — LLM-Based Tool Selection
 
-Before entering the agentic loop, `aws-agent` invokes Qwen2.5-Coder (the fastest, cheapest model) to classify the user's intent into one of 9 categories. Based on this classification, only the relevant tools are included in the main agent's context, reducing token usage and improving accuracy.
+Before entering the agentic loop, `aws-agent` invokes Claude 3.5 Sonnet to classify the user's intent into one of 9 categories. Based on this classification, only the relevant tools are included in the main agent's context, reducing token usage and improving accuracy.
 
 | Intent | Tool Subset | Example Queries |
 |--------|-------------|-----------------|
@@ -592,7 +593,7 @@ Before entering the agentic loop, `aws-agent` invokes Qwen2.5-Coder (the fastest
 
 ```mermaid
 flowchart TD
-    A[User Query + Conversation Context] --> B[Qwen2.5-Coder Intent Classifier]
+    A[User Query + Conversation Context] --> B[Claude 3.5 Sonnet Intent Classifier]
     B --> C{Classified Intent}
     C -- security_audit --> D[4 tools selected]
     C -- cost_analysis --> E[3 tools selected]
@@ -603,7 +604,7 @@ flowchart TD
     C -- event_automation --> J[3 tools selected]
     C -- direct_query --> K[1 tool selected]
     C -- general --> L[All 15 tools]
-    D --> M[Qwen2.5-Coder Main Agentic Loop with filtered tools]
+    D --> M[Claude 3.5 Sonnet Main Agentic Loop with filtered tools]
     E --> M
     F --> M
     G --> M
@@ -622,23 +623,19 @@ flowchart TD
 
 This diagram shows the two-stage model architecture:
 
-1. **Classification Stage:** The user's latest message and last 3 conversation messages are sent to Qwen2.5-Coder with a structured classification prompt. The model returns a single category string (e.g., `security_audit`). If classification fails (network error, invalid response), the system falls back to `general` which includes all 15 tools.
+1. **Classification Stage:** The user's latest message and last 3 conversation messages are sent to Claude 3.5 Sonnet with a structured classification prompt. The model returns a single category string (e.g., `security_audit`). If classification fails, the system falls back to `general` which includes all 15 tools.
 
 2. **Tool Filtering:** The classified intent maps to a pre-defined tool subset via `INTENT_TOOL_MAP`. For example, a cost query only sees `execute_aws_api`, `run_cost_anomaly_scan`, and `manage_cost_rule` — 3 tools instead of 15. This reduces the tool definition tokens by ~80% for focused queries.
 
-3. **Main Agent:** Qwen2.5-Coder receives the full system prompt, conversation history, and the **filtered** tool set. It then enters the standard agentic loop (up to 15 iterations).
+3. **Main Agent:** Claude 3.5 Sonnet receives the full system prompt, conversation history, and the **filtered** tool set. It then enters the standard agentic loop (up to 15 iterations).
 
-**Why Qwen2.5-Coder Was Chosen:**
+**Why Claude 3.5 Sonnet Was Chosen:**
 
 The model selection for CloudPilot AI was driven by three operational requirements specific to an agentic security tool:
 
-- **Latency sensitivity:** Security operations demand fast response times. Qwen2.5-Coder provides the lowest latency among models with strong tool-calling capabilities, critical for an agentic loop that may iterate up to 15 times per query. Each iteration adds round-trip latency, so a slower model (e.g., GPT-5 or Qwen2.5-Coder 2.5 Pro) would compound delays across iterations, making complex audits impractical.
-
-- **Tool-calling accuracy at scale:** CloudPilot exposes 15 complex tools with nested JSON schemas. Qwen2.5-Coder demonstrates high accuracy in structured tool-call generation while maintaining sub-second inference times — a balance that larger models achieve at 3-5x the cost and latency.
-
-- **Cost efficiency for high-volume usage:** Security teams run dozens of queries per session, each consuming multiple tool-call iterations. Qwen2.5-Coder costs ~80% less per token than Pro-tier models, making sustained usage economically viable. The two-model architecture further optimizes this: Qwen2.5-Coder (the cheapest, fastest tier) handles the single-shot classification at ~10x lower cost, while Flash handles the reasoning-intensive agentic loop.
-
-- **Sufficient reasoning depth:** While Pro-tier models offer marginally better reasoning on ambiguous queries, CloudPilot's system prompt and tool-call protocols are highly structured — the model follows deterministic workflows rather than open-ended reasoning. This structured context compensates for any reasoning gap, making Flash's capability level the optimal cost-performance sweet spot.
+- **Industry-standard reasoning:** Claude 3.5 Sonnet provides state-of-the-art logical reasoning, crucial for complex cloud environments where identity boundaries, security group scopes, and compliance baselines must be evaluated accurately.
+- **Tool-calling accuracy at scale:** CloudPilot exposes 15 complex tools with nested JSON schemas. Claude 3.5 Sonnet demonstrates unmatched function-calling precision, ensuring the agentic loop consistently selects and generates correct AWS SDK inputs.
+- **Double-Audited Safety:** Claude 3.5 Sonnet handles the Safety Gate Judge role with high-fidelity consensus auditing. It easily detects when proposed operations deviate from user commands or violate safe operations policies.
 
 ### System Prompt Engineering
 
@@ -681,21 +678,25 @@ The edge function exposes **15 tools** to the LLM:
 ```mermaid
 flowchart TD
     A[Receive user query + session credentials] --> B[Validate inputs - messages, content length, sessionToken]
-    B --> B2[Intent Classification via Qwen2.5-Coder]
+    B --> B2[Intent Classification via Claude]
     B2 --> B3[Select filtered tool subset based on intent]
     B3 --> C[Construct system prompt + filtered tools + credential context]
     C --> D[Iteration i = 0]
     D --> E{i == 0}
-    E -- Yes --> F[Call Qwen2.5-Coder with tool_choice required]
-    E -- No --> G[Call Qwen2.5-Coder with tool_choice auto]
+    E -- Yes --> F[Call Claude with tool_choice required]
+    E -- No --> G[Call Claude with tool_choice auto]
     F --> H{Response has tool_calls}
     G --> H
-    H -- Yes --> I[Batch ALL tool calls to aws-agent-tools]
-    I --> J[Router dispatches to scanner and ops in parallel]
-    J --> K[Scanner and Ops call aws-executor for SDK operations]
-    K --> L[Collect all tool results]
-    L --> M2[Append tool responses to conversation context]
-    M2 --> N[Increment i]
+    H -- Yes --> I[Run Safety Gate Judge check]
+    I --> I2{Approved?}
+    I2 -- No --> I3[Append SAFETY_GATE_REJECTION to history]
+    I3 --> N[Increment i]
+    I2 -- Yes --> J[Batch ALL tool calls to aws-agent-tools]
+    J --> K[Router dispatches to scanner and ops in parallel]
+    K --> L[Scanner and Ops call aws-executor for SDK operations]
+    L --> M2[Collect all tool results]
+    M2 --> M3[Append tool responses to conversation context]
+    M3 --> N
     N --> O{i >= 15}
     O -- Yes --> P[Return max-iteration warning]
     O -- No --> D
@@ -708,28 +709,24 @@ flowchart TD
 ```
 
 <div align="center">
-  <em>Figure 6.2: Agentic Tool-Call Loop — Complete Decision Flow with Intent-Based Tool Filtering</em>
+  <em>Figure 6.2: Agentic Tool-Call Loop — Complete Decision Flow with Safety Gate Auditing</em>
 </div>
 
 **Figure 6.2 Explanation:**
 
-This flowchart details the exact decision logic inside the agentic loop, including the new intent-based routing:
+This flowchart details the decision logic inside the agentic loop:
 
 1. **Entry:** The edge function receives validated session credentials (must include `sessionToken`).
 
-2. **Intent Classification:** Before entering the agentic loop, the user's query (with last 3 messages for context) is sent to Qwen2.5-Coder for intent classification. This takes ~100-200ms and returns one of 9 categories. On failure, falls back to `general` (all tools).
+2. **Intent Classification:** The user's query is classified via Claude 3.5 Sonnet to filter the active tools set.
 
-3. **Tool Filtering:** The classified intent maps to a filtered tool subset. For example, `cost_analysis` includes only 3 tools instead of 15, reducing prompt tokens significantly.
+3. **Context Construction:** The system prompt is combined with sanitized conversation history and active credentials.
 
-4. **Context Construction:** The 575-line system prompt is combined with sanitized conversation history, a credential context string showing the masked key and active region, and the **filtered** tool definitions.
+4. **Safety Gate Audit:** When the agent proposes tool calls, a secondary Claude reasoning call reviews the exact payload schema. If it flags safety, security, or drift concerns (such as deleting subnets or modifying security groups without explicit instructions), the action is blocked, and feedback is appended to the loop context to trigger self-correction.
 
-5. **Iteration Control:** The loop runs up to 15 iterations (`MAX_ITERATIONS = 15`). On iteration 0, `tool_choice` is `"required"`. On all subsequent iterations, `tool_choice` is `"auto"`. The main model is Qwen2.5-Coder.
+5. **Batched Tool Dispatch:** Once approved by the Judge, all tool calls in the response are dispatched in parallel to `aws-agent-tools`.
 
-6. **Batched Tool Dispatch:** When the AI returns tool calls, ALL calls in the response are sent in a single POST to `aws-agent-tools`. This is a key architectural decision — it avoids multiple round trips and enables the router to parallelize scanner and ops calls.
-
-7. **Audit Metadata:** If any tool result contains a `auditSummary` field (from `run_unified_audit`), it is captured and prepended as a metadata SSE event before the main content stream. The frontend uses this to populate the findings panel.
-
-8. **Loop Termination:** Normal exit when AI returns content without tool calls. Max iterations returns: "Agent reached the maximum number of API iterations. Try narrowing your request." AI gateway errors (429, 402, 500) are returned immediately.
+6. **Loop Termination:** Normal exit when Claude returns content without tool calls. Max iterations returns: "Agent reached the maximum number of API iterations. Try narrowing your request."
 
 ---
 

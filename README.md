@@ -17,8 +17,9 @@ sequenceDiagram
     participant DB as Local Storage (Mock DB)
     participant Gateway as Local Deno Gateway
     participant Agent as aws-agent
-    participant Classifier as Local Intent Classifier
-    participant LLM as Local Qwen2.5-Coder
+    participant Classifier as Anthropic Intent Classifier
+    participant LLM as Anthropic Claude 3.5 Sonnet
+    participant Judge as Safety Gate Judge (Claude)
     participant AWS as AWS Account
 
     User->>Frontend: Enter query & credentials
@@ -28,7 +29,10 @@ sequenceDiagram
     Agent->>Classifier: Classify query intent
     Classifier-->>Agent: Returns intent category
     Agent->>LLM: Forward query + intent-filtered tools
-    LLM-->>Agent: Returns required AWS tool calls
+    LLM-->>Agent: Returns proposed AWS tool calls
+    Agent->>Judge: Audit proposed AWS tool calls
+    Judge-->>Agent: Returns audit verdict (approved/rejected)
+    Note over Agent, AWS: If approved, execute real AWS API calls
     Agent->>AWS: Executes real AWS SDK calls (aws-executor)
     AWS-->>Agent: Returns AWS API JSON response
     Agent->>LLM: Provide API response context
@@ -45,11 +49,12 @@ sequenceDiagram
 
 1. **User Interaction**: The user accesses the React Frontend, inputs their AWS query (e.g., "Find exposed S3 buckets"), and provides their AWS credentials (either Access Keys or an AssumeRole ARN).
 2. **Request Handling**: The frontend securely sends the prompt and credentials to the Local Deno Gateway (`local-server.ts`), which mounts and executes the `aws-agent` module locally on port 54321.
-3. **Intent Classification**: Before engaging the main AI model, `aws-agent` sends the query to the local `qwen2.5-coder` model (via Ollama) for intent classification. The classifier categorizes the query into one of 9 domains (e.g., `security_audit`, `cost_analysis`, `drift_detection`), and only the relevant tool subset is selected for the main agent. This reduces token usage by 40-70% on focused queries.
-4. **AI Evaluation**: The local Deno router builds the system context (enforcing "zero simulation tolerance") and communicates with the local `qwen2.5-coder` model via Ollama's completions API, providing only the filtered tool definitions for the classified intent.
-5. **AWS Integration**: When the AI determines it needs data, it requests a tool call to `execute_aws_api`. The local gateway dynamically instantiates an AWS SDK client using the user's provided credentials and executes the requested API call against the user's real AWS account via the `aws-executor` module.
-6. **Synthesis & Streaming**: The real AWS API responses are passed back to the AI model. The model synthesizes an executive summary, findings table, detailed analysis, and exact CLI remediation commands. The gateway streams this synthesized response back to the React Frontend for real-time display via SSE.
-7. **Database Storage**: Conversations, user sessions, runbooks, compliance configurations, and drift baselines are persisted completely client-side inside the browser's `localStorage` mock client, guaranteeing zero setup and 100% offline data privacy.
+3. **Intent Classification**: Before engaging the main AI model, `aws-agent` sends the query to the Anthropic API for intent classification using Claude 3.5 Sonnet. The classifier categorizes the query into one of 9 domains (e.g., `security_audit`, `cost_analysis`, `drift_detection`), and only the relevant tool subset is selected for the main agent. This reduces token usage by 40-70% on focused queries.
+4. **AI Evaluation**: The local Deno router builds the system context (enforcing "zero simulation tolerance") and communicates with Claude 3.5 Sonnet via the Anthropic completions API, providing only the filtered tool definitions for the classified intent.
+5. **Safety Gate Judge**: Before executing any proposed AWS commands, a separate Claude 3.5 Sonnet reasoning call acts as a Safety Gate Judge to audit the proposed actions against the user's intent. If it detects unsafe, destructive, or irrelevant mutations (such as deleting active resources unless explicitly commanded), it blocks execution and feeds the reason back to the agent for self-correction.
+6. **AWS Integration**: Once approved, the local gateway dynamically instantiates an AWS SDK client using the user's provided credentials and executes the requested API call against the user's real AWS account via the `aws-executor` module.
+7. **Synthesis & Streaming**: The real AWS API responses are passed back to Claude. The model synthesizes an executive summary, findings table, detailed analysis, and exact CLI remediation commands. The gateway streams this response back to the React Frontend for real-time display via SSE.
+8. **Database Storage**: Conversations, user sessions, runbooks, compliance configurations, and drift baselines are persisted completely client-side inside the browser's `localStorage` mock client, guaranteeing zero setup and 100% offline data privacy.
 
 ---
 
@@ -59,8 +64,9 @@ CloudPilot AI employs a lightweight LLM-based intent router that classifies each
 
 | Component | Model | Purpose |
 |-----------|-------|---------|
-| **Intent Classifier** | Qwen2.5-Coder (via Ollama) | Single-shot query classification into 9 intent categories (~100-200ms) |
-| **Main Agent** | Qwen2.5-Coder (via Ollama) | Multi-iteration agentic loop with filtered tool set (up to 15 iterations) |
+| **Intent Classifier** | Claude 3.5 Sonnet | Single-shot query classification into 9 intent categories (~100-200ms) |
+| **Main Agent** | Claude 3.5 Sonnet | Multi-iteration agentic loop with filtered tool set (up to 15 iterations) |
+| **Safety Gate Judge** | Claude 3.5 Sonnet | Audits proposed AWS API tool calls against safety policies and user intent |
 
 ### Intent Categories
 
@@ -76,11 +82,11 @@ CloudPilot AI employs a lightweight LLM-based intent router that classifies each
 | `direct_query` | 1 tool | "List my S3 buckets" |
 | `general` | All 15 tools | Ambiguous or multi-domain queries |
 
-### Why Qwen2.5-Coder?
+### Why Claude 3.5 Sonnet?
 
-- **100% Private and Local**: Runs entirely on your local machine. No credentials, tokens, or audit logs leave your network.
-- **Top-Tier Tool Calling**: Specially fine-tuned to emit structured JSON API calls, allowing the agentic loop to consistently select correct AWS SDK operations.
-- **Zero API Cost & Key Setup**: No developer keys, credits, or rate limits. You can run unlimited security scans offline.
+- **Top-Tier Tool Calling**: Native function-calling and tool-use support with near-zero hallucination rates, ensuring correct AWS SDK payloads.
+- **Advanced Cloud Reasoning**: Excellent understanding of cloud security benchmarks, IAM structures, cost vectors, and drift patterns.
+- **Safety Gate Integration**: High-precision evaluation of API payloads against user safety rules, preventing accidental data loss or security breaches.
 
 ---
 
@@ -160,7 +166,7 @@ For full details on input validation, rate limiting behavior, and practical impl
 - **Frontend:** React, TypeScript, Vite, Tailwind CSS, shadcn-ui, Framer Motion
 - **Backend / API:** Local Deno Gateway (`local-server.ts`), running Edge Function modules locally on port 54321
 - **Database / Auth:** Mocked locally using browser `localStorage` and client-side session handlers
-- **AI Model:** Qwen2.5-Coder (via local Ollama server)
+- **AI Model:** Anthropic Claude 3.5 Sonnet (via official API)
 - **Cloud Integration:** AWS SDK for JavaScript v3 (35+ services)
 
 ---
@@ -172,7 +178,7 @@ Follow these steps to run the application locally.
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) (v18+) & npm installed (or [Bun](https://bun.sh/) as an alternative package manager).
-- [Ollama](https://ollama.com) installed and running locally on your machine.
+- An [Anthropic API Key](https://console.anthropic.com/) to invoke Claude 3.5 Sonnet.
 - No database setup or Docker installation is needed! Everything runs locally on your machine.
 
 ### 1. Clone & Install Dependencies
@@ -188,26 +194,15 @@ npm install
 bun install
 ```
 
-### 2. Ollama Local LLM Setup
+### 2. Configure Environment Variables
 
-Since CloudPilot AI executes all operations and intent classifications 100% offline, you must configure Ollama to serve the AI model locally:
-
-1. **Download Ollama**: Visit [ollama.com](https://ollama.com) and download the app for Windows, macOS, or Linux.
-2. **Download Model**: Pull the default `qwen2.5-coder` coding and security model:
-   ```sh
-   ollama pull qwen2.5-coder:latest
-   ```
-3. **Verify Running**: Start the Ollama server (e.g. check the tray icon or run `ollama list` in your terminal to ensure it is responsive).
-
-### 3. Configure Environment Variables
-
-Create a `.env` file in the root directory (if not present) and specify your local model:
+Create a `.env` file in the root directory (if not present) and configure your Anthropic API Key:
 
 ```env
-OLLAMA_MODEL="qwen2.5-coder"
+ANTHROPIC_API_KEY="your-anthropic-api-key-here"
 ```
 
-### 4. Start the Development Server
+### 3. Start the Development Server
 
 The development command launches both the React Vite frontend and the local Deno server gateway emulating the Supabase API endpoints internally on port 54321:
 

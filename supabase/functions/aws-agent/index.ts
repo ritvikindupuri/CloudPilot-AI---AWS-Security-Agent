@@ -1245,61 +1245,34 @@ async function classifyIntent(
     const contextMessages = messages.slice(-3).map((m) => `${m.role}: ${m.content}`).join("\n");
 
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (anthropicKey) {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": anthropicKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({
-          model: Deno.env.get("ANTHROPIC_MODEL") || "claude-3-5-sonnet-20241022",
-          max_tokens: 100,
-          system: INTENT_CLASSIFIER_PROMPT,
-          messages: [
-            { role: "user", content: `Conversation context:\n${contextMessages}\n\nLatest user message: ${latestUserMsg}` }
-          ]
-        })
-      });
-
-      if (!response.ok) {
-        console.warn("[CloudPilot Router] Anthropic intent classification failed, falling back to general:", response.status);
-        return "general";
-      }
-
-      const data = await response.json();
-      const raw = (data.content.find((c: any) => c.type === "text")?.text || "").trim().toLowerCase().replace(/[^a-z_]/g, "");
-      if (raw in INTENT_TOOL_MAP) return raw as AgentIntent;
-      console.warn("[CloudPilot Router] Unknown intent classification:", raw, "— falling back to general");
-      return "general";
+    if (!anthropicKey) {
+      throw new Error("Missing ANTHROPIC_API_KEY environment variable. Local Ollama backend has been deprecated. Please configure your Anthropic API key in .env.");
     }
 
-    const gatewayUrl = "http://localhost:11434/v1/chat/completions";
-    const classifierModel = Deno.env.get("OLLAMA_MODEL") || "gpt-oss:20b";
-
-    const resp = await fetch(gatewayUrl, {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "x-api-key": anthropicKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
       },
       body: JSON.stringify({
-        model: classifierModel,
+        model: Deno.env.get("ANTHROPIC_MODEL") || "claude-3-5-sonnet-20241022",
+        max_tokens: 100,
+        system: INTENT_CLASSIFIER_PROMPT,
         messages: [
-          { role: "system", content: INTENT_CLASSIFIER_PROMPT },
-          { role: "user", content: `Conversation context:\n${contextMessages}\n\nLatest user message: ${latestUserMsg}` },
-        ],
-        stream: false,
-      }),
+          { role: "user", content: `Conversation context:\n${contextMessages}\n\nLatest user message: ${latestUserMsg}` }
+        ]
+      })
     });
 
-    if (!resp.ok) {
-      console.warn("[CloudPilot Router] Intent classification failed, falling back to general:", resp.status);
+    if (!response.ok) {
+      console.warn("[CloudPilot Router] Anthropic intent classification failed, falling back to general:", response.status);
       return "general";
     }
 
-    const data = await resp.json();
-    const raw = (data.choices?.[0]?.message?.content || "").trim().toLowerCase().replace(/[^a-z_]/g, "");
+    const data = await response.json();
+    const raw = (data.content.find((c: any) => c.type === "text")?.text || "").trim().toLowerCase().replace(/[^a-z_]/g, "");
     if (raw in INTENT_TOOL_MAP) return raw as AgentIntent;
     console.warn("[CloudPilot Router] Unknown intent classification:", raw, "— falling back to general");
     return "general";
@@ -1316,53 +1289,129 @@ async function getLLMResponse(
   resolvedGeminiKey: string
 ): Promise<{ content: string | null; tool_calls?: any[] }> {
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (anthropicKey) {
-    const systemMessage = apiMessages.find((m) => m.role === "system")?.content || "";
-    const conversationMessages = apiMessages.filter((m) => m.role !== "system");
+  if (!anthropicKey) {
+    throw new Error("Missing ANTHROPIC_API_KEY environment variable. Local Ollama backend has been deprecated. Please configure your Anthropic API key in .env.");
+  }
 
-    const formattedMessages: any[] = [];
-    for (let j = 0; j < conversationMessages.length; j++) {
-      const msg = conversationMessages[j];
-      if (msg.role === "user") {
-        formattedMessages.push({ role: "user", content: msg.content });
-      } else if (msg.role === "assistant") {
-        const content: any[] = [];
-        if (msg.content) {
-          content.push({ type: "text", text: msg.content });
-        }
-        if (msg.tool_calls) {
-          for (const tc of msg.tool_calls) {
-            content.push({
-              type: "tool_use",
-              id: tc.id,
-              name: tc.function.name,
-              input: typeof tc.function.arguments === "string" 
-                ? JSON.parse(tc.function.arguments) 
-                : tc.function.arguments
-            });
-          }
-        }
-        formattedMessages.push({ role: "assistant", content });
-      } else if (msg.role === "tool") {
-        let lastUser = formattedMessages[formattedMessages.length - 1];
-        if (!lastUser || lastUser.role !== "user" || typeof lastUser.content === "string") {
-          lastUser = { role: "user", content: [] };
-          formattedMessages.push(lastUser);
-        }
-        lastUser.content.push({
-          type: "tool_result",
-          tool_use_id: msg.tool_call_id,
-          content: msg.content
-        });
+  const systemMessage = apiMessages.find((m) => m.role === "system")?.content || "";
+  const conversationMessages = apiMessages.filter((m) => m.role !== "system");
+
+  const formattedMessages: any[] = [];
+  for (let j = 0; j < conversationMessages.length; j++) {
+    const msg = conversationMessages[j];
+    if (msg.role === "user") {
+      formattedMessages.push({ role: "user", content: msg.content });
+    } else if (msg.role === "assistant") {
+      const content: any[] = [];
+      if (msg.content) {
+        content.push({ type: "text", text: msg.content });
       }
+      if (msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          content.push({
+            type: "tool_use",
+            id: tc.id,
+            name: tc.function.name,
+            input: typeof tc.function.arguments === "string" 
+              ? JSON.parse(tc.function.arguments) 
+              : tc.function.arguments
+          });
+        }
+      }
+      formattedMessages.push({ role: "assistant", content });
+    } else if (msg.role === "tool") {
+      let lastUser = formattedMessages[formattedMessages.length - 1];
+      if (!lastUser || lastUser.role !== "user" || typeof lastUser.content === "string") {
+        lastUser = { role: "user", content: [] };
+        formattedMessages.push(lastUser);
+      }
+      lastUser.content.push({
+        type: "tool_result",
+        tool_use_id: msg.tool_call_id,
+        content: msg.content
+      });
     }
+  }
 
-    const anthropicTools = filteredTools.map((t: any) => ({
-      name: t.function.name,
-      description: t.function.description,
-      input_schema: t.function.parameters
-    }));
+  const anthropicTools = filteredTools.map((t: any) => ({
+    name: t.function.name,
+    description: t.function.description,
+    input_schema: t.function.parameters
+  }));
 
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": anthropicKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      model: Deno.env.get("ANTHROPIC_MODEL") || "claude-3-5-sonnet-20241022",
+      max_tokens: 4000,
+      system: systemMessage,
+      messages: formattedMessages,
+      tools: anthropicTools,
+      ...(toolChoice === "required" ? { tool_choice: { type: "any" } } : {})
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error("[CloudPilot Anthropic] API Error:", response.status, errText);
+    throw new Error(`Anthropic API error (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json();
+  const assistantContent = data.content.find((c: any) => c.type === "text")?.text || null;
+  const toolUseBlocks = data.content.filter((c: any) => c.type === "tool_use");
+  const tool_calls = toolUseBlocks.length > 0 ? toolUseBlocks.map((b: any) => ({
+    id: b.id,
+    type: "function" as const,
+    function: {
+      name: b.name,
+      arguments: JSON.stringify(b.input)
+    }
+  })) : undefined;
+
+  return { content: assistantContent, tool_calls };
+}
+
+async function runSafetyAudit(
+  proposedToolCalls: any[],
+  apiMessages: any[]
+): Promise<{ approved: boolean; reason: string }> {
+  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!anthropicKey) {
+    throw new Error("Missing ANTHROPIC_API_KEY environment variable.");
+  }
+
+  if (!proposedToolCalls || proposedToolCalls.length === 0) {
+    return { approved: true, reason: "No tool calls to audit." };
+  }
+
+  const latestUserMsg = [...apiMessages].reverse().find((m) => m.role === "user")?.content || "";
+
+  const auditorPrompt = `You are the CloudPilot Safety Gate Judge. Your role is to audit proposed AWS API tool calls to ensure they are safe, compliant, do not perform accidental or excessive over-deletion, and strictly match the user's intent.
+
+Review the following context:
+- User Intent / Query: "${latestUserMsg}"
+- Proposed AWS Tool Calls:
+${JSON.stringify(proposedToolCalls, null, 2)}
+
+Audit Rules:
+1. Ensure the proposed actions strictly align with the user's explicit instructions.
+2. Reject actions that delete resources (like VPCs, EC2s, subnets, tables) unless the user explicitly requested deletion/teardown in their latest message.
+3. Reject actions that open security vulnerabilities (e.g. creating Security Group rules allowing all traffic on port 22/3389, opening wide open access, granting admin roles to untrusted principals).
+4. Approve safe reads, status checks, and resource creation queries that align with the query.
+
+Return your response strictly in the following JSON format:
+{
+  "approved": true/false,
+  "reason": "Clear explanation of approval or security/safety concerns flagged"
+}`;
+
+  try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -1372,64 +1421,35 @@ async function getLLMResponse(
       },
       body: JSON.stringify({
         model: Deno.env.get("ANTHROPIC_MODEL") || "claude-3-5-sonnet-20241022",
-        max_tokens: 4000,
-        system: systemMessage,
-        messages: formattedMessages,
-        tools: anthropicTools,
-        ...(toolChoice === "required" ? { tool_choice: { type: "any" } } : {})
+        max_tokens: 500,
+        system: "You are a strict, automated JSON-only security auditor. Return ONLY a single raw JSON object matching the requested schema. Do not output any markdown formatting, wrappers, or conversational explanations.",
+        messages: [
+          { role: "user", content: auditorPrompt }
+        ]
       })
     });
 
     if (!response.ok) {
-      const errText = await response.text();
-      console.error("[CloudPilot Anthropic] API Error:", response.status, errText);
-      throw new Error(`Anthropic API error (${response.status}): ${errText}`);
+      console.warn("[CloudPilot Safety Gate] Auditor call failed:", response.status);
+      return { approved: true, reason: "Auditor service unavailable, bypassed for fallback." };
     }
 
     const data = await response.json();
-    const assistantContent = data.content.find((c: any) => c.type === "text")?.text || null;
-    const toolUseBlocks = data.content.filter((c: any) => c.type === "tool_use");
-    const tool_calls = toolUseBlocks.length > 0 ? toolUseBlocks.map((b: any) => ({
-      id: b.id,
-      type: "function" as const,
-      function: {
-        name: b.name,
-        arguments: JSON.stringify(b.input)
-      }
-    })) : undefined;
-
-    return { content: assistantContent, tool_calls };
-  } else {
-    const gatewayUrl = "http://localhost:11434/v1/chat/completions";
-    const agentModel = Deno.env.get("OLLAMA_MODEL") || "gpt-oss:20b";
-    const toolChoiceParam = toolChoice === "required" ? "required" : "auto";
-
-    const response = await fetch(gatewayUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: agentModel,
-        messages: apiMessages,
-        tools: filteredTools,
-        tool_choice: toolChoiceParam,
-        stream: false,
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("[CloudPilot Ollama] API Error:", response.status, errText);
-      throw new Error(`Ollama API error (${response.status}): ${errText}`);
+    let text = (data.content.find((c: any) => c.type === "text")?.text || "").trim();
+    
+    if (text.startsWith("```")) {
+      text = text.replace(/```json|```/g, "").trim();
     }
 
-    const data = await response.json();
-    const responseMessage = data.choices[0].message;
+    const auditResult = JSON.parse(text);
+    console.log(`[CloudPilot Safety Gate] Audit results:`, auditResult);
     return {
-      content: responseMessage.content || null,
-      tool_calls: responseMessage.tool_calls
+      approved: typeof auditResult.approved === "boolean" ? auditResult.approved : true,
+      reason: auditResult.reason || "Audited successfully."
     };
+  } catch (err) {
+    console.error("[CloudPilot Safety Gate] Error running audit:", err);
+    return { approved: true, reason: "Error parsing audit results, bypassed for fallback." };
   }
 }
 
@@ -6081,6 +6101,13 @@ export const handler = async (req: Request): Promise<Response> => {
 
   try {
     const body = await req.json();
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!anthropicKey) {
+      return new Response(
+        JSON.stringify({ error: "Missing ANTHROPIC_API_KEY environment variable. Local Ollama backend has been deprecated. Please configure your Anthropic API key in the .env file." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     const { messages, credentials, notificationEmail, conversationId, geminiApiKey: clientGeminiKey } = body;
     const resolvedGeminiKey = clientGeminiKey || RUNTIME_CONFIG.geminiApiKey;
 
@@ -6340,6 +6367,21 @@ export const handler = async (req: Request): Promise<Response> => {
       apiMessages.push(responseMessage);
 
       if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+        const safetyAudit = await runSafetyAudit(responseMessage.tool_calls, apiMessages);
+        if (!safetyAudit.approved) {
+          console.warn("[CloudPilot Safety Gate] Action BLOCKED by Safety Gate Judge:", safetyAudit.reason);
+          for (const tc of responseMessage.tool_calls) {
+            apiMessages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: JSON.stringify({
+                error: `SAFETY_GATE_REJECTION: The CloudPilot Safety Gate Judge has blocked this action. Reason: ${safetyAudit.reason}`
+              })
+            });
+          }
+          continue;
+        }
+
         // Dispatch ALL tool calls to aws-agent-tools in a single batch
         const toolsResp = await fetch(TOOLS_URL, {
           method: "POST",
