@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, ChevronRight, Check, Shield, Cpu, RefreshCw, Database, Terminal, User, Loader2, Send, MessageSquare } from "lucide-react";
+import { ArrowRight, ChevronRight, Check, Shield, Cpu, RefreshCw, Database, Terminal, User, Loader2, Send, MessageSquare, Gavel } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import CloudPilotLogo from "@/components/CloudPilotLogo";
@@ -352,7 +352,7 @@ const PipelineFlow = () => {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setActiveStep((prev) => (prev + 1) % 5);
+      setActiveStep((prev) => (prev + 1) % 6);
     }, 2500);
     return () => clearInterval(interval);
   }, []);
@@ -372,6 +372,11 @@ const PipelineFlow = () => {
       title: "STS Token Exchange",
       desc: "STS issues temporary 1-hour session credentials.",
       icon: Shield,
+    },
+    {
+      title: "Safety Gate Judge",
+      desc: "Audits proposed AWS commands against security policies.",
+      icon: Gavel,
     },
     {
       title: "Sandbox Run",
@@ -420,7 +425,7 @@ const PipelineFlow = () => {
                 {step.desc}
               </p>
 
-              {idx < 4 && (
+              {idx < 5 && (
                 <div className="hidden lg:block absolute top-7 left-[calc(50%+2rem)] right-[calc(-50%+2rem)] h-[3px] bg-border/20 overflow-hidden">
                   <div className={`h-full bg-gradient-to-r from-transparent via-primary to-transparent w-16 transition-transform duration-1000 ${
                     isActive ? "animate-flow-arrow" : "hidden"
