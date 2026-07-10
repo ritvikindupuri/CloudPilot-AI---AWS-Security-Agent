@@ -32,7 +32,7 @@ sequenceDiagram
     LLM-->>Agent: Returns proposed AWS tool calls
     Agent->>Judge: Audit proposed AWS tool calls
     Judge-->>Agent: Returns audit verdict (approved/rejected)
-    Note over Agent, AWS: If approved, execute real AWS API calls
+    Note right of Agent: If approved, execute real AWS API calls
     Agent->>AWS: Executes real AWS SDK calls (aws-executor)
     AWS-->>Agent: Returns AWS API JSON response
     Agent->>LLM: Provide API response context
