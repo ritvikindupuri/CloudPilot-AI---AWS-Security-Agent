@@ -1244,6 +1244,37 @@ async function classifyIntent(
     // Include last 3 messages for context
     const contextMessages = messages.slice(-3).map((m) => `${m.role}: ${m.content}`).join("\n");
 
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (anthropicKey) {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": anthropicKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          model: Deno.env.get("ANTHROPIC_MODEL") || "claude-3-5-sonnet-20241022",
+          max_tokens: 100,
+          system: INTENT_CLASSIFIER_PROMPT,
+          messages: [
+            { role: "user", content: `Conversation context:\n${contextMessages}\n\nLatest user message: ${latestUserMsg}` }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        console.warn("[CloudPilot Router] Anthropic intent classification failed, falling back to general:", response.status);
+        return "general";
+      }
+
+      const data = await response.json();
+      const raw = (data.content.find((c: any) => c.type === "text")?.text || "").trim().toLowerCase().replace(/[^a-z_]/g, "");
+      if (raw in INTENT_TOOL_MAP) return raw as AgentIntent;
+      console.warn("[CloudPilot Router] Unknown intent classification:", raw, "— falling back to general");
+      return "general";
+    }
+
     const gatewayUrl = "http://localhost:11434/v1/chat/completions";
     const classifierModel = Deno.env.get("OLLAMA_MODEL") || "gpt-oss:20b";
 
@@ -1275,6 +1306,130 @@ async function classifyIntent(
   } catch (err) {
     console.warn("[CloudPilot Router] Intent classification error:", err);
     return "general";
+  }
+}
+
+async function getLLMResponse(
+  apiMessages: any[],
+  filteredTools: any[],
+  toolChoice: "required" | "auto" | "none",
+  resolvedGeminiKey: string
+): Promise<{ content: string | null; tool_calls?: any[] }> {
+  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (anthropicKey) {
+    const systemMessage = apiMessages.find((m) => m.role === "system")?.content || "";
+    const conversationMessages = apiMessages.filter((m) => m.role !== "system");
+
+    const formattedMessages: any[] = [];
+    for (let j = 0; j < conversationMessages.length; j++) {
+      const msg = conversationMessages[j];
+      if (msg.role === "user") {
+        formattedMessages.push({ role: "user", content: msg.content });
+      } else if (msg.role === "assistant") {
+        const content: any[] = [];
+        if (msg.content) {
+          content.push({ type: "text", text: msg.content });
+        }
+        if (msg.tool_calls) {
+          for (const tc of msg.tool_calls) {
+            content.push({
+              type: "tool_use",
+              id: tc.id,
+              name: tc.function.name,
+              input: typeof tc.function.arguments === "string" 
+                ? JSON.parse(tc.function.arguments) 
+                : tc.function.arguments
+            });
+          }
+        }
+        formattedMessages.push({ role: "assistant", content });
+      } else if (msg.role === "tool") {
+        let lastUser = formattedMessages[formattedMessages.length - 1];
+        if (!lastUser || lastUser.role !== "user" || typeof lastUser.content === "string") {
+          lastUser = { role: "user", content: [] };
+          formattedMessages.push(lastUser);
+        }
+        lastUser.content.push({
+          type: "tool_result",
+          tool_use_id: msg.tool_call_id,
+          content: msg.content
+        });
+      }
+    }
+
+    const anthropicTools = filteredTools.map((t: any) => ({
+      name: t.function.name,
+      description: t.function.description,
+      input_schema: t.function.parameters
+    }));
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": anthropicKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model: Deno.env.get("ANTHROPIC_MODEL") || "claude-3-5-sonnet-20241022",
+        max_tokens: 4000,
+        system: systemMessage,
+        messages: formattedMessages,
+        tools: anthropicTools,
+        ...(toolChoice === "required" ? { tool_choice: { type: "any" } } : {})
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("[CloudPilot Anthropic] API Error:", response.status, errText);
+      throw new Error(`Anthropic API error (${response.status}): ${errText}`);
+    }
+
+    const data = await response.json();
+    const assistantContent = data.content.find((c: any) => c.type === "text")?.text || null;
+    const toolUseBlocks = data.content.filter((c: any) => c.type === "tool_use");
+    const tool_calls = toolUseBlocks.length > 0 ? toolUseBlocks.map((b: any) => ({
+      id: b.id,
+      type: "function" as const,
+      function: {
+        name: b.name,
+        arguments: JSON.stringify(b.input)
+      }
+    })) : undefined;
+
+    return { content: assistantContent, tool_calls };
+  } else {
+    const gatewayUrl = "http://localhost:11434/v1/chat/completions";
+    const agentModel = Deno.env.get("OLLAMA_MODEL") || "gpt-oss:20b";
+    const toolChoiceParam = toolChoice === "required" ? "required" : "auto";
+
+    const response = await fetch(gatewayUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: agentModel,
+        messages: apiMessages,
+        tools: filteredTools,
+        tool_choice: toolChoiceParam,
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("[CloudPilot Ollama] API Error:", response.status, errText);
+      throw new Error(`Ollama API error (${response.status}): ${errText}`);
+    }
+
+    const data = await response.json();
+    const responseMessage = data.choices[0].message;
+    return {
+      content: responseMessage.content || null,
+      tool_calls: responseMessage.tool_calls
+    };
   }
 }
 
@@ -6090,36 +6245,18 @@ export const handler = async (req: Request): Promise<Response> => {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const toolChoice = i === 0 ? "required" : "auto";
 
-      const gatewayUrl = "http://localhost:11434/v1/chat/completions";
-      const agentModel = Deno.env.get("OLLAMA_MODEL") || "gpt-oss:20b";
-
-      const response = await fetch(gatewayUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: agentModel,
-          messages: apiMessages,
-          tools: filteredTools,
-          tool_choice: toolChoice,
-          stream: false,
-        }),
-      });
-
-      if (!response.ok) {
-        if (response.status === 429) {
-          return new Response(JSON.stringify({ error: "Rate limit exceeded." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
-        if (response.status === 402) {
-          return new Response(JSON.stringify({ error: "AI usage credits exhausted." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        }
-        console.error("AI gateway error:", response.status, await response.text());
-        return new Response(JSON.stringify({ error: "AI service error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      let responseMessage: any;
+      try {
+        const llmResp = await getLLMResponse(apiMessages, filteredTools, toolChoice, resolvedGeminiKey);
+        responseMessage = {
+          role: "assistant",
+          content: llmResp.content,
+          ...(llmResp.tool_calls ? { tool_calls: llmResp.tool_calls } : {})
+        };
+      } catch (err: any) {
+        console.error("Agent loop LLM error:", err);
+        return new Response(JSON.stringify({ error: err.message || "AI service error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-
-      const data = await response.json();
-      const responseMessage = data.choices[0].message;
 
       // Fallback: parse raw text content as tool call if formatted as JSON by the model
       if (!responseMessage.tool_calls && responseMessage.content) {
