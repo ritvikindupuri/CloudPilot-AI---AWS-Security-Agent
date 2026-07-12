@@ -693,44 +693,30 @@ const Operations = () => {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <section className="rounded-xl border border-border bg-card p-5 space-y-4">
             <div>
-              <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Live Event Activity</p>
-              <h2 className="text-lg font-semibold text-foreground mt-1">CloudTrail-driven responses</h2>
+              <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Security Findings</p>
+              <h2 className="text-lg font-semibold text-foreground mt-1">Active drift & security issues</h2>
             </div>
 
             <div className="space-y-3">
               {loading ? (
-                <p className="text-sm text-muted-foreground">Loading event activity...</p>
-              ) : eventActivity.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No processed event activity has been recorded yet.</p>
-              ) : eventActivity.map((event) => {
-                const matchedPolicies = summarizeMatchedPolicies(event.matched_policies);
-                const autoFixes = Array.isArray(event.auto_fixes) ? event.auto_fixes.length : 0;
-                const notifications = Array.isArray(event.notifications) ? event.notifications.length : 0;
-                const runbooks = Array.isArray(event.runbooks) ? event.runbooks.length : 0;
-                const autoFixState = summarizeAutoFixState(event.auto_fixes);
-                return (
-                  <div key={event.id} className="rounded-lg border border-border bg-muted/30 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">{event.event_name}</p>
-                        <p className="text-[11px] text-muted-foreground mt-1">
-                          Resource: {event.resource_id || "Unknown"} · Region: {event.region || "Unknown"} · {new Date(event.created_at).toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <span className={`text-[10px] font-mono px-2 py-1 rounded border ${badgeClass(event.risk_level)}`}>{event.risk_level}</span>
-                        <span className={`text-[10px] font-mono px-2 py-1 rounded border ${autoFixState.className}`}>{autoFixState.label}</span>
-                      </div>
+                <p className="text-sm text-muted-foreground">Loading active findings...</p>
+              ) : driftEvents.filter((event) => !event.resolved).length === 0 ? (
+                <p className="text-sm text-muted-foreground">No unresolved security group or resource drift findings detected.</p>
+              ) : driftEvents.filter((event) => !event.resolved).map((event) => (
+                <div key={event.id} className="rounded-lg border border-border bg-muted/30 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{event.title}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Resource: {event.resource_id} · Detected {new Date(event.detected_at).toLocaleString()}
+                      </p>
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-2">
-                      Actor: {event.actor_arn || "Unknown"} · Policies: {matchedPolicies.join(", ") || "None"} · Auto-fixes: {autoFixes} · Notifications: {notifications} · Runbooks: {runbooks}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      {autoFixState.detail}
-                    </p>
+                    <span className={`text-[10px] font-mono px-2 py-1 rounded border ${badgeClass(event.severity)}`}>
+                      {event.severity}
+                    </span>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           </section>
 
