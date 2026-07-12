@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, supabaseUrl, supabaseAnonKey } from "@/integrations/supabase/client";
 
 /** Session credentials returned by the exchange endpoint — these are the ONLY credentials sent to the agent. */
 export interface AwsSessionCredentials {
@@ -84,21 +84,28 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
       }
 
       const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aws-exchange-credentials`,
+        `${supabaseUrl}/functions/v1/aws-exchange-credentials`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${session.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            apikey: supabaseAnonKey,
           },
           body: JSON.stringify({ credentials: payload }),
         }
       );
 
-      const data = await resp.json();
+      let data: any = null;
+      try {
+        const text = await resp.text();
+        data = text ? JSON.parse(text) : null;
+      } catch (e) {
+        throw new Error(`Unexpected server response format (HTTP ${resp.status})`);
+      }
+
       if (!resp.ok || data?.ok === false || !data?.sessionCredentials) {
-        throw new Error(data.error || `Validation failed (${resp.status})`);
+        throw new Error(data?.error || `Validation failed (${resp.status})`);
       }
 
       const creds: AwsCredentials = {

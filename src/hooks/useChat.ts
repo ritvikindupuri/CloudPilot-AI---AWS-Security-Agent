@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, supabaseUrl, supabaseAnonKey } from "@/integrations/supabase/client";
 import type { ChatMessageData, MessageRole, MessageStatus } from "@/components/ChatMessage";
 import type { AwsCredentials } from "@/components/AwsCredentialsPanel";
 import type { Finding } from "@/components/FindingsPanel";
@@ -326,13 +326,13 @@ export const useChat = (
         const customGeminiKey = localStorage.getItem("cloudpilot-gemini-api-key");
 
         const resp = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aws-agent`,
+          `${supabaseUrl}/functions/v1/aws-agent`,
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
-              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              apikey: supabaseAnonKey,
             },
             body: JSON.stringify({
               messages: historyForApi,

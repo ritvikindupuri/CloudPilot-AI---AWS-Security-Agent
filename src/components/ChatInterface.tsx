@@ -20,7 +20,7 @@ import { useChat } from "@/hooks/useChat";
 import { useAuth } from "@/hooks/useAuth";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, supabaseUrl, supabaseAnonKey } from "@/integrations/supabase/client";
 
 const ChatInterface = () => {
   const navigate = useNavigate();
@@ -223,13 +223,13 @@ const ChatInterface = () => {
       const customGeminiKey = localStorage.getItem("cloudpilot-gemini-api-key");
 
       const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aws-agent`,
+        `${supabaseUrl}/functions/v1/aws-agent`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            apikey: supabaseAnonKey,
           },
           body: JSON.stringify({
             messages: [

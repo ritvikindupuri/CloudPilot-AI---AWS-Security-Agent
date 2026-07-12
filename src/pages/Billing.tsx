@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, CreditCard, Check, Shield, Zap, Info, Loader2, ExternalLink, Receipt, AlertCircle, Gift } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, supabaseUrl } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface Subscription {
@@ -97,7 +97,7 @@ const Billing = () => {
       if (!token) return;
 
       const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stripe-checkout`,
+        `${supabaseUrl}/functions/v1/stripe-checkout`,
         {
           method: "POST",
           headers: {
@@ -137,7 +137,7 @@ const Billing = () => {
       if (!token) throw new Error("Not authenticated");
 
       const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stripe-checkout`,
+        `${supabaseUrl}/functions/v1/stripe-checkout`,
         {
           method: "POST",
           headers: {
@@ -177,7 +177,7 @@ const Billing = () => {
       if (!token) throw new Error("Not authenticated");
 
       const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stripe-checkout`,
+        `${supabaseUrl}/functions/v1/stripe-checkout`,
         {
           method: "POST",
           headers: {
