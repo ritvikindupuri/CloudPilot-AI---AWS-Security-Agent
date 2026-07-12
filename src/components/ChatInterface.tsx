@@ -733,8 +733,7 @@ const ChatInterface = () => {
               />
             </div>
 
-            {/* AWS Credentials */}
-            <AwsCredentialsPanel credentials={credentials} onSave={handleCredentialsSave} compact />
+
 
             {/* VPC Routing Management */}
             {credentials && (
