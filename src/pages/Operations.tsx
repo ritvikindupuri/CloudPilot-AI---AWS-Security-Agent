@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, CheckSquare, Clock, Download, FileText, Globe, Layers3, Lock, PlayCircle, RefreshCcw, Shield, ShieldCheck, SlidersHorizontal, TrendingUp } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckSquare, Clock, Download, FileText, Globe, HelpCircle, Layers3, Lock, PlayCircle, RefreshCcw, Shield, ShieldCheck, SlidersHorizontal, TrendingUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -240,6 +240,7 @@ const Operations = () => {
       return null;
     }
   });
+  const [tourStep, setTourStep] = useState<number | null>(null);
   const [automationRuns, setAutomationRuns] = useState<AutomationRunRow[]>([]);
   const [eventActivity, setEventActivity] = useState<GuardianEventActivityRow[]>([]);
   const [approvalRequests, setApprovalRequests] = useState<ApprovalRequestRow[]>([]);
@@ -575,6 +576,10 @@ const Operations = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setTourStep(1)} className="border-primary/50 text-primary hover:bg-primary/10">
+              <HelpCircle className="w-4 h-4 mr-2" />
+              Start Tour
+            </Button>
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
               <RefreshCcw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
               Refresh
@@ -596,7 +601,7 @@ const Operations = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
+        <div className={`grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 transition-all duration-300 ${tourStep === 1 ? "ring-2 ring-primary ring-offset-2 ring-offset-background p-1 rounded-xl shadow-[0_0_20px_rgba(var(--primary),0.3)] bg-primary/5" : ""}`}>
           {[
             { label: "Event Policies", value: eventPolicies.length, icon: Shield },
             { label: "Cost Rules", value: costRules.length, icon: TrendingUp },
@@ -617,7 +622,7 @@ const Operations = () => {
           ))}
         </div>
 
-        <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+        <section className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 2 ? "ring-2 ring-primary ring-offset-2 ring-offset-background shadow-[0_0_20px_rgba(var(--primary),0.3)] bg-primary/5" : ""}`}>
           <div>
             <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase flex items-center gap-2">
               <ShieldCheck className="w-3.5 h-3.5 text-primary" />
@@ -690,7 +695,7 @@ const Operations = () => {
           </div>
         </section>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className={`grid grid-cols-1 xl:grid-cols-2 gap-6 transition-all duration-300 ${tourStep === 3 ? "ring-2 ring-primary ring-offset-2 ring-offset-background p-1 rounded-2xl shadow-[0_0_20px_rgba(var(--primary),0.3)] bg-primary/5" : ""}`}>
           <section className="rounded-xl border border-border bg-card p-5 space-y-4">
             <div>
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Security Findings</p>
@@ -761,7 +766,7 @@ const Operations = () => {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <section className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 4 ? "ring-2 ring-primary ring-offset-2 ring-offset-background shadow-[0_0_20px_rgba(var(--primary),0.3)] bg-primary/5" : ""}`}>
             <div>
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Approval Workflows</p>
               <h2 className="text-lg font-semibold text-foreground mt-1">High-risk execution approvals</h2>
@@ -800,7 +805,7 @@ const Operations = () => {
             </div>
           </section>
 
-          <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <section className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 5 ? "ring-2 ring-primary ring-offset-2 ring-offset-background shadow-[0_0_20px_rgba(var(--primary),0.3)] bg-primary/5" : ""}`}>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Compliance Evidence</p>
@@ -1122,6 +1127,75 @@ const Operations = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {tourStep !== null && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-card/95 backdrop-blur-md border border-primary/30 p-5 rounded-xl shadow-2xl animate-in slide-in-from-bottom-5 duration-300">
+          <div className="flex justify-between items-start mb-3">
+            <div>
+              <span className="text-[9px] font-mono bg-primary/10 text-primary px-2 py-0.5 rounded border border-primary/20 uppercase">
+                Step {tourStep} of 5
+              </span>
+              <h4 className="font-bold text-sm text-foreground mt-2">
+                {tourStep === 1 && "Operational Metrics"}
+                {tourStep === 2 && "Active Session Security"}
+                {tourStep === 3 && "Findings & Audit Trails"}
+                {tourStep === 4 && "Governance approvals"}
+                {tourStep === 5 && "Compliance evidence"}
+              </h4>
+            </div>
+            <button 
+              onClick={() => setTourStep(null)}
+              className="text-muted-foreground hover:text-foreground text-xs"
+            >
+              ✕
+            </button>
+          </div>
+
+          <p className="text-xs text-muted-foreground mb-4">
+            {tourStep === 1 && "This dashboard rollup aggregates your security rules, active cost optimization rules, unresolved resource drifts, execution runbooks, pending admin approvals, and evidence exports."}
+            {tourStep === 2 && "CloudPilot runs in a Zero-Storage session mode. Your AWS keys exist only in browser session memory. This card displays your active region, session connection status, and key metadata."}
+            {tourStep === 3 && "Left panel lists active security groups/S3 drifts detected on your AWS account. Right panel logs all API calls run by the agent on-demand, giving you an immutable execution history."}
+            {tourStep === 4 && "Elevated or mutating operations (e.g. deleting a world-open SG rule) trigger a dual-approval request. Review, accept, or reject the agent's recommended remediations right here."}
+            {tourStep === 5 && "Here you can generate immutable compliance reports (detailing active baseline configurations, audits, and runbook logs) for SOC2 or ISO 27001 evidence requirements."}
+          </p>
+
+          <div className="flex justify-between items-center pt-2 border-t border-border">
+            <Button 
+              variant="ghost" 
+              size="xs" 
+              onClick={() => setTourStep(null)}
+              className="text-xs text-muted-foreground"
+            >
+              Skip
+            </Button>
+            <div className="flex gap-2">
+              {tourStep > 1 && (
+                <Button 
+                  variant="outline" 
+                  size="xs" 
+                  onClick={() => setTourStep(prev => prev ? prev - 1 : null)}
+                  className="text-xs"
+                >
+                  Back
+                </Button>
+              )}
+              <Button 
+                size="xs" 
+                onClick={() => {
+                  if (tourStep < 5) {
+                    setTourStep(prev => prev ? prev + 1 : null);
+                  } else {
+                    setTourStep(null);
+                  }
+                }}
+                className="text-xs"
+              >
+                {tourStep === 5 ? "Finish" : "Next"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
