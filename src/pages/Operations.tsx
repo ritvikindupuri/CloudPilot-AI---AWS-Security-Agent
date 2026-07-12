@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, CheckSquare, Clock, Download, FileText, Layers3, PlayCircle, RefreshCcw, Shield, ShieldCheck, SlidersHorizontal, TrendingUp } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckSquare, Clock, Download, FileText, Globe, Layers3, Lock, PlayCircle, RefreshCcw, Shield, ShieldCheck, SlidersHorizontal, TrendingUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -232,7 +232,14 @@ const Operations = () => {
   const [runbookExecutions, setRunbookExecutions] = useState<RunbookExecutionRow[]>([]);
   const [runbookSteps, setRunbookSteps] = useState<RunbookStepRow[]>([]);
   const [orgHistory, setOrgHistory] = useState<OrgHistoryRow[]>([]);
-  const [guardianCreds, setGuardianCreds] = useState<GuardianCredentialRow[]>([]);
+  const [localCreds, setLocalCreds] = useState<any>(() => {
+    try {
+      const saved = localStorage.getItem("cloudpilot-aws-credentials");
+      return saved && saved !== "undefined" ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [automationRuns, setAutomationRuns] = useState<AutomationRunRow[]>([]);
   const [eventActivity, setEventActivity] = useState<GuardianEventActivityRow[]>([]);
   const [approvalRequests, setApprovalRequests] = useState<ApprovalRequestRow[]>([]);
@@ -614,78 +621,72 @@ const Operations = () => {
           <div>
             <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase flex items-center gap-2">
               <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-              Guardian Autonomous Security
+              Active Operations Connection
             </p>
-            <h2 className="text-lg font-semibold text-foreground mt-1">Autonomous environment scanning</h2>
-            <p className="text-sm text-muted-foreground mt-1">Status of scheduled Guardian scans and anomaly detections across enrolled credentials.</p>
+            <h2 className="text-lg font-semibold text-foreground mt-1">Active Security Agent Session</h2>
+            <p className="text-sm text-muted-foreground mt-1">Status of your temporary, zero-storage connection held in browser memory.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {loading ? (
-              <p className="text-sm text-muted-foreground">Loading Guardian status...</p>
-            ) : guardianCreds.length === 0 ? (
-              <p className="text-sm text-muted-foreground col-span-full border border-dashed border-border rounded-lg p-6 text-center">No credentials enrolled in Guardian scans yet.</p>
-            ) : guardianCreds.map((cred) => {
-              let parsedStatus = { message: cred.last_scan_status || "No scans recorded yet", anomalies: 0 };
-
-              if (cred.last_scan_status) {
-                try {
-                  const data = JSON.parse(cred.last_scan_status);
-                  parsedStatus = {
-                    message: data.status || "Completed",
-                    anomalies: data.anomalies !== undefined ? Number(data.anomalies) : 0
-                  };
-                } catch {
-                  // Fallback for simple string format
-                  const match = cred.last_scan_status.match(/(\d+) anomal/i);
-                  const anomalies = match ? parseInt(match[1], 10) : 0;
-                  parsedStatus = { message: cred.last_scan_status, anomalies };
-                }
-              }
-
-              return (
-                <div key={cred.id} className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div className="space-y-1">
-                      <p className="font-semibold text-sm text-foreground">{cred.label}</p>
-                      {cred.account_id && (
-                        <p className="text-[10px] font-mono text-muted-foreground">{cred.account_id}</p>
-                      )}
-                    </div>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${cred.last_scan_at ? "bg-primary/10 text-primary border-primary/30" : "bg-muted text-muted-foreground border-border"}`}>
-                      {cred.last_scan_at ? "ACTIVE" : "PENDING"}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 mt-4">
-                    <div className="space-y-1 bg-background/50 p-2 rounded border border-border">
-                      <div className="flex items-center gap-1.5 text-muted-foreground">
-                        <Clock className="w-3.5 h-3.5" />
-                        <span className="text-[10px] uppercase font-mono">Last Scan</span>
-                      </div>
-                      <p className="text-xs font-medium truncate">
-                        {cred.last_scan_at ? new Date(cred.last_scan_at).toLocaleString() : "Never"}
+          <div>
+            {localCreds ? (
+              <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3 max-w-md">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <p className="font-semibold text-sm text-foreground">AWS Account Session</p>
+                    {localCreds.roleArn ? (
+                      <p className="text-[10px] font-mono text-muted-foreground truncate max-w-[280px]" title={localCreds.roleArn}>
+                        Role: {localCreds.roleArn}
                       </p>
-                    </div>
-                    <div className="space-y-1 bg-background/50 p-2 rounded border border-border">
-                      <div className="flex items-center gap-1.5 text-muted-foreground">
-                        <AlertTriangle className={`w-3.5 h-3.5 ${parsedStatus.anomalies > 0 ? "text-destructive" : ""}`} />
-                        <span className="text-[10px] uppercase font-mono">Anomalies</span>
-                      </div>
-                      <p className={`text-xs font-medium ${parsedStatus.anomalies > 0 ? "text-destructive" : ""}`}>
-                        {parsedStatus.anomalies} detected
+                    ) : (
+                      <p className="text-[10px] font-mono text-muted-foreground">
+                        Access Key: {localCreds.accessKeyId ? `***${localCreds.accessKeyId.slice(-4)}` : "Ephemeral Access Key"}
                       </p>
-                    </div>
+                    )}
                   </div>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono border bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                    CONNECTED
+                  </span>
+                </div>
 
-                  <div className="pt-2 border-t border-border/50">
-                    <p className="text-[11px] text-muted-foreground line-clamp-2" title={parsedStatus.message}>
-                      {parsedStatus.message}
+                <div className="grid grid-cols-2 gap-2 mt-4">
+                  <div className="space-y-1 bg-background/50 p-2 rounded border border-border">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Globe className="w-3.5 h-3.5" />
+                      <span className="text-[10px] uppercase font-mono">Region</span>
+                    </div>
+                    <p className="text-xs font-medium truncate">
+                      {localCreds.region || "us-east-1"}
+                    </p>
+                  </div>
+                  <div className="space-y-1 bg-background/50 p-2 rounded border border-border">
+                    <div className="flex items-center gap-1.5 text-muted-foreground">
+                      <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-[10px] uppercase font-mono">Storage</span>
+                    </div>
+                    <p className="text-xs font-medium text-emerald-400">
+                      Zero-Storage (Session)
                     </p>
                   </div>
                 </div>
-              );
-            })}
+
+                <div className="pt-2 border-t border-border/50">
+                  <p className="text-[11px] text-muted-foreground">
+                    This session is active. All security audits, cost checks, and runbook triggers run in real time directly against this connection.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="border border-dashed border-border rounded-lg p-8 text-center max-w-lg">
+                <ShieldCheck className="w-8 h-8 text-muted-foreground/60 mx-auto mb-3" />
+                <h3 className="text-sm font-semibold text-foreground">No Active AWS Connection</h3>
+                <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                  Connect your AWS account via the main console to enable real-time audits, threat analysis, and automated compliance tracking.
+                </p>
+                <Button size="sm" className="mt-4" asChild>
+                  <Link to="/app">Go to Console</Link>
+                </Button>
+              </div>
+            )}
           </div>
         </section>
 
@@ -735,29 +736,38 @@ const Operations = () => {
 
           <section className="rounded-xl border border-border bg-card p-5 space-y-4">
             <div>
-              <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Automation Runtime</p>
-              <h2 className="text-lg font-semibold text-foreground mt-1">Scheduler and processor history</h2>
+              <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Agent Operations</p>
+              <h2 className="text-lg font-semibold text-foreground mt-1">Agent execution audit log</h2>
             </div>
 
             <div className="space-y-3">
               {loading ? (
-                <p className="text-sm text-muted-foreground">Loading automation runs...</p>
-              ) : automationRuns.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No scheduler or runtime history has been recorded yet.</p>
-              ) : automationRuns.map((run) => (
-                <div key={run.id} className="rounded-lg border border-border bg-muted/30 p-3">
+                <p className="text-sm text-muted-foreground">Loading audit logs...</p>
+              ) : auditLogs.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No agent executions have been recorded yet.</p>
+              ) : auditLogs.slice(0, 10).map((log) => (
+                <div key={log.id} className="rounded-lg border border-border bg-muted/30 p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">{run.source}</p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono uppercase bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20">
+                          {log.aws_service || "AWS"}
+                        </span>
+                        <p className="text-sm font-semibold text-foreground">{log.aws_operation}</p>
+                      </div>
                       <p className="text-[11px] text-muted-foreground mt-1">
-                        Mode: {run.mode} · Account: {run.account_id || "Unknown"} · {new Date(run.created_at).toLocaleString()}
+                        {new Date(log.created_at).toLocaleString()}
                       </p>
                     </div>
-                    <span className={`text-[10px] font-mono px-2 py-1 rounded border ${badgeClass(run.status)}`}>{run.status}</span>
+                    <span className={`text-[10px] font-mono px-2 py-1 rounded border ${log.status === "SUCCESS" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-destructive/10 text-destructive border-destructive/20"}`}>
+                      {log.status}
+                    </span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-2">
-                    {run.summary ? JSON.stringify(run.summary) : "No summary recorded."}
-                  </p>
+                  {log.error_message && (
+                    <p className="text-[11px] text-destructive mt-2 bg-destructive/5 p-2 rounded border border-destructive/10 font-mono">
+                      Error: {log.error_message}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
