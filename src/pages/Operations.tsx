@@ -601,7 +601,7 @@ const Operations = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        <div className={`grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 transition-all duration-300 ${tourStep === 1 ? "ring-2 ring-primary ring-offset-2 ring-offset-background p-1 rounded-xl shadow-[0_0_20px_rgba(var(--primary),0.3)] bg-primary/5" : ""}`}>
+        <div className={`grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 transition-all duration-300 ${tourStep === 1 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background p-1 rounded-xl shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
           {[
             { label: "Event Policies", value: eventPolicies.length, icon: Shield },
             { label: "Cost Rules", value: costRules.length, icon: TrendingUp },
@@ -622,7 +622,7 @@ const Operations = () => {
           ))}
         </div>
 
-        <section className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 2 ? "ring-2 ring-primary ring-offset-2 ring-offset-background shadow-[0_0_20px_rgba(var(--primary),0.3)] bg-primary/5" : ""}`}>
+        <section className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 2 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
           <div>
             <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase flex items-center gap-2">
               <ShieldCheck className="w-3.5 h-3.5 text-primary" />
@@ -695,7 +695,7 @@ const Operations = () => {
           </div>
         </section>
 
-        <div className={`grid grid-cols-1 xl:grid-cols-2 gap-6 transition-all duration-300 ${tourStep === 3 ? "ring-2 ring-primary ring-offset-2 ring-offset-background p-1 rounded-2xl shadow-[0_0_20px_rgba(var(--primary),0.3)] bg-primary/5" : ""}`}>
+        <div className={`grid grid-cols-1 xl:grid-cols-2 gap-6 transition-all duration-300 ${tourStep === 3 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background p-1 rounded-2xl shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
           <section className="rounded-xl border border-border bg-card p-5 space-y-4">
             <div>
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Security Findings</p>
@@ -766,7 +766,7 @@ const Operations = () => {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <section className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 4 ? "ring-2 ring-primary ring-offset-2 ring-offset-background shadow-[0_0_20px_rgba(var(--primary),0.3)] bg-primary/5" : ""}`}>
+          <section className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 4 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <div>
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Approval Workflows</p>
               <h2 className="text-lg font-semibold text-foreground mt-1">High-risk execution approvals</h2>
@@ -805,7 +805,7 @@ const Operations = () => {
             </div>
           </section>
 
-          <section className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 5 ? "ring-2 ring-primary ring-offset-2 ring-offset-background shadow-[0_0_20px_rgba(var(--primary),0.3)] bg-primary/5" : ""}`}>
+          <section className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 5 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Compliance Evidence</p>
@@ -1129,69 +1129,92 @@ const Operations = () => {
       </Dialog>
 
       {tourStep !== null && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-card/95 backdrop-blur-md border border-primary/30 p-5 rounded-xl shadow-2xl animate-in slide-in-from-bottom-5 duration-300">
-          <div className="flex justify-between items-start mb-3">
-            <div>
-              <span className="text-[9px] font-mono bg-primary/10 text-primary px-2 py-0.5 rounded border border-primary/20 uppercase">
-                Step {tourStep} of 5
-              </span>
-              <h4 className="font-bold text-sm text-foreground mt-2">
-                {tourStep === 1 && "Operational Metrics"}
-                {tourStep === 2 && "Active Session Security"}
-                {tourStep === 3 && "Findings & Audit Trails"}
-                {tourStep === 4 && "Governance approvals"}
-                {tourStep === 5 && "Compliance evidence"}
-              </h4>
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-xs z-30 transition-all duration-300" />
+      )}
+
+      {tourStep !== null && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+          <div className="bg-card/95 border border-primary/30 max-w-md w-full shadow-2xl p-6 rounded-2xl backdrop-blur-md animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <span className="text-[10px] font-mono bg-primary/10 text-primary px-2.5 py-0.5 rounded border border-primary/20 uppercase tracking-wider">
+                  Interactive Step {tourStep} of 5
+                </span>
+                <h4 className="font-extrabold text-lg text-foreground mt-3 tracking-tight">
+                  {tourStep === 1 && "📊 Operational Metrics Grid"}
+                  {tourStep === 2 && "🛡️ Zero-Storage AWS Session"}
+                  {tourStep === 3 && "🔍 Drift Findings & Agent Logs"}
+                  {tourStep === 4 && "⚖️ High-Risk Mutation Approvals"}
+                  {tourStep === 5 && "📑 Compliance Evidence & Reports"}
+                </h4>
+              </div>
+              <button 
+                onClick={() => setTourStep(null)}
+                className="text-muted-foreground hover:text-foreground text-xs p-1"
+                aria-label="Close tour"
+              >
+                ✕
+              </button>
             </div>
-            <button 
-              onClick={() => setTourStep(null)}
-              className="text-muted-foreground hover:text-foreground text-xs"
-            >
-              ✕
-            </button>
-          </div>
 
-          <p className="text-xs text-muted-foreground mb-4">
-            {tourStep === 1 && "This dashboard rollup aggregates your security rules, active cost optimization rules, unresolved resource drifts, execution runbooks, pending admin approvals, and evidence exports."}
-            {tourStep === 2 && "CloudPilot runs in a Zero-Storage session mode. Your AWS keys exist only in browser session memory. This card displays your active region, session connection status, and key metadata."}
-            {tourStep === 3 && "Left panel lists active security groups/S3 drifts detected on your AWS account. Right panel logs all API calls run by the agent on-demand, giving you an immutable execution history."}
-            {tourStep === 4 && "Elevated or mutating operations (e.g. deleting a world-open SG rule) trigger a dual-approval request. Review, accept, or reject the agent's recommended remediations right here."}
-            {tourStep === 5 && "Here you can generate immutable compliance reports (detailing active baseline configurations, audits, and runbook logs) for SOC2 or ISO 27001 evidence requirements."}
-          </p>
+            <div className="space-y-4 my-4">
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-mono text-primary uppercase tracking-widest">What it does</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {tourStep === 1 && "Aggregates rule counts, unresolved drift detections, compliance evidence files, cost optimization rules, and pending governance approvals in a quick-read grid."}
+                  {tourStep === 2 && "Provides status monitoring for your active AWS connection. Credentials live purely in browser session memory and are exchanged for temporary 1-hour session tokens—guaranteeing 100% zero-storage safety."}
+                  {tourStep === 3 && "Displays active security findings (resource drift) detected on your AWS accounts on the left, and a real-time audit log of all direct AWS SDK calls executed by the agent on the right."}
+                  {tourStep === 4 && "Acts as a security gateway. When you ask the agent to apply changes (e.g. close an open port), the agent queues the action here. No changes run until you review and click Approve."}
+                  {tourStep === 5 && "Provides a portal to generate cryptographically signed evidence exports containing baseline configurations, audit trails, and agent remediation runs for SOC2 or ISO 27001 audits."}
+                </p>
+              </div>
 
-          <div className="flex justify-between items-center pt-2 border-t border-border">
-            <Button 
-              variant="ghost" 
-              size="xs" 
-              onClick={() => setTourStep(null)}
-              className="text-xs text-muted-foreground"
-            >
-              Skip
-            </Button>
-            <div className="flex gap-2">
-              {tourStep > 1 && (
+              <div className="bg-primary/5 border border-primary/25 rounded-lg p-3 space-y-1.5 font-mono">
+                <p className="text-[9px] uppercase tracking-widest text-primary font-bold">Interactive Try-this-Prompt</p>
+                <p className="text-[11px] text-foreground font-medium italic">
+                  {tourStep === 1 && '"Create a medium-severity event policy for EC2 SG changes"'}
+                  {tourStep === 2 && 'Connect access keys in the main tab to establish the session.'}
+                  {tourStep === 3 && '"Audit my S3 bucket public access blocks for drift"'}
+                  {tourStep === 4 && '"Revoke wide-open security group rule on sg-012345"'}
+                  {tourStep === 5 && 'Click the "Generate Export" button in this panel.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center pt-3 border-t border-border mt-4">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setTourStep(null)}
+                className="text-xs text-muted-foreground"
+              >
+                Skip Walkthrough
+              </Button>
+              <div className="flex gap-2">
+                {tourStep > 1 && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setTourStep(prev => prev ? prev - 1 : null)}
+                    className="text-xs"
+                  >
+                    Back
+                  </Button>
+                )}
                 <Button 
-                  variant="outline" 
-                  size="xs" 
-                  onClick={() => setTourStep(prev => prev ? prev - 1 : null)}
+                  size="sm" 
+                  onClick={() => {
+                    if (tourStep < 5) {
+                      setTourStep(prev => prev ? prev + 1 : null);
+                    } else {
+                      setTourStep(null);
+                    }
+                  }}
                   className="text-xs"
                 >
-                  Back
+                  {tourStep === 5 ? "Finish" : "Next"}
                 </Button>
-              )}
-              <Button 
-                size="xs" 
-                onClick={() => {
-                  if (tourStep < 5) {
-                    setTourStep(prev => prev ? prev + 1 : null);
-                  } else {
-                    setTourStep(null);
-                  }
-                }}
-                className="text-xs"
-              >
-                {tourStep === 5 ? "Finish" : "Next"}
-              </Button>
+              </div>
             </div>
           </div>
         </div>
