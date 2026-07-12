@@ -11,6 +11,7 @@ import {
   FileSpreadsheet,
   FileText,
   GanttChartSquare,
+  HelpCircle,
   ShieldCheck,
   ShieldAlert,
   Sparkles,
@@ -94,6 +95,7 @@ const Compliance = () => {
   const [approvals, setApprovals] = useState<ApprovalRequestRow[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([]);
   const [selectedFramework, setSelectedFramework] = useState<string>("all");
+  const [tourStep, setTourStep] = useState<number | null>(null);
   const [exceptionForm, setExceptionForm] = useState({
     framework: "soc2",
     control_id: "",
@@ -161,6 +163,17 @@ const Compliance = () => {
 
     loadData();
   }, [user]);
+
+  useEffect(() => {
+    if (tourStep !== null) {
+      setTimeout(() => {
+        const element = document.getElementById(`tour-step-${tourStep}`);
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 50);
+    }
+  }, [tourStep]);
 
   const filteredReports = useMemo(() => {
     if (selectedFramework === "all") return reports;
@@ -411,6 +424,10 @@ const Compliance = () => {
                 ))}
               </SelectContent>
             </Select>
+            <Button variant="outline" size="sm" onClick={() => setTourStep(1)} className="border-primary/50 text-primary hover:bg-primary/10">
+              <HelpCircle className="w-4 h-4 mr-2" />
+              Start Tour
+            </Button>
             <Button variant="outline" size="sm" onClick={handleAuditorExport} disabled={exporting}>
               <Download className="w-4 h-4 mr-2" />
               {exporting ? "Exporting..." : "Auditor Export"}
@@ -438,7 +455,7 @@ const Compliance = () => {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+        <div id="tour-step-1" className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4 transition-all duration-300 ${tourStep === 1 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background p-1 rounded-xl shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
           {[
             { label: "Frameworks Covered", value: frameworkSummaries.filter((item) => item.reportsCount > 0).length, icon: ShieldCheck },
             { label: "Report Library", value: filteredReports.length, icon: FileText },
@@ -460,7 +477,7 @@ const Compliance = () => {
         </div>
 
         <section className="grid grid-cols-1 xl:grid-cols-[1.5fr,1fr] gap-6">
-          <div className="rounded-xl border border-border bg-card p-5">
+          <div id="tour-step-2" className={`rounded-xl border border-border bg-card p-5 transition-all duration-300 ${tourStep === 2 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase flex items-center gap-2">
@@ -513,7 +530,7 @@ const Compliance = () => {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5">
+          <div id="tour-step-3" className={`rounded-xl border border-border bg-card p-5 transition-all duration-300 ${tourStep === 3 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Control Trend</p>
             <h2 className="text-lg font-semibold text-foreground mt-1">Pass / fail signal trend</h2>
             <p className="text-sm text-muted-foreground mt-1">Recent report activity across the filtered compliance scope.</p>
@@ -559,7 +576,7 @@ const Compliance = () => {
         </section>
 
         <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <div id="tour-step-4" className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 4 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <div>
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Exception Management</p>
               <h2 className="text-lg font-semibold text-foreground mt-1">Risk-accepted control gaps</h2>
@@ -669,7 +686,7 @@ const Compliance = () => {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <div id="tour-step-5" className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 5 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <div>
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Scheduled Attestations</p>
               <h2 className="text-lg font-semibold text-foreground mt-1">Recurring review calendar</h2>
@@ -780,7 +797,7 @@ const Compliance = () => {
         </section>
 
         <section className="grid grid-cols-1 xl:grid-cols-[1.25fr,1fr] gap-6">
-          <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <div id="tour-step-6" className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 6 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <div>
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Auditor Exports</p>
               <h2 className="text-lg font-semibold text-foreground mt-1">Immutable evidence bundle history</h2>
@@ -827,7 +844,7 @@ const Compliance = () => {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <div id="tour-step-7" className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 7 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <div>
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Recent Evidence Trail</p>
               <h2 className="text-lg font-semibold text-foreground mt-1">Approvals and AWS call audit stream</h2>
@@ -869,7 +886,7 @@ const Compliance = () => {
           </div>
         </section>
 
-        <section className="rounded-xl border border-border bg-card p-5">
+        <section id="tour-step-8" className={`rounded-xl border border-border bg-card p-5 transition-all duration-300 ${tourStep === 8 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase flex items-center gap-2">
@@ -908,6 +925,107 @@ const Compliance = () => {
           </div>
         </section>
       </main>
+
+      {tourStep !== null && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-xs z-30 transition-all duration-300" />
+      )}
+
+      {tourStep !== null && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+          <div className="bg-card/95 border border-primary/30 max-w-md w-full shadow-2xl p-6 rounded-2xl backdrop-blur-md animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <span className="text-[10px] font-mono bg-primary/10 text-primary px-2.5 py-0.5 rounded border border-primary/20 uppercase tracking-wider">
+                  Compliance Step {tourStep} of 8
+                </span>
+                <h4 className="font-extrabold text-lg text-foreground mt-3 tracking-tight">
+                  {tourStep === 1 && "📊 Compliance Metrics"}
+                  {tourStep === 2 && "🛡️ Control Posture Dashboard"}
+                  {tourStep === 3 && "📈 Pass / Fail Signal Trend"}
+                  {tourStep === 4 && "🛑 Deviation Exceptions Queue"}
+                  {tourStep === 5 && "📅 Attestation Calendar"}
+                  {tourStep === 6 && "📁 Auditor Evidence Exports"}
+                  {tourStep === 7 && "🔍 Recent Validation Trail"}
+                  {tourStep === 8 && "📚 Mapped Report Library"}
+                </h4>
+              </div>
+              <button 
+                onClick={() => setTourStep(null)}
+                className="text-muted-foreground hover:text-foreground text-xs p-1"
+                aria-label="Close tour"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 my-4">
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-mono text-primary uppercase tracking-widest">What it does</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {tourStep === 1 && "Displays portfolios covered, report library count, evidence exports history, open risk exceptions, and due attestations."}
+                  {tourStep === 2 && "Calculates automated compliance scores for frameworks (SOC2, HIPAA, PCI-DSS) by mapping controls to agent findings."}
+                  {tourStep === 3 && "Tracks historical security scan signals, rendering compliance health trends over time."}
+                  {tourStep === 4 && "Provides a repository to log compensating security controls and temporary compliance deviations for auditor review."}
+                  {tourStep === 5 && "Manages recurring control sign-offs, cadences (quarterly/monthly), owners, and notes."}
+                  {tourStep === 6 && "Lists generated evidence archives complete with cryptographically secure SHA-256 validation hashes."}
+                  {tourStep === 7 && "Consolidates approvals and direct AWS call logs into an audit-friendly validation trail."}
+                  {tourStep === 8 && "Contains full reports generated by the agent during security chat queries that feed this compliance dashboard."}
+                </p>
+              </div>
+
+              <div className="bg-primary/5 border border-primary/25 rounded-lg p-3 space-y-1.5 font-mono">
+                <p className="text-[9px] uppercase tracking-widest text-primary font-bold">Interactive Try-this-Prompt</p>
+                <p className="text-[11px] text-foreground font-medium italic">
+                  {tourStep === 1 && '"List all S3 bucket settings that fail SOC2 compliance rules"'}
+                  {tourStep === 2 && '"Map my AWS configuration checks to the HIPAA security rulebook"'}
+                  {tourStep === 3 && 'Ask the agent to execute a baseline scan to trigger trend data.'}
+                  {tourStep === 4 && '"Log a HIPAA exception for bucket logging on dev-bucket"'}
+                  {tourStep === 5 && '"Add a quarterly attestation for review of bucket public blocks"'}
+                  {tourStep === 6 && 'Click the "Auditor Export" button at the top header to compile CSV/JSON.'}
+                  {tourStep === 7 && 'Instruct the agent to perform checks to populate the validation logs.'}
+                  {tourStep === 8 && '"Draft a SOC2 security review for IAM group permissions"'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center pt-3 border-t border-border mt-4">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setTourStep(null)}
+                className="text-xs text-muted-foreground"
+              >
+                Skip Walkthrough
+              </Button>
+              <div className="flex gap-2">
+                {tourStep > 1 && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setTourStep(prev => prev ? prev - 1 : null)}
+                    className="text-xs"
+                  >
+                    Back
+                  </Button>
+                )}
+                <Button 
+                  size="sm" 
+                  onClick={() => {
+                    if (tourStep < 8) {
+                      setTourStep(prev => prev ? prev + 1 : null);
+                    } else {
+                      setTourStep(null);
+                    }
+                  }}
+                  className="text-xs"
+                >
+                  {tourStep === 8 ? "Finish" : "Next"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
