@@ -345,6 +345,17 @@ const Operations = () => {
   }, [user]);
 
   useEffect(() => {
+    if (tourStep !== null) {
+      setTimeout(() => {
+        const element = document.getElementById(`tour-step-${tourStep}`);
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 50);
+    }
+  }, [tourStep]);
+
+  useEffect(() => {
     if (!user) return;
 
     const refresh = () => {
@@ -601,7 +612,7 @@ const Operations = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        <div className={`grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 transition-all duration-300 ${tourStep === 1 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background p-1 rounded-xl shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
+        <div id="tour-step-1" className={`grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 transition-all duration-300 ${tourStep === 1 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background p-1 rounded-xl shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
           {[
             { label: "Event Policies", value: eventPolicies.length, icon: Shield },
             { label: "Cost Rules", value: costRules.length, icon: TrendingUp },
@@ -622,7 +633,7 @@ const Operations = () => {
           ))}
         </div>
 
-        <section className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 2 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
+        <section id="tour-step-2" className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 2 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
           <div>
             <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase flex items-center gap-2">
               <ShieldCheck className="w-3.5 h-3.5 text-primary" />
@@ -695,8 +706,8 @@ const Operations = () => {
           </div>
         </section>
 
-        <div className={`grid grid-cols-1 xl:grid-cols-2 gap-6 transition-all duration-300 ${tourStep === 3 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background p-1 rounded-2xl shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
-          <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <section id="tour-step-3" className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 3 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <div>
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Security Findings</p>
               <h2 className="text-lg font-semibold text-foreground mt-1">Active drift & security issues</h2>
@@ -725,7 +736,7 @@ const Operations = () => {
             </div>
           </section>
 
-          <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <section id="tour-step-4" className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 4 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <div>
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Agent Operations</p>
               <h2 className="text-lg font-semibold text-foreground mt-1">Agent execution audit log</h2>
@@ -766,7 +777,7 @@ const Operations = () => {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <section className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 4 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
+          <section id="tour-step-5" className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 5 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <div>
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Approval Workflows</p>
               <h2 className="text-lg font-semibold text-foreground mt-1">High-risk execution approvals</h2>
@@ -805,7 +816,7 @@ const Operations = () => {
             </div>
           </section>
 
-          <section className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 5 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
+          <section id="tour-step-6" className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 6 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Compliance Evidence</p>
@@ -842,7 +853,7 @@ const Operations = () => {
           </section>
         </div>
 
-        <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+        <section id="tour-step-7" className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 7 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
           <div>
             <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Immutable Audit Timeline</p>
             <h2 className="text-lg font-semibold text-foreground mt-1">Cross-system evidence trail</h2>
@@ -871,7 +882,7 @@ const Operations = () => {
         </section>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <section id="tour-step-8" className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 8 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Event Response Policies</p>
@@ -910,7 +921,7 @@ const Operations = () => {
             </div>
           </section>
 
-          <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <section id="tour-step-9" className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 9 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <div>
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Cost Automation</p>
               <h2 className="text-lg font-semibold text-foreground mt-1">Saved rules</h2>
@@ -944,7 +955,7 @@ const Operations = () => {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <section id="tour-step-10" className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 10 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <div>
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Baseline and Drift</p>
               <h2 className="text-lg font-semibold text-foreground mt-1">Snapshot health</h2>
@@ -985,7 +996,7 @@ const Operations = () => {
             </div>
           </section>
 
-          <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <section id="tour-step-11" className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 11 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
             <div>
               <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Runbook History</p>
               <h2 className="text-lg font-semibold text-foreground mt-1">Execution progress</h2>
@@ -1035,7 +1046,7 @@ const Operations = () => {
           </section>
         </div>
 
-        <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+        <section id="tour-step-12" className={`rounded-xl border border-border bg-card p-5 space-y-4 transition-all duration-300 ${tourStep === 12 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
           <div>
             <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Organization Operations</p>
             <h2 className="text-lg font-semibold text-foreground mt-1">Rollout history and blast radius previews</h2>
@@ -1138,14 +1149,21 @@ const Operations = () => {
             <div className="flex justify-between items-start mb-4">
               <div>
                 <span className="text-[10px] font-mono bg-primary/10 text-primary px-2.5 py-0.5 rounded border border-primary/20 uppercase tracking-wider">
-                  Interactive Step {tourStep} of 5
+                  Interactive Step {tourStep} of 12
                 </span>
                 <h4 className="font-extrabold text-lg text-foreground mt-3 tracking-tight">
                   {tourStep === 1 && "📊 Operational Metrics Grid"}
                   {tourStep === 2 && "🛡️ Zero-Storage AWS Session"}
-                  {tourStep === 3 && "🔍 Drift Findings & Agent Logs"}
-                  {tourStep === 4 && "⚖️ High-Risk Mutation Approvals"}
-                  {tourStep === 5 && "📑 Compliance Evidence & Reports"}
+                  {tourStep === 3 && "🔍 Drift Findings & Security Issues"}
+                  {tourStep === 4 && "💻 Agent Execution Audit Log"}
+                  {tourStep === 5 && "⚖️ High-Risk Mutation Approvals"}
+                  {tourStep === 6 && "📑 Compliance Evidence Exports"}
+                  {tourStep === 7 && "📜 Immutable Audit Timeline"}
+                  {tourStep === 8 && "🛡️ Event Response Policies"}
+                  {tourStep === 9 && "💰 Cost Automation Saved Rules"}
+                  {tourStep === 10 && "📸 Snapshot & Drift Health"}
+                  {tourStep === 11 && "🏃 Runbook Execution History"}
+                  {tourStep === 12 && "🏢 Organization Rollouts"}
                 </h4>
               </div>
               <button 
@@ -1161,11 +1179,18 @@ const Operations = () => {
               <div className="space-y-1.5">
                 <p className="text-[10px] font-mono text-primary uppercase tracking-widest">What it does</p>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  {tourStep === 1 && "Aggregates rule counts, unresolved drift detections, compliance evidence files, cost optimization rules, and pending governance approvals in a quick-read grid."}
+                  {tourStep === 1 && "Aggregates rules, unresolved drift detections, compliance evidence files, cost optimization policies, and pending governance approvals in a quick-read grid."}
                   {tourStep === 2 && "Provides status monitoring for your active AWS connection. Credentials live purely in browser session memory and are exchanged for temporary 1-hour session tokens—guaranteeing 100% zero-storage safety."}
-                  {tourStep === 3 && "Displays active security findings (resource drift) detected on your AWS accounts on the left, and a real-time audit log of all direct AWS SDK calls executed by the agent on the right."}
-                  {tourStep === 4 && "Acts as a security gateway. When you ask the agent to apply changes (e.g. close an open port), the agent queues the action here. No changes run until you review and click Approve."}
-                  {tourStep === 5 && "Provides a portal to generate cryptographically signed evidence exports containing baseline configurations, audit trails, and agent remediation runs for SOC2 or ISO 27001 audits."}
+                  {tourStep === 3 && "Displays active security findings (resource drift) detected on your AWS accounts on-demand based on chat audits."}
+                  {tourStep === 4 && "Logs a real-time audit log of all direct AWS SDK calls executed by the agent on-demand during chat queries."}
+                  {tourStep === 5 && "Acts as a security gateway. Mutating operations (e.g. deleting a world-open SG rule) queue here. No changes run until you review and click Approve."}
+                  {tourStep === 6 && "Provides a portal to generate cryptographically signed evidence exports containing baseline configurations and fix trails for SOC2 audits."}
+                  {tourStep === 7 && "Aggregates audit entries, event activity logs, runbook steps, approvals, and organization history into an immutable timeline trail."}
+                  {tourStep === 8 && "Lists all on-demand event policies and remediations configured for your account, allowing you to pause or activate them."}
+                  {tourStep === 9 && "Lists cost rules (e.g. flag idle EC2s) configured via the agent for optimization rollups."}
+                  {tourStep === 10 && "Displays a breakdown of baseline resources, unresolved drift counts, and dates of the last scan snapshots."}
+                  {tourStep === 11 && "Shows steps and output logs of active remediation runbooks triggered by the agent."}
+                  {tourStep === 12 && "Logs organization-wide operation rollouts, account scope counts, blast-radius warnings, and rollback plans."}
                 </p>
               </div>
 
@@ -1175,8 +1200,15 @@ const Operations = () => {
                   {tourStep === 1 && '"Create a medium-severity event policy for EC2 SG changes"'}
                   {tourStep === 2 && 'Connect access keys in the main tab to establish the session.'}
                   {tourStep === 3 && '"Audit my S3 bucket public access blocks for drift"'}
-                  {tourStep === 4 && '"Revoke wide-open security group rule on sg-012345"'}
-                  {tourStep === 5 && 'Click the "Generate Export" button in this panel.'}
+                  {tourStep === 4 && 'Ask the agent to query or check resource properties in chat.'}
+                  {tourStep === 5 && '"Revoke wide-open security group rule on sg-012345"'}
+                  {tourStep === 6 && 'Click the "Generate Export" button in this panel.'}
+                  {tourStep === 7 && 'Ask the agent to run a audit scan to log timeline entries.'}
+                  {tourStep === 8 && '"Set up a policy to notify on any new IAM user attachments"'}
+                  {tourStep === 9 && '"Add a cost rule to alert on EC2 CPU usage under 2%"'}
+                  {tourStep === 10 && '"Capture security groups as baseline for drift checking"'}
+                  {tourStep === 11 && '"Run the S3 public block remediation runbook"'}
+                  {tourStep === 12 && '"Prepare an organization SCP rollout to block root logins"'}
                 </p>
               </div>
             </div>
@@ -1204,7 +1236,7 @@ const Operations = () => {
                 <Button 
                   size="sm" 
                   onClick={() => {
-                    if (tourStep < 5) {
+                    if (tourStep < 12) {
                       setTourStep(prev => prev ? prev + 1 : null);
                     } else {
                       setTourStep(null);
@@ -1212,7 +1244,7 @@ const Operations = () => {
                   }}
                   className="text-xs"
                 >
-                  {tourStep === 5 ? "Finish" : "Next"}
+                  {tourStep === 12 ? "Finish" : "Next"}
                 </Button>
               </div>
             </div>
