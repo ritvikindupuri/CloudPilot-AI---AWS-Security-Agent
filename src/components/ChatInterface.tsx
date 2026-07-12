@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Plus, PanelRightOpen, PanelRightClose, LogOut, History, FileText, Gauge, Settings2, Users, CreditCard, ClipboardCheck, MessageSquare, Check, Key, ChevronRight } from "lucide-react";
+import { Send, Plus, PanelRightOpen, PanelRightClose, LogOut, History, FileText, Gauge, Settings2, Users, CreditCard, ClipboardCheck, MessageSquare, Check, Key, ChevronRight, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import ChatMessage from "@/components/ChatMessage";
@@ -391,7 +391,7 @@ const ChatInterface = () => {
                   <div>
                     <h2 className="text-2xl font-bold text-foreground tracking-tight">CloudPilot Getting Started</h2>
                     <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1 leading-relaxed">
-                      Follow these three simple interactive steps to analyze, secure, and monitor your AWS cloud infrastructure.
+                      Follow these four simple interactive steps to analyze, secure, monitor, and audit your AWS cloud infrastructure.
                     </p>
                   </div>
                 </div>
@@ -581,6 +581,51 @@ const ChatInterface = () => {
                                 </DialogContent>
                               </Dialog>
                             </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* STEP 4: Explore Dashboards & Walkthroughs */}
+                  <div className={`border rounded-xl p-4 transition-all duration-200 ${
+                    !auditSummary 
+                      ? 'border-border/30 opacity-50 bg-muted/5' 
+                      : 'border-border bg-card/60'
+                  }`}>
+                    <div className="flex gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        !auditSummary ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary'
+                      }`}>
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold flex items-center gap-1.5 flex-wrap">
+                          Step 4: Explore Dashboards & Run Walkthroughs
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                          Navigate to the <span className="font-semibold text-foreground">Reports</span>, <span className="font-semibold text-foreground">Operations</span>, and <span className="font-semibold text-foreground">Compliance</span> tabs in the top header. 
+                          Click the <span className="font-mono text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20">Start Tour</span> button on those pages to launch the interactive walkthroughs and learn about their features!
+                        </p>
+
+                        {auditSummary && (
+                          <div className="mt-3 flex gap-2 flex-wrap">
+                            <Button 
+                              variant="outline" 
+                              size="xs" 
+                              onClick={() => navigate("/operations")}
+                              className="text-xs"
+                            >
+                              Go to Operations
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="xs" 
+                              onClick={() => navigate("/compliance")}
+                              className="text-xs"
+                            >
+                              Go to Compliance
+                            </Button>
                           </div>
                         )}
                       </div>
