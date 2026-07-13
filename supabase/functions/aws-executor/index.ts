@@ -62,10 +62,49 @@ const V3_CLIENT_NAMES: Record<string, string> = {
 
 async function loadAwsModule(service: string): Promise<any> {
   if (_awsModuleCache[service]) return _awsModuleCache[service];
-  const pkg = _awsSvcMap[service];
-  if (!pkg) throw new Error(`Unsupported AWS service: ${service}`);
-  const specifier = "npm:@aws-sdk/client-" + pkg;
-  const mod = await import(specifier);
+
+  let mod: any;
+  switch (service) {
+    case "EC2":
+      mod = await import("https://esm.sh/@aws-sdk/client-ec2@3.744.0");
+      break;
+    case "STS":
+      mod = await import("https://esm.sh/@aws-sdk/client-sts@3.744.0");
+      break;
+    case "S3":
+      mod = await import("https://esm.sh/@aws-sdk/client-s3@3.744.0");
+      break;
+    case "IAM":
+      mod = await import("https://esm.sh/@aws-sdk/client-iam@3.744.0");
+      break;
+    case "Organizations":
+      mod = await import("https://esm.sh/@aws-sdk/client-organizations@3.744.0");
+      break;
+    case "CloudWatch":
+      mod = await import("https://esm.sh/@aws-sdk/client-cloudwatch@3.744.0");
+      break;
+    case "CostExplorer":
+      mod = await import("https://esm.sh/@aws-sdk/client-cost-explorer@3.744.0");
+      break;
+    case "SNS":
+      mod = await import("https://esm.sh/@aws-sdk/client-sns@3.744.0");
+      break;
+    case "CloudTrail":
+      mod = await import("https://esm.sh/@aws-sdk/client-cloudtrail@3.744.0");
+      break;
+    case "CloudWatchLogs":
+      mod = await import("https://esm.sh/@aws-sdk/client-cloudwatch-logs@3.744.0");
+      break;
+    case "Budgets":
+      mod = await import("https://esm.sh/@aws-sdk/client-budgets@3.744.0");
+      break;
+    default:
+      const pkg = _awsSvcMap[service];
+      if (!pkg) throw new Error(`Unsupported AWS service: ${service}`);
+      mod = await import("npm:@aws-sdk/client-" + pkg);
+      break;
+  }
+
   _awsModuleCache[service] = mod;
   return mod;
 }
