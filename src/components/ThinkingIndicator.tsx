@@ -16,29 +16,7 @@ const ThinkingIndicator = ({ logs = [] }: ThinkingIndicatorProps) => {
   const [visibleLogs, setVisibleLogs] = useState<LogItem[]>([]);
 
   useEffect(() => {
-    if (logs.length === 0) {
-      setVisibleLogs([]);
-      return;
-    }
-
-    // Sequentially animate the appearance of each log item to make it feel live
-    const timerIds: number[] = [];
-    logs.forEach((log, index) => {
-      const id = setTimeout(() => {
-        setVisibleLogs((prev) => {
-          // Avoid duplicate logs if state updates multiple times
-          if (prev.some((p) => p.message === log.message && p.step === log.step)) {
-            return prev;
-          }
-          return [...prev, log];
-        });
-      }, index * 800); // 800ms stagger delay
-      timerIds.push(id);
-    });
-
-    return () => {
-      timerIds.forEach((id) => clearTimeout(id));
-    };
+    setVisibleLogs(logs);
   }, [logs]);
 
   const getIcon = (status: string, step: string) => {
