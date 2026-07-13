@@ -6200,7 +6200,6 @@ export const handler = async (req: Request): Promise<Response> => {
         accessKeyId: sanitizeString(accessKeyId, 128),
         secretAccessKey: sanitizeString(secretAccessKey, 256),
         ...(sessionToken ? { sessionToken: sanitizeString(sessionToken, 8192) } : {}),
-
       },
       region,
       maxRetries: 4,
@@ -6231,274 +6230,302 @@ export const handler = async (req: Request): Promise<Response> => {
       ...sanitizedMessages,
     ];
 
-    let finalResponseText = "";
-    let isStreamable = false;
-    let latestUnifiedAuditSummary: Record<string, any> | null = null;
     const liveExecutionLogs: Array<{ step: string; status: "info" | "success" | "warning" | "error"; message: string }> = [];
     let blockedAuditsCount = 0;
     let lastBlockedCallDetails = "";
 
-    // ── Intent-based routing ─────────────────────────────────────────────────
-    liveExecutionLogs.push({ step: "Router", status: "info", message: "Classifying query intent..." });
-    const classifiedIntent = await classifyIntent(sanitizedMessages, resolvedGeminiKey);
-    console.log(`[CloudPilot Router] Classified intent: ${classifiedIntent}`);
-
-    const allowedToolNames = INTENT_TOOL_MAP[classifiedIntent];
-    const filteredTools = allowedToolNames.size === tools.length
-      ? tools
-      : tools.filter((t: any) => allowedToolNames.has(t.function.name));
-
-    liveExecutionLogs.push({ step: "Router", status: "success", message: `Activated ${filteredTools.length} security tools for intent: ${classifiedIntent}` });
-    console.log(`[CloudPilot Router] Using ${filteredTools.length}/${tools.length} tools for intent: ${classifiedIntent}`);
-
-    const MAX_ITERATIONS = 15;
-    const TOOLS_URL = `${RUNTIME_CONFIG.supabaseUrl}/functions/v1/aws-agent-tools`;
-
-    for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const toolChoice = i === 0 ? "required" : "auto";
-
-      let responseMessage: any;
-      try {
-        const llmResp = await getLLMResponse(apiMessages, filteredTools, toolChoice, resolvedGeminiKey);
-        responseMessage = {
-          role: "assistant",
-          content: llmResp.content,
-          ...(llmResp.tool_calls ? { tool_calls: llmResp.tool_calls } : {})
-        };
-      } catch (err: any) {
-        console.error("Agent loop LLM error:", err);
-        return new Response(JSON.stringify({ error: err.message || "AI service error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-
-      // Fallback: parse raw text content as tool call if formatted as JSON by the model
-      if (!responseMessage.tool_calls && responseMessage.content) {
-        try {
-          const text = responseMessage.content;
-          const toolCalls: any[] = [];
-          
-          // 1. Try finding markdown code blocks
-          const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/g;
-          let match;
-          while ((match = codeBlockRegex.exec(text)) !== null) {
-            try {
-              const content = match[1].trim();
-              const parsed = JSON.parse(content);
-              if (parsed.name && parsed.arguments) {
-                toolCalls.push(parsed);
-              } else if (Array.isArray(parsed)) {
-                for (const item of parsed) {
-                  if (item.name && item.arguments) {
-                    toolCalls.push(item);
-                  }
-                }
-              }
-            } catch {
-              // Ignore invalid JSON in code blocks
-            }
-          }
-
-          // 2. If no code blocks had valid tool calls, scan raw text for JSON objects starting with {"name"
-          if (toolCalls.length === 0) {
-            let index = 0;
-            while ((index = text.indexOf("{", index)) !== -1) {
-              let braceCount = 0;
-              let endIndex = -1;
-              for (let i = index; i < text.length; i++) {
-                if (text[i] === "{") braceCount++;
-                else if (text[i] === "}") {
-                  braceCount--;
-                  if (braceCount === 0) {
-                    endIndex = i;
-                    break;
-                  }
-                }
-              }
-
-              if (endIndex !== -1) {
-                const candidate = text.slice(index, endIndex + 1);
-                try {
-                  const parsed = JSON.parse(candidate);
-                  if (parsed.name && parsed.arguments) {
-                    toolCalls.push(parsed);
-                    index = endIndex + 1; // Advance past the matched object
-                    continue;
-                  }
-                } catch {
-                  // Not valid JSON, try next '{'
-                }
-              }
-              index++;
-            }
-          }
-
-          if (toolCalls.length > 0) {
-            console.log(`[CloudPilot Agent] Parsed ${toolCalls.length} tool calls from text content fallback:`, toolCalls);
-            responseMessage.tool_calls = toolCalls.map((tc) => ({
-              id: `call_${crypto.randomUUID().replace(/-/g, "")}`,
-              type: "function",
-              function: {
-                name: tc.name,
-                arguments: typeof tc.arguments === "string" 
-                  ? tc.arguments 
-                  : JSON.stringify(tc.arguments)
-              }
-            }));
-          }
-        } catch (err) {
-          console.warn("[CloudPilot Agent] Fallback tool call parser error:", err);
-        }
-      }
-
-      apiMessages.push(responseMessage);
-
-      if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
-        const callsCount = responseMessage.tool_calls.length;
-        const callNames = responseMessage.tool_calls.map((tc: any) => tc.function.name).join(", ");
-        liveExecutionLogs.push({ step: "Safety Gate", status: "info", message: `Intercepted ${callsCount} proposed AWS command(s): [${callNames}]` });
-        liveExecutionLogs.push({ step: "Safety Gate", status: "info", message: "Safety Gate Judge: Auditing proposed payloads against security guidelines..." });
-
-        const safetyAudit = await runSafetyAudit(responseMessage.tool_calls, apiMessages);
-        if (!safetyAudit.approved) {
-          blockedAuditsCount++;
-          if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
-            try {
-              const firstCall = responseMessage.tool_calls[0];
-              const name = firstCall.function.name;
-              const args = typeof firstCall.function.arguments === "string"
-                ? JSON.parse(firstCall.function.arguments)
-                : firstCall.function.arguments;
-              
-              let resourceInfo = "";
-              if (args) {
-                const resKeys = ["Bucket", "GroupId", "VpcId", "SubnetId", "InstanceId", "RoleName", "PolicyArn", "PolicyName", "QueueUrl", "TopicArn"];
-                const foundKey = Object.keys(args).find(k => resKeys.includes(k));
-                if (foundKey) {
-                  resourceInfo = ` on ${args[foundKey]}`;
-                } else if (args.service && args.operation) {
-                  const params = args.params;
-                  if (params) {
-                    const paramKey = Object.keys(params).find(k => resKeys.includes(k) || k.toLowerCase().includes("name") || k.toLowerCase().includes("id") || k.toLowerCase().includes("arn"));
-                    if (paramKey) {
-                      resourceInfo = ` on ${params[paramKey]}`;
-                    }
-                  }
-                }
-              }
-              
-              if (name === "execute_aws_api") {
-                const op = args?.operation || "AWS API command";
-                const srv = args?.service || "AWS";
-                lastBlockedCallDetails = `Please execute the proposed ${srv} ${op}${resourceInfo}`;
-              } else {
-                lastBlockedCallDetails = `Please run ${name}${resourceInfo}`;
-              }
-            } catch (err) {
-              console.warn("Failed to extract blocked call details for suggestion:", err);
-            }
-          }
-          console.warn("[CloudPilot Safety Gate] Action BLOCKED by Safety Gate Judge:", safetyAudit.reason);
-          liveExecutionLogs.push({ step: "Safety Gate", status: "error", message: `Safety Gate Judge: BLOCKED. Reason: ${safetyAudit.reason}` });
-          liveExecutionLogs.push({ step: "Agent", status: "warning", message: "Agent: Rejection received, initiating self-correction loop..." });
-          for (const tc of responseMessage.tool_calls) {
-            apiMessages.push({
-              role: "tool",
-              tool_call_id: tc.id,
-              content: JSON.stringify({
-                error: `SAFETY_GATE_REJECTION: The CloudPilot Safety Gate Judge has blocked this action. Reason: ${safetyAudit.reason}`
-              })
-            });
-          }
-          continue;
-        }
-
-        liveExecutionLogs.push({ step: "Safety Gate", status: "success", message: `Safety Gate Judge: APPROVED. Reason: ${safetyAudit.reason}` });
-        liveExecutionLogs.push({ step: "Execution", status: "info", message: `Executing AWS SDK commands on account...` });
-
-        // Dispatch ALL tool calls to aws-agent-tools in a single batch
-        const toolsResp = await fetch(TOOLS_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: authHeader || "",
-            apikey: RUNTIME_CONFIG.supabaseAnonKey,
-          },
-          body: JSON.stringify({
-            toolCalls: responseMessage.tool_calls,
-            awsConfig,
-            userId,
-            conversationId: conversationId || null,
-            notificationEmail: notificationEmail || null,
-            userHasConfirmedMutation,
-            latestUserMessage,
-          }),
-        });
-
-        if (!toolsResp.ok) {
-          const errText = await toolsResp.text();
-          console.error("[CloudPilot] Tools function error:", toolsResp.status, errText);
-          liveExecutionLogs.push({ step: "Execution", status: "error", message: `AWS API batch execution failed (${toolsResp.status}).` });
-          // Push error for all tool calls so the LLM can recover
-          const detailedError = `Tool execution pipeline failure (${toolsResp.status}): ${errText || "No downstream error details returned."}`;
-          for (const tc of responseMessage.tool_calls) {
-            apiMessages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ error: detailedError }) });
-          }
-          continue;
-        }
-
-        const toolResults = await toolsResp.json();
-        liveExecutionLogs.push({ step: "Execution", status: "success", message: `AWS API batch successfully executed (${toolResults.results.length} result(s) returned).` });
-        for (const result of toolResults.results) {
-          apiMessages.push({
-            role: "tool",
-            tool_call_id: result.toolCallId,
-            content: result.content,
-          });
-          if (result.auditSummary) {
-            latestUnifiedAuditSummary = result.auditSummary;
-          }
-        }
-      } else {
-        finalResponseText = responseMessage.content || "";
-        isStreamable = true;
-        break;
-      }
-    }
-
-    if (!isStreamable) {
-      if (blockedAuditsCount > 0) {
-        let suggestionBlock = "";
-        if (lastBlockedCallDetails) {
-          suggestionBlock = `\n\n**Suggested message to send next (copy and paste this to authorize and proceed):**\n\`\`\`\n${lastBlockedCallDetails}\n\`\`\``;
-        }
-        finalResponseText = `The proposed actions were blocked by the Safety Gate Judge because the request is too vague or lacks necessary security details. Please try again with a more specific query, specifying the exact resource names or IDs you want to manage, or confirm your intent explicitly.${suggestionBlock}`;
-      } else {
-        finalResponseText = "The agent could not complete the request within the execution limit. Please try breaking your request down into smaller, more specific steps.";
-      }
-    }
-
     const stream = new ReadableStream({
-      start(controller) {
-        if (liveExecutionLogs.length > 0) {
-          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ meta: { executionLogs: liveExecutionLogs } })}\n\n`));
-        }
-        if (latestUnifiedAuditSummary) {
-          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ meta: { auditSummary: latestUnifiedAuditSummary } })}\n\n`));
-        }
-        const chunkSize = 30;
-        let index = 0;
-        function pushChunk() {
-          if (index < finalResponseText.length) {
-            const chunk = finalResponseText.slice(index, index + chunkSize);
-            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`));
-            index += chunkSize;
-            setTimeout(pushChunk, 8);
-          } else {
-            controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
-            controller.close();
+      async start(controller) {
+        const sendMeta = (meta: any) => {
+          try {
+            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ meta })}\n\n`));
+          } catch (err) {
+            console.warn("Failed to enqueue SSE meta:", err);
           }
+        };
+
+        const sendChunk = (chunk: string) => {
+          try {
+            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`));
+          } catch (err) {
+            console.warn("Failed to enqueue SSE chunk:", err);
+          }
+        };
+
+        let finalResponseText = "";
+        let isStreamable = false;
+        let latestUnifiedAuditSummary: Record<string, any> | null = null;
+
+        try {
+          // ── Intent-based routing ─────────────────────────────────────────────────
+          liveExecutionLogs.push({ step: "Router", status: "info", message: "Classifying query intent..." });
+          sendMeta({ executionLogs: [...liveExecutionLogs] });
+
+          const classifiedIntent = await classifyIntent(sanitizedMessages, resolvedGeminiKey);
+          console.log(`[CloudPilot Router] Classified intent: ${classifiedIntent}`);
+
+          const allowedToolNames = INTENT_TOOL_MAP[classifiedIntent];
+          const filteredTools = allowedToolNames.size === tools.length
+            ? tools
+            : tools.filter((t: any) => allowedToolNames.has(t.function.name));
+
+          liveExecutionLogs.push({ step: "Router", status: "success", message: `Activated ${filteredTools.length} security tools for intent: ${classifiedIntent}` });
+          sendMeta({ executionLogs: [...liveExecutionLogs] });
+
+          const MAX_ITERATIONS = 15;
+          const TOOLS_URL = `${RUNTIME_CONFIG.supabaseUrl}/functions/v1/aws-agent-tools`;
+
+          for (let i = 0; i < MAX_ITERATIONS; i++) {
+            const toolChoice = i === 0 ? "required" : "auto";
+
+            let responseMessage: any;
+            try {
+              const llmResp = await getLLMResponse(apiMessages, filteredTools, toolChoice, resolvedGeminiKey);
+              responseMessage = {
+                role: "assistant",
+                content: llmResp.content,
+                ...(llmResp.tool_calls ? { tool_calls: llmResp.tool_calls } : {})
+              };
+            } catch (err: any) {
+              console.error("Agent loop LLM error:", err);
+              throw err;
+            }
+
+            // Fallback: parse raw text content as tool call if formatted as JSON by the model
+            if (!responseMessage.tool_calls && responseMessage.content) {
+              try {
+                const text = responseMessage.content;
+                const toolCalls: any[] = [];
+                
+                // 1. Try finding markdown code blocks
+                const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/g;
+                let match;
+                while ((match = codeBlockRegex.exec(text)) !== null) {
+                  try {
+                    const content = match[1].trim();
+                    const parsed = JSON.parse(content);
+                    if (parsed.name && parsed.arguments) {
+                      toolCalls.push(parsed);
+                    } else if (Array.isArray(parsed)) {
+                      for (const item of parsed) {
+                        if (item.name && item.arguments) {
+                          toolCalls.push(item);
+                        }
+                      }
+                    }
+                  } catch {
+                    // Ignore invalid JSON in code blocks
+                  }
+                }
+
+                // 2. If no code blocks had valid tool calls, scan raw text for JSON objects starting with {"name"
+                if (toolCalls.length === 0) {
+                  let index = 0;
+                  while ((index = text.indexOf("{", index)) !== -1) {
+                    let braceCount = 0;
+                    let endIndex = -1;
+                    for (let i = index; i < text.length; i++) {
+                      if (text[i] === "{") braceCount++;
+                      else if (text[i] === "}") {
+                        braceCount--;
+                        if (braceCount === 0) {
+                          endIndex = i;
+                          break;
+                        }
+                      }
+                    }
+
+                    if (endIndex !== -1) {
+                      const candidate = text.slice(index, endIndex + 1);
+                      try {
+                        const parsed = JSON.parse(candidate);
+                        if (parsed.name && parsed.arguments) {
+                          toolCalls.push(parsed);
+                          index = endIndex + 1; // Advance past the matched object
+                          continue;
+                        }
+                      } catch {
+                        // Not valid JSON, try next '{'
+                      }
+                    }
+                    index++;
+                  }
+                }
+
+                if (toolCalls.length > 0) {
+                  console.log(`[CloudPilot Agent] Parsed ${toolCalls.length} tool calls from text content fallback:`, toolCalls);
+                  responseMessage.tool_calls = toolCalls.map((tc) => ({
+                    id: `call_${crypto.randomUUID().replace(/-/g, "")}`,
+                    type: "function",
+                    function: {
+                      name: tc.name,
+                      arguments: typeof tc.arguments === "string" 
+                        ? tc.arguments 
+                        : JSON.stringify(tc.arguments)
+                    }
+                  }));
+                }
+              } catch (err) {
+                console.warn("[CloudPilot Agent] Fallback tool call parser error:", err);
+              }
+            }
+
+            apiMessages.push(responseMessage);
+
+            if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+              const callsCount = responseMessage.tool_calls.length;
+              const callNames = responseMessage.tool_calls.map((tc: any) => tc.function.name).join(", ");
+              liveExecutionLogs.push({ step: "Safety Gate", status: "info", message: `Intercepted ${callsCount} proposed AWS command(s): [${callNames}]` });
+              liveExecutionLogs.push({ step: "Safety Gate", status: "info", message: "Safety Gate Judge: Auditing proposed payloads against security guidelines..." });
+              sendMeta({ executionLogs: [...liveExecutionLogs] });
+
+              const safetyAudit = await runSafetyAudit(responseMessage.tool_calls, apiMessages);
+
+              if (!safetyAudit.approved) {
+                blockedAuditsCount++;
+                if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+                  try {
+                    const firstCall = responseMessage.tool_calls[0];
+                    const name = firstCall.function.name;
+                    const args = typeof firstCall.function.arguments === "string"
+                      ? JSON.parse(firstCall.function.arguments)
+                      : firstCall.function.arguments;
+                    
+                    let resourceInfo = "";
+                    if (args) {
+                      const resKeys = ["Bucket", "GroupId", "VpcId", "SubnetId", "InstanceId", "RoleName", "PolicyArn", "PolicyName", "QueueUrl", "TopicArn"];
+                      const foundKey = Object.keys(args).find(k => resKeys.includes(k));
+                      if (foundKey) {
+                        resourceInfo = ` on ${args[foundKey]}`;
+                      } else if (args.service && args.operation) {
+                        const params = args.params;
+                        if (params) {
+                          const paramKey = Object.keys(params).find(k => resKeys.includes(k) || k.toLowerCase().includes("name") || k.toLowerCase().includes("id") || k.toLowerCase().includes("arn"));
+                          if (paramKey) {
+                            resourceInfo = ` on ${params[paramKey]}`;
+                          }
+                        }
+                      }
+                    }
+                    
+                    if (name === "execute_aws_api") {
+                      const op = args?.operation || "AWS API command";
+                      const srv = args?.service || "AWS";
+                      lastBlockedCallDetails = `Please execute the proposed ${srv} ${op}${resourceInfo}`;
+                    } else {
+                      lastBlockedCallDetails = `Please run ${name}${resourceInfo}`;
+                    }
+                  } catch (err) {
+                    console.warn("Failed to extract blocked call details for suggestion:", err);
+                  }
+                }
+                console.warn("[CloudPilot Safety Gate] Action BLOCKED by Safety Gate Judge:", safetyAudit.reason);
+                liveExecutionLogs.push({ step: "Safety Gate", status: "error", message: `Safety Gate Judge: BLOCKED. Reason: ${safetyAudit.reason}` });
+                liveExecutionLogs.push({ step: "Agent", status: "warning", message: "Agent: Rejection received, initiating self-correction loop..." });
+                sendMeta({ executionLogs: [...liveExecutionLogs] });
+
+                for (const tc of responseMessage.tool_calls) {
+                  apiMessages.push({
+                    role: "tool",
+                    tool_call_id: tc.id,
+                    content: JSON.stringify({
+                      error: `SAFETY_GATE_REJECTION: The CloudPilot Safety Gate Judge has blocked this action. Reason: ${safetyAudit.reason}`
+                    })
+                  });
+                }
+                continue;
+              }
+
+              liveExecutionLogs.push({ step: "Safety Gate", status: "success", message: `Safety Gate Judge: APPROVED. Reason: ${safetyAudit.reason}` });
+              liveExecutionLogs.push({ step: "Execution", status: "info", message: `Executing AWS SDK commands on account...` });
+              sendMeta({ executionLogs: [...liveExecutionLogs] });
+
+              // Dispatch ALL tool calls to aws-agent-tools in a single batch
+              const toolsResp = await fetch(TOOLS_URL, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: authHeader || "",
+                  apikey: RUNTIME_CONFIG.supabaseAnonKey,
+                },
+                body: JSON.stringify({
+                  toolCalls: responseMessage.tool_calls,
+                  awsConfig,
+                  userId,
+                  conversationId: conversationId || null,
+                  notificationEmail: notificationEmail || null,
+                  userHasConfirmedMutation,
+                  latestUserMessage,
+                }),
+              });
+
+              if (!toolsResp.ok) {
+                const errText = await toolsResp.text();
+                console.error("[CloudPilot] Tools function error:", toolsResp.status, errText);
+                liveExecutionLogs.push({ step: "Execution", status: "error", message: `AWS API batch execution failed (${toolsResp.status}).` });
+                sendMeta({ executionLogs: [...liveExecutionLogs] });
+                // Push error for all tool calls so the LLM can recover
+                const detailedError = `Tool execution pipeline failure (${toolsResp.status}): ${errText || "No downstream error details returned."}`;
+                for (const tc of responseMessage.tool_calls) {
+                  apiMessages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ error: detailedError }) });
+                }
+                continue;
+              }
+
+              const toolResults = await toolsResp.json();
+              liveExecutionLogs.push({ step: "Execution", status: "success", message: `AWS API batch successfully executed (${toolResults.results.length} result(s) returned).` });
+              sendMeta({ executionLogs: [...liveExecutionLogs] });
+
+              for (const result of toolResults.results) {
+                apiMessages.push({
+                  role: "tool",
+                  tool_call_id: result.toolCallId,
+                  content: result.content,
+                });
+                if (result.auditSummary) {
+                  latestUnifiedAuditSummary = result.auditSummary;
+                  sendMeta({ auditSummary: latestUnifiedAuditSummary });
+                }
+              }
+            } else {
+              finalResponseText = responseMessage.content || "";
+              isStreamable = true;
+              break;
+            }
+          }
+
+          if (!isStreamable) {
+            if (blockedAuditsCount > 0) {
+              let suggestionBlock = "";
+              if (lastBlockedCallDetails) {
+                suggestionBlock = `\n\n**Suggested message to send next (copy and paste this to authorize and proceed):**\n\`\`\`\n${lastBlockedCallDetails}\n\`\`\``;
+              }
+              finalResponseText = `The proposed actions were blocked by the Safety Gate Judge because the request is too vague or lacks necessary security details. Please try again with a more specific query, specifying the exact resource names or IDs you want to manage, or confirm your intent explicitly.${suggestionBlock}`;
+            } else {
+              finalResponseText = "The agent could not complete the request within the execution limit. Please try breaking your request down into smaller, more specific steps.";
+            }
+          }
+
+          // stream text chunks
+          const chunkSize = 30;
+          let index = 0;
+          while (index < finalResponseText.length) {
+            const chunk = finalResponseText.slice(index, index + chunkSize);
+            sendChunk(chunk);
+            index += chunkSize;
+            await new Promise((r) => setTimeout(r, 8));
+          }
+
+          controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+          controller.close();
+        } catch (err: any) {
+          console.error("ReadableStream asynchronous execution failed:", err);
+          try {
+            controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ error: err.message || "Asynchronous execution failed" })}\n\n`));
+          } catch {}
+          try { controller.close(); } catch {}
         }
-        pushChunk();
-      },
+      }
     });
 
     return new Response(stream, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
