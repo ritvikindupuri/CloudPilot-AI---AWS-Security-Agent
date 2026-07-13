@@ -1,4 +1,69 @@
 
+-- Create custom app_role type if not exists
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'app_role') THEN
+    CREATE TYPE public.app_role AS ENUM ('owner', 'admin', 'member', 'viewer');
+  END IF;
+END $$;
+
+-- Create organizations table
+CREATE TABLE IF NOT EXISTS public.organizations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
+-- Create org_members table
+CREATE TABLE IF NOT EXISTS public.org_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role public.app_role NOT NULL DEFAULT 'member',
+  invited_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  joined_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  UNIQUE(org_id, user_id)
+);
+
+-- Create user_roles table
+CREATE TABLE IF NOT EXISTS public.user_roles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role public.app_role NOT NULL,
+  UNIQUE(user_id, role)
+);
+
+-- Helper functions for RLS
+CREATE OR REPLACE FUNCTION public.is_org_member(_user_id UUID, _org_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.org_members
+    WHERE org_id = _org_id AND user_id = _user_id
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_org_role(_user_id UUID, _org_id UUID)
+RETURNS public.app_role
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  _role public.app_role;
+BEGIN
+  SELECT role INTO _role FROM public.org_members
+  WHERE org_id = _org_id AND user_id = _user_id;
+  RETURN _role;
+END;
+$$;
+
 -- Subscription tracking table
 CREATE TABLE public.subscriptions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
