@@ -54,13 +54,219 @@ const ChatMessage = ({ message, onAddToS3, onTeardownVpc }: ChatMessageProps) =>
           scale: 2,
           useCORS: true,
           letterRendering: true,
-          onclone: (document: Document) => {
-            document.documentElement.classList.remove("dark");
+          onclone: (clonedDoc: Document) => {
+            clonedDoc.documentElement.classList.remove("dark");
+            
+            const clonedContent = clonedDoc.getElementById(`msg-content-${message.id}`);
+            if (clonedContent) {
+              const style = clonedDoc.createElement("style");
+              style.innerHTML = `
+                .pdf-print-container {
+                  background-color: #ffffff !important;
+                  color: #0f172a !important;
+                  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+                  padding: 0.4in !important;
+                }
+                .pdf-print-container h1, 
+                .pdf-print-container h2, 
+                .pdf-print-container h3, 
+                .pdf-print-container h4, 
+                .pdf-print-container p, 
+                .pdf-print-container li,
+                .pdf-print-container td,
+                .pdf-print-container th,
+                .pdf-print-container strong {
+                  color: #0f172a !important;
+                }
+                
+                .pdf-cover-page {
+                  height: 9.5in;
+                  display: flex;
+                  flex-direction: column;
+                  justify-content: space-between;
+                  padding: 1in 0.5in;
+                  border-top: 10px solid #1e3a8a;
+                  page-break-after: always;
+                }
+                .pdf-cover-title-box {
+                  margin-top: 1.5in;
+                }
+                .pdf-cover-logo {
+                  font-size: 14px;
+                  font-weight: 800;
+                  letter-spacing: 0.1em;
+                  color: #1e3a8a !important;
+                  text-transform: uppercase;
+                  margin-bottom: 20px;
+                }
+                .pdf-cover-title {
+                  font-size: 32px;
+                  font-weight: 800;
+                  line-height: 1.2;
+                  color: #0f172a !important;
+                  margin-bottom: 15px;
+                }
+                .pdf-cover-subtitle {
+                  font-size: 16px;
+                  color: #475569 !important;
+                  font-weight: 400;
+                }
+                .pdf-cover-meta-box {
+                  margin-bottom: 1in;
+                  background-color: #f8fafc;
+                  border: 1px solid #e2e8f0;
+                  border-radius: 8px;
+                  padding: 20px;
+                }
+                .pdf-cover-meta-grid {
+                  display: grid;
+                  grid-template-columns: 1.5in 1fr;
+                  row-gap: 8px;
+                  font-size: 12px;
+                }
+                .pdf-cover-meta-label {
+                  font-weight: 600;
+                  color: #64748b !important;
+                }
+                .pdf-cover-meta-value {
+                  color: #334155 !important;
+                }
+                
+                .pdf-print-container h2 {
+                  font-size: 18px !important;
+                  font-weight: 700 !important;
+                  border-bottom: 1.5px solid #cbd5e1 !important;
+                  padding-bottom: 6px !important;
+                  margin-top: 30px !important;
+                  margin-bottom: 15px !important;
+                  page-break-inside: avoid;
+                }
+                .pdf-print-container h3 {
+                  font-size: 14px !important;
+                  font-weight: 700 !important;
+                  color: #1e3a8a !important;
+                  margin-top: 20px !important;
+                  margin-bottom: 10px !important;
+                  page-break-inside: avoid;
+                }
+                .pdf-print-container p, 
+                .pdf-print-container li {
+                  font-size: 12px !important;
+                  line-height: 1.6 !important;
+                }
+                .pdf-print-container pre {
+                  background-color: #f8fafc !important;
+                  border: 1px solid #e2e8f0 !important;
+                  color: #0f172a !important;
+                  border-radius: 6px !important;
+                  padding: 12px !important;
+                  font-size: 10px !important;
+                  page-break-inside: avoid;
+                  white-space: pre-wrap !important;
+                  word-break: break-all !important;
+                }
+                .pdf-print-container code {
+                  background-color: #f1f5f9 !important;
+                  color: #b91c1c !important;
+                  padding: 2px 4px !important;
+                  border-radius: 4px !important;
+                  font-size: 10.5px !important;
+                }
+                .pdf-print-container table {
+                  width: 100% !important;
+                  border-collapse: collapse !important;
+                  margin: 15px 0 !important;
+                  page-break-inside: avoid;
+                }
+                .pdf-print-container th {
+                  background-color: #f1f5f9 !important;
+                  color: #1e293b !important;
+                  font-weight: 600 !important;
+                  font-size: 11px !important;
+                  border: 1px solid #cbd5e1 !important;
+                  padding: 8px 10px !important;
+                }
+                .pdf-print-container td {
+                  border: 1px solid #cbd5e1 !important;
+                  padding: 8px 10px !important;
+                  font-size: 11px !important;
+                }
+                .pdf-print-container tr:nth-child(even) td {
+                  background-color: #f8fafc !important;
+                }
+              `;
+              clonedDoc.head.appendChild(style);
+              
+              clonedContent.className = "prose max-w-none pdf-print-container";
+              
+              const coverPage = clonedDoc.createElement("div");
+              coverPage.className = "pdf-cover-page";
+              
+              const titleBox = clonedDoc.createElement("div");
+              titleBox.className = "pdf-cover-title-box";
+              
+              const logo = clonedDoc.createElement("div");
+              logo.className = "pdf-cover-logo";
+              logo.textContent = "CLOUDPILOT AI";
+              
+              const title = clonedDoc.createElement("h1");
+              title.className = "pdf-cover-title";
+              title.textContent = "SECURITY ASSESSMENT REPORT";
+              
+              const subtitle = clonedDoc.createElement("div");
+              subtitle.className = "pdf-cover-subtitle";
+              subtitle.textContent = "Comprehensive AWS Infrastructure Audit & Strategic Security Runbook";
+              
+              titleBox.appendChild(logo);
+              titleBox.appendChild(title);
+              titleBox.appendChild(subtitle);
+              
+              const metaBox = clonedDoc.createElement("div");
+              metaBox.className = "pdf-cover-meta-box";
+              
+              const metaGrid = clonedDoc.createElement("div");
+              metaGrid.className = "pdf-cover-meta-grid";
+              
+              const addMetaRow = (label: string, value: string) => {
+                const labelDiv = clonedDoc.createElement("div");
+                labelDiv.className = "pdf-cover-meta-label";
+                labelDiv.textContent = label;
+                
+                const valueDiv = clonedDoc.createElement("div");
+                valueDiv.className = "pdf-cover-meta-value";
+                valueDiv.textContent = value;
+                
+                metaGrid.appendChild(labelDiv);
+                metaGrid.appendChild(valueDiv);
+              };
+              
+              const now = new Date();
+              const dateStr = now.toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                timeZoneName: "short"
+              });
+              
+              addMetaRow("Report ID:", `CPR-${timestamp}-${message.id.slice(0, 8).toUpperCase()}`);
+              addMetaRow("Date Generated:", dateStr);
+              addMetaRow("Classification:", "CONFIDENTIAL — AUTHORIZED USE ONLY");
+              addMetaRow("Distribution:", "Internal Security Teams — Need-to-Know Basis");
+              addMetaRow("Assessment Engine:", "CloudPilot AI Agent v1.0");
+              
+              metaBox.appendChild(metaGrid);
+              
+              coverPage.appendChild(titleBox);
+              coverPage.appendChild(metaBox);
+              
+              clonedContent.insertBefore(coverPage, clonedContent.firstChild);
+            }
           },
         },
         jsPDF: { unit: "in", format: "a4", orientation: "portrait" },
         pagebreak: { mode: ["avoid-all", "css", "legacy"] },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any;
       await html2pdf().set(opt).from(contentRef.current).save();
     } catch (err) {
@@ -104,6 +310,7 @@ const ChatMessage = ({ message, onAddToS3, onTeardownVpc }: ChatMessageProps) =>
         ) : (
           <div
             ref={contentRef}
+            id={`msg-content-${message.id}`}
             className="
             prose max-w-none
 
