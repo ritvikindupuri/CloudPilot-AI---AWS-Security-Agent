@@ -673,9 +673,13 @@ and controls not applicable. Provide a compliance percentage per framework.
 Provide a brief narrative outlining the recommended sequence of remediation activities,
 dependencies between findings, and any quick wins that can be addressed immediately.
 
+## 8. Conclusion and Strategic Roadmap
+
+Provide a detailed 5-8 sentence conclusion summarizing the long-term strategic recommendations for the assessed AWS environment. Focus on systemic improvements, root causes (such as a lack of Infrastructure-as-Code linting, missing organizations-level SCPs, or a lack of active drift monitoring), recommendations for establishing continuous compliance, and a closing assessment of the overall cloud maturity. This section must provide deep technical insights suitable for a Lead Cloud Security Engineer.
+
 ---
 
-## 8. Appendices
+## 9. Appendices
 
 ### Appendix A: Raw API Response Data
 Include key API responses that substantiate findings. Truncate large responses for readability
@@ -5397,17 +5401,21 @@ async function scanS3(awsConfig: any): Promise<UnifiedScannerResult> {
 
   try {
     const buckets = await s3.listBuckets().promise();
-    for (const bucket of buckets.Buckets || []) {
+    const bucketList = buckets.Buckets || [];
+    resourcesEvaluated = bucketList.length;
+
+    const scanPromises = bucketList.map(async (bucket) => {
       const bucketName = bucket.Name;
-      if (!bucketName) continue;
-      resourcesEvaluated += 1;
+      if (!bucketName) return null;
+
+      const localFindings: UnifiedFinding[] = [];
       const tags = await getBucketTags(s3, bucketName);
 
       try {
         const pub = await s3.getPublicAccessBlock({ Bucket: bucketName }).promise();
         const cfg = pub.PublicAccessBlockConfiguration || {};
         if (![cfg.BlockPublicAcls, cfg.IgnorePublicAcls, cfg.BlockPublicPolicy, cfg.RestrictPublicBuckets].every(Boolean)) {
-          findings.push(makeFinding({
+          localFindings.push(makeFinding({
             service: "s3",
             severity: "CRITICAL",
             title: `Bucket ${bucketName} has public access exposure`,
@@ -5419,7 +5427,7 @@ async function scanS3(awsConfig: any): Promise<UnifiedScannerResult> {
           }));
         }
       } catch (err: any) {
-        findings.push(makeFinding({
+        localFindings.push(makeFinding({
           service: "s3",
           severity: "HIGH",
           title: `Bucket ${bucketName} has no public access block configured`,
@@ -5437,7 +5445,7 @@ async function scanS3(awsConfig: any): Promise<UnifiedScannerResult> {
       try {
         await s3.getBucketEncryption({ Bucket: bucketName }).promise();
       } catch {
-        findings.push(makeFinding({
+        localFindings.push(makeFinding({
           service: "s3",
           severity: "MEDIUM",
           title: `Bucket ${bucketName} has no default encryption`,
@@ -5452,7 +5460,7 @@ async function scanS3(awsConfig: any): Promise<UnifiedScannerResult> {
       try {
         await s3.getBucketLifecycleConfiguration({ Bucket: bucketName }).promise();
       } catch {
-        findings.push(makeFinding({
+        localFindings.push(makeFinding({
           service: "s3",
           severity: "LOW",
           title: `Bucket ${bucketName} has no lifecycle policy`,
@@ -5463,6 +5471,13 @@ async function scanS3(awsConfig: any): Promise<UnifiedScannerResult> {
           tags,
         }));
       }
+
+      return localFindings;
+    });
+
+    const results = await Promise.all(scanPromises);
+    for (const r of results) {
+      if (r) findings.push(...r);
     }
   } catch (err: any) {
     limitations.push(`S3 scan failed: ${err.message}`);
