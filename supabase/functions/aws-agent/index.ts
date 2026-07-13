@@ -6149,54 +6149,7 @@ export const handler = async (req: Request): Promise<Response> => {
       } catch { /* anon access */ }
     }
 
-    // Subscription and usage validation
-    let planName = "free";
-    if (userId) {
-      const { data: membership } = await supabaseAdmin
-        .from("org_members")
-        .select("org_id")
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (membership?.org_id) {
-        const { data: sub } = await supabaseAdmin
-          .from("subscriptions")
-          .select("plan_name, status")
-          .eq("org_id", membership.org_id)
-          .maybeSingle();
-
-        if (sub && sub.status === "active") {
-          planName = sub.plan_name;
-        }
-      }
-    }
-
-    if (planName === "free" && userId) {
-      const startOfDay = new Date();
-      startOfDay.setUTCHours(0, 0, 0, 0);
-
-      const { data: userConvs } = await supabaseAdmin
-        .from("conversations")
-        .select("id")
-        .eq("user_id", userId);
-
-      if (userConvs && userConvs.length > 0) {
-        const convIds = userConvs.map((c) => c.id);
-        const { count, error: countError } = await supabaseAdmin
-          .from("messages")
-          .select("id", { count: "exact", head: true })
-          .in("conversation_id", convIds)
-          .eq("role", "user")
-          .gte("created_at", startOfDay.toISOString());
-
-        if (!countError && count !== null && count >= 5) {
-          return new Response(
-            JSON.stringify({ error: "You have reached the limit of 5 API Executions per day on the Free Plan. Please upgrade your plan in the Billing section to continue." }),
-            { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-      }
-    }
+    // Subscription and usage validation - Removed daily execution limits
 
     if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_MESSAGES) {
       return new Response(
