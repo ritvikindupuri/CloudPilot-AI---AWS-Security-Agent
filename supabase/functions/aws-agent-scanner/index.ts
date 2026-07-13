@@ -1658,70 +1658,82 @@ async function scanIam(awsConfig: any): Promise<UnifiedScannerResult> {
 
   try {
     const users = await iam.listUsers({ MaxItems: 1000 }).promise();
-    for (const user of users.Users || []) {
-      if (!user.UserName) continue;
-      resourcesEvaluated += 1;
-      const resourceLabel = `${user.UserName}${user.Arn ? ` (${user.Arn})` : ""}`;
+    const userList = users.Users || [];
+    resourcesEvaluated = userList.length;
+
+    const scanPromises = userList.map(async (user) => {
+      const userName = user.UserName;
+      if (!userName) return null;
+
+      const localFindings: UnifiedFinding[] = [];
+      const resourceLabel = `${userName}${user.Arn ? ` (${user.Arn})` : ""}`;
 
       try {
-        const attached = await iam.listAttachedUserPolicies({ UserName: user.UserName, MaxItems: 1000 }).promise();
+        const attached = await iam.listAttachedUserPolicies({ UserName: userName, MaxItems: 1000 }).promise();
         for (const policy of attached.AttachedPolicies || []) {
           if (policy.PolicyName === "AdministratorAccess") {
-            findings.push(makeFinding({
+            localFindings.push(makeFinding({
               service: "iam",
               severity: "HIGH",
-              title: `User ${user.UserName} has full AdministratorAccess`,
+              title: `User ${userName} has full AdministratorAccess`,
               resource: resourceLabel,
-              detail: `IAM user ${user.UserName} has the AWS managed AdministratorAccess policy attached.`,
-              fix_prompt: `remove AdministratorAccess from ${user.UserName}`,
+              detail: `IAM user ${userName} has the AWS managed AdministratorAccess policy attached.`,
+              fix_prompt: `remove AdministratorAccess from ${userName}`,
               remediation: "detach_user_policy",
               tags: {},
             }));
           }
         }
       } catch (err: any) {
-        limitations.push(`IAM attached policy enumeration failed for ${user.UserName}: ${err.message}`);
+        limitations.push(`IAM attached policy enumeration failed for ${userName}: ${err.message}`);
       }
 
       try {
-        const mfa = await iam.listMFADevices({ UserName: user.UserName }).promise();
+        const mfa = await iam.listMFADevices({ UserName: userName }).promise();
         if ((mfa.MFADevices || []).length === 0) {
-          findings.push(makeFinding({
+          localFindings.push(makeFinding({
             service: "iam",
             severity: "MEDIUM",
-            title: `User ${user.UserName} has no MFA enabled`,
+            title: `User ${userName} has no MFA enabled`,
             resource: resourceLabel,
-            detail: `IAM user ${user.UserName} has no MFA devices registered.`,
-            fix_prompt: `enforce MFA for ${user.UserName}`,
+            detail: `IAM user ${userName} has no MFA devices registered.`,
+            fix_prompt: `enforce MFA for ${userName}`,
             remediation: "enforce_mfa",
             tags: {},
           }));
         }
       } catch (err: any) {
-        limitations.push(`IAM MFA enumeration failed for ${user.UserName}: ${err.message}`);
+        limitations.push(`IAM MFA enumeration failed for ${userName}: ${err.message}`);
       }
 
       try {
-        const keys = await iam.listAccessKeys({ UserName: user.UserName }).promise();
+        const keys = await iam.listAccessKeys({ UserName: userName }).promise();
         for (const key of keys.AccessKeyMetadata || []) {
           if (!key.CreateDate) continue;
           const ageDays = Math.floor((Date.now() - key.CreateDate.getTime()) / (1000 * 60 * 60 * 24));
           if (ageDays > 90) {
-            findings.push(makeFinding({
+            localFindings.push(makeFinding({
               service: "iam",
               severity: "MEDIUM",
-              title: `Access key for ${user.UserName} is ${ageDays} days old`,
+              title: `Access key for ${userName} is ${ageDays} days old`,
               resource: resourceLabel,
-              detail: `Access key ${key.AccessKeyId || "(unknown)"} for IAM user ${user.UserName} is older than 90 days.`,
-              fix_prompt: `rotate access keys for ${user.UserName}`,
+              detail: `Access key ${key.AccessKeyId || "(unknown)"} for IAM user ${userName} is older than 90 days.`,
+              fix_prompt: `rotate access keys for ${userName}`,
               remediation: "rotate_access_keys",
               tags: {},
             }));
           }
         }
       } catch (err: any) {
-        limitations.push(`IAM access key enumeration failed for ${user.UserName}: ${err.message}`);
+        limitations.push(`IAM access key enumeration failed for ${userName}: ${err.message}`);
       }
+
+      return localFindings;
+    });
+
+    const results = await Promise.all(scanPromises);
+    for (const r of results) {
+      if (r) findings.push(...r);
     }
   } catch (err: any) {
     limitations.push(`IAM scan failed: ${err.message}`);
@@ -1751,17 +1763,21 @@ async function scanS3(awsConfig: any): Promise<UnifiedScannerResult> {
 
   try {
     const buckets = await s3.listBuckets().promise();
-    for (const bucket of buckets.Buckets || []) {
+    const bucketList = buckets.Buckets || [];
+    resourcesEvaluated = bucketList.length;
+
+    const scanPromises = bucketList.map(async (bucket) => {
       const bucketName = bucket.Name;
-      if (!bucketName) continue;
-      resourcesEvaluated += 1;
+      if (!bucketName) return null;
+
+      const localFindings: UnifiedFinding[] = [];
       const tags = await getBucketTags(s3, bucketName);
 
       try {
         const pub = await s3.getPublicAccessBlock({ Bucket: bucketName }).promise();
         const cfg = pub.PublicAccessBlockConfiguration || {};
         if (![cfg.BlockPublicAcls, cfg.IgnorePublicAcls, cfg.BlockPublicPolicy, cfg.RestrictPublicBuckets].every(Boolean)) {
-          findings.push(makeFinding({
+          localFindings.push(makeFinding({
             service: "s3",
             severity: "CRITICAL",
             title: `Bucket ${bucketName} has public access exposure`,
@@ -1773,7 +1789,7 @@ async function scanS3(awsConfig: any): Promise<UnifiedScannerResult> {
           }));
         }
       } catch (err: any) {
-        findings.push(makeFinding({
+        localFindings.push(makeFinding({
           service: "s3",
           severity: "HIGH",
           title: `Bucket ${bucketName} has no public access block configured`,
@@ -1791,7 +1807,7 @@ async function scanS3(awsConfig: any): Promise<UnifiedScannerResult> {
       try {
         await s3.getBucketEncryption({ Bucket: bucketName }).promise();
       } catch {
-        findings.push(makeFinding({
+        localFindings.push(makeFinding({
           service: "s3",
           severity: "MEDIUM",
           title: `Bucket ${bucketName} has no default encryption`,
@@ -1806,7 +1822,7 @@ async function scanS3(awsConfig: any): Promise<UnifiedScannerResult> {
       try {
         await s3.getBucketLifecycleConfiguration({ Bucket: bucketName }).promise();
       } catch {
-        findings.push(makeFinding({
+        localFindings.push(makeFinding({
           service: "s3",
           severity: "LOW",
           title: `Bucket ${bucketName} has no lifecycle policy`,
@@ -1817,6 +1833,13 @@ async function scanS3(awsConfig: any): Promise<UnifiedScannerResult> {
           tags,
         }));
       }
+
+      return localFindings;
+    });
+
+    const results = await Promise.all(scanPromises);
+    for (const r of results) {
+      if (r) findings.push(...r);
     }
   } catch (err: any) {
     limitations.push(`S3 scan failed: ${err.message}`);
