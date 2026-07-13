@@ -304,10 +304,10 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
                       <li>Open the <a href="https://console.aws.amazon.com/iam/home#/users" target="_blank" rel="noreferrer" className="text-primary underline">IAM Users console</a> → <span className="font-mono">Create user</span>.</li>
                       <li>Name it <span className="font-mono">cloudpilot-agent</span> → <span className="font-mono">Next</span>.</li>
                       <li>
-                        Choose <span className="font-mono">Attach policies directly</span> and select these <strong>two AWS-managed policies</strong>:
-                        <ul className="list-disc list-inside ml-3 mt-0.5 space-y-0.5">
-                          <li><span className="font-mono text-primary">SecurityAudit</span> — read-only visibility for scans</li>
-                          <li><span className="font-mono text-primary">IAMFullAccess</span> — lets CloudPilot grant per-action permissions on demand</li>
+                        Choose <span className="font-mono">Attach policies directly</span> and attach permissions based on your needs:
+                        <ul className="list-disc list-inside ml-3 mt-1 space-y-1">
+                          <li><strong>Option A (Full Automation & VPC Routing):</strong> Attach <span className="font-mono text-primary">AdministratorAccess</span>, OR attach <span className="font-mono text-primary">SecurityAudit</span> + <span className="font-mono text-primary">IAMFullAccess</span> (enables CloudPilot to dynamically elevate permissions on demand).</li>
+                          <li><strong>Option B (Read-Only Audit Scans):</strong> Attach <span className="font-mono text-primary">SecurityAudit</span>. *(Note: Automation tasks like VPC routing or IP blocks will show permission errors unless you manually attach write policies like <span className="font-mono text-primary">AmazonVPCFullAccess</span>).*</li>
                         </ul>
                       </li>
                       <li><span className="font-mono">Next</span> → <span className="font-mono">Create user</span>.</li>
@@ -315,8 +315,8 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
                       <li>Paste the <span className="font-mono">AKIA…</span> key + secret above. Leave Session Token empty.</li>
                     </ol>
                     <div className="mt-2 p-2 rounded border border-primary/20 bg-primary/5 text-[10px] text-foreground/85 leading-snug">
-                      <p className="font-bold text-primary mb-0.5 flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> What happens next</p>
-                      <p>When you run a prompt or VPC routing, CloudPilot detects the exact service it needs (EC2, S3, GuardDuty, etc.) and attaches the matching AWS-managed policy to your <span className="font-mono">cloudpilot-agent</span> user automatically — then executes the action. No manual JSON, no upfront over-permissioning.</p>
+                      <p className="font-bold text-primary mb-0.5 flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> About Auto-Elevation</p>
+                      <p>If you attach <span className="font-mono">IAMFullAccess</span>, CloudPilot will detect the exact service it needs (EC2, VPC, GuardDuty) and dynamically attach the matching policy to your user when you execute actions, avoiding manual setup.</p>
                     </div>
                   </details>
                   <details className="group mb-2">
