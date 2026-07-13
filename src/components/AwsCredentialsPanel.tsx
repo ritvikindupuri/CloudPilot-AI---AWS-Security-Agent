@@ -304,11 +304,13 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
                       <li>Open the <a href="https://console.aws.amazon.com/iam/home#/users" target="_blank" rel="noreferrer" className="text-primary underline">IAM Users console</a> → <span className="font-mono">Create user</span>.</li>
                       <li>Name it <span className="font-mono">cloudpilot-agent</span> → <span className="font-mono">Next</span>.</li>
                       <li>
-                        Choose <span className="font-mono">Attach policies directly</span> and attach permissions based on your needs:
-                        <ul className="list-disc list-inside ml-3 mt-1 space-y-1">
-                          <li><strong>Option A (Full Automation & VPC Routing):</strong> Attach <span className="font-mono text-primary">AdministratorAccess</span>, OR attach <span className="font-mono text-primary">SecurityAudit</span> + <span className="font-mono text-primary">IAMFullAccess</span> (enables CloudPilot to dynamically elevate permissions on demand).</li>
-                          <li><strong>Option B (Read-Only Audit Scans):</strong> Attach <span className="font-mono text-primary">SecurityAudit</span>. *(Note: Automation tasks like VPC routing or IP blocks will show permission errors unless you manually attach write policies like <span className="font-mono text-primary">AmazonVPCFullAccess</span>).*</li>
+                        Choose <span className="font-mono">Attach policies directly</span>. To ensure **every single quick action prompt** (including VPC Routing, VPC Teardown, and automated remediations) works without permission errors, attach these <strong>three AWS-managed policies</strong>:
+                        <ul className="list-disc list-inside ml-3 mt-1 space-y-0.5">
+                          <li><span className="font-mono text-primary">SecurityAudit</span> — allows all read-only security audits and scans</li>
+                          <li><span className="font-mono text-primary">AmazonVPCFullAccess</span> — allows automatic VPC routing provisioning and teardown</li>
+                          <li><span className="font-mono text-primary">IAMFullAccess</span> — allows CloudPilot to auto-elevate remediation permissions on demand</li>
                         </ul>
+                        *(Note: You can attach <span className="font-mono text-primary">AdministratorAccess</span> as a single alternative for full capability, or attach <span className="font-mono text-primary">SecurityAudit</span> alone if you only require read-only scans).*
                       </li>
                       <li><span className="font-mono">Next</span> → <span className="font-mono">Create user</span>.</li>
                       <li>Open the user → <span className="font-mono">Security credentials</span> → <span className="font-mono">Create access key</span> → <span className="font-mono">Application outside AWS</span>.</li>
