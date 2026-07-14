@@ -308,7 +308,7 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
                         <ul className="list-disc list-inside ml-3 mt-1 space-y-0.5">
                           <li><span className="font-mono text-primary">SecurityAudit</span> — allows all read-only security audits and scans</li>
                           <li><span className="font-mono text-primary">AmazonVPCFullAccess</span> — allows automatic VPC routing provisioning and teardown</li>
-                          <li><span className="font-mono text-primary">IAMFullAccess</span> — allows CloudPilot to auto-elevate remediation permissions on demand</li>
+                          <li><span className="font-mono text-primary">IAMFullAccess</span> — allows CloudPilot to manage IAM roles, pass roles to services, and auto-elevate remediation permissions on demand</li>
                         </ul>
                         *(Note: You can attach <span className="font-mono text-primary">AdministratorAccess</span> as a single alternative for full capability, or attach <span className="font-mono text-primary">SecurityAudit</span> alone if you only require read-only scans).*
                       </li>
