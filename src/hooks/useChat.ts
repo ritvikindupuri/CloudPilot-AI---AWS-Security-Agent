@@ -64,6 +64,7 @@ interface LiveRunbookExecution {
 
 export const useChat = (
   conversationId: string | null,
+  credentials: AwsCredentials | null,
   notificationEmail?: string,
   createConversation?: (title: string) => Promise<any>,
   onConversationCreated?: (id: string) => void
@@ -76,6 +77,60 @@ export const useChat = (
 
   const currentMessagesConvIdRef = useRef<string | null>(conversationId);
   const justCreatedConvRef = useRef<string | null>(null);
+
+  // Load the active unified audit cache if it exists for the current AWS account
+  useEffect(() => {
+    if (!credentials?.identity?.account) {
+      setAuditSummary(null);
+      return;
+    }
+
+    const fetchLatestAudit = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("unified_audit_cache" as any)
+          .select("*")
+          .eq("account_id", credentials.identity!.account)
+          .order("last_refreshed_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          console.warn("[useChat] Failed to load cached audit:", error);
+          return;
+        }
+
+        if (data && data.response) {
+          const cachedData = data.response;
+          
+          const score = Math.max(0,
+            100 -
+            (cachedData.totals.severityCounts.CRITICAL || 0) * 20 -
+            (cachedData.totals.severityCounts.HIGH || 0) * 10 -
+            (cachedData.totals.severityCounts.MEDIUM || 0) * 5 -
+            (cachedData.totals.severityCounts.LOW || 0) * 2
+          );
+
+          setAuditSummary({
+            planner: data.planner,
+            totals: cachedData.totals,
+            cache: {
+              status: "cached",
+              lastRefreshedAt: data.last_refreshed_at,
+              ttlSeconds: Math.max(0, Math.floor((new Date(data.expires_at).getTime() - Date.now()) / 1000)),
+            },
+            accountHealthScore: score,
+            findingsForPanel: cachedData.findingsForPanel || [],
+            servicesAssessed: cachedData.servicesAssessed || [],
+          });
+        }
+      } catch (err) {
+        console.warn("[useChat] Error fetching unified audit cache:", err);
+      }
+    };
+
+    fetchLatestAudit();
+  }, [credentials?.identity?.account]);
 
   // Load messages from DB when active conversation changes
   useEffect(() => {

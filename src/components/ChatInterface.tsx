@@ -95,6 +95,7 @@ const ChatInterface = () => {
 
   const { messages, isLoading, sendMessage, clearMessages, auditSummary, findings, liveRunbook, executionLogs } = useChat(
     currentConvId,
+    credentials,
     notificationEmail,
     createConversation,
     setCurrentConvId
