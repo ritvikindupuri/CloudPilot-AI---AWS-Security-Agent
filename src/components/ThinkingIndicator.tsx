@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import CloudPilotLogo from "@/components/CloudPilotLogo";
 import { Shield, Cpu, Play, CheckCircle2, AlertTriangle, XCircle, Info } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface LogItem {
   step: string;
@@ -53,9 +55,11 @@ const ThinkingIndicator = ({ logs = [] }: ThinkingIndicatorProps) => {
             {visibleLogs.map((log, idx) => (
               <div key={idx} className="flex items-start gap-2.5 text-[10px] font-mono leading-relaxed animate-fade-in-up">
                 {getIcon(log.status, log.step)}
-                <div className="flex flex-col">
-                  <span className="text-[#86868b] text-[9px] uppercase tracking-wider font-semibold">{log.step}</span>
-                  <span className="text-foreground/90">{log.message}</span>
+                <div className="flex flex-col flex-1 min-w-0">
+                  <span className="text-[#86868b] text-[9px] uppercase tracking-wider font-semibold mb-0.5">{log.step}</span>
+                  <div className="text-foreground/90 leading-relaxed font-sans text-[10.5px] [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_li]:my-0.5 [&_strong]:font-semibold [&_strong]:text-foreground [&_code]:font-mono [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{log.message}</ReactMarkdown>
+                  </div>
                 </div>
               </div>
             ))}

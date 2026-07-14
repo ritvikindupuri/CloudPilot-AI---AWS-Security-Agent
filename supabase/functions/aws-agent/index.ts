@@ -1409,6 +1409,12 @@ Audit Rules:
 3. Reject actions that open security vulnerabilities (e.g. creating Security Group rules allowing all traffic on port 22/3389, opening wide open access, granting admin roles to untrusted principals).
 4. Approve safe reads, status checks, and resource creation queries that align with the query.
 
+Formatting Rules for "reason":
+- Style the reason as clean, well-spaced Markdown. Do NOT output a single, dense, run-on paragraph.
+- Use bolding (e.g. **APPROVED**, **BLOCKED**, specific command names like **ec2:DescribeInstances**) for visual emphasis.
+- Use list bullet points (starting with '-') with clean line breaks to group findings for each proposed tool call.
+- Start with a bold high-level summary line, followed by a double line break, then the bulleted list, and finish with any notes or next-step recommendations.
+
 Return your response strictly in the following JSON format:
 {
   "approved": true/false,
