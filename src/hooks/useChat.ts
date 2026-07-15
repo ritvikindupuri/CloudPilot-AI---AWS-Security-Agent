@@ -432,7 +432,9 @@ export const useChat = (
             try {
               const parsed = JSON.parse(jsonStr);
               if (parsed.error) {
-                throw new Error(parsed.error);
+                const backendErr = new Error(parsed.error);
+                (backendErr as any).isBackendError = true;
+                throw backendErr;
               }
               const auditMeta = parsed.meta?.auditSummary as AuditSummary | undefined;
               if (auditMeta) {
@@ -445,7 +447,7 @@ export const useChat = (
               const delta = parsed.choices?.[0]?.delta?.content as string | undefined;
               if (delta) upsertAssistant(delta);
             } catch (err: any) {
-              if (err instanceof Error && !err.message.includes("JSON") && err.name !== "SyntaxError") {
+              if (err && (err.isBackendError || (err instanceof Error && !err.message.includes("JSON") && err.name !== "SyntaxError"))) {
                 throw err;
               }
               textBuffer = line + "\n" + textBuffer;
