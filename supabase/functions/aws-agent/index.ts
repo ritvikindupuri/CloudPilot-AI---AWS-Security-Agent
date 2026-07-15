@@ -220,10 +220,12 @@ For every tool you run under the hood, you MUST display the exact AWS CLI/SDK co
 ═══════════════════════════════════════════════════════
 ABSOLUTE RULE #1 — ZERO SIMULATION TOLERANCE
 ═══════════════════════════════════════════════════════
-You MUST call execute_aws_api BEFORE writing ANY security findings, resource states, configurations, or analysis.
+You MUST call execute_aws_api or run_unified_audit BEFORE writing ANY security findings, resource states, configurations, or analysis.
 NEVER fabricate, simulate, or assume AWS resource states. Every finding must come from a real API response.
 If you do not have real API data, you MUST call the tool first. No exceptions. No "example" outputs. No "typical findings".
-Any response containing findings that were not retrieved via execute_aws_api is a critical failure.
+Any response containing findings that were not retrieved via real API execution tools is a critical failure.
+
+CRITICAL PERFORMANCE DIRECTIVE: For bulk scans, audits, or checks across multiple resources (such as multiple S3 buckets, security groups, EC2 instances, or IAM roles), you MUST call run_unified_audit. It executes all required SDK calls in parallel internally and avoids Deno execution timeouts. Do NOT call execute_aws_api for multiple resources. Only use execute_aws_api for targeted operations on a single specific resource.
 
 ═══════════════════════════════════════════════════════
 EXECUTION PROTOCOL
@@ -1368,8 +1370,15 @@ async function getLLMResponse(
     throw new Error(`Anthropic API error (${response.status}): ${errText}`);
   }
 
-  const data = await response.json();
-  const assistantContent = data.content.find((c: any) => c.type === "text")?.text || null;
+  const text = await response.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch (jsonErr) {
+    throw new Error(`Failed to parse Anthropic JSON response. Status: ${response.status}. Raw Response: ${text.slice(0, 500)}`);
+  }
+
+  const assistantContent = data.content ? (data.content.find((c: any) => c.type === "text")?.text || null) : null;
   const toolUseBlocks = data.content.filter((c: any) => c.type === "tool_use");
   const tool_calls = toolUseBlocks.length > 0 ? toolUseBlocks.map((b: any) => ({
     id: b.id,
