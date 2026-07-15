@@ -266,7 +266,11 @@ const ChatInterface = () => {
   }, [credentials]);
 
   // Determine if we should show the thinking indicator
-  const showThinking = isLoading && (messages.length === 0 || messages[messages.length - 1]?.role === "user");
+  const showThinking = isLoading && (
+    messages.length === 0 || 
+    messages[messages.length - 1]?.role === "user" ||
+    (messages[messages.length - 1]?.role === "assistant" && !messages[messages.length - 1]?.content)
+  );
 
   const hasMessages = messages.length > 0;
   const userEmail = user?.email ?? "";
@@ -644,7 +648,9 @@ const ChatInterface = () => {
                     <p className="text-xs text-muted-foreground">This session has no message history.</p>
                   </div>
                 ) : (
-                  messages.map((msg) => (
+                  messages
+                    .filter((msg) => !(msg.role === "assistant" && !msg.content))
+                    .map((msg) => (
                     <ChatMessage
                       key={msg.id}
                       message={msg}
