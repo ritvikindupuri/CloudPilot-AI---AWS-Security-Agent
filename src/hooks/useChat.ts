@@ -432,6 +432,9 @@ export const useChat = (
 
             try {
               const parsed = JSON.parse(jsonStr);
+              if (parsed.error) {
+                throw new Error(parsed.error);
+              }
               const auditMeta = parsed.meta?.auditSummary as AuditSummary | undefined;
               if (auditMeta) {
                 setAuditSummary(auditMeta);
@@ -442,16 +445,23 @@ export const useChat = (
               }
               const delta = parsed.choices?.[0]?.delta?.content as string | undefined;
               if (delta) upsertAssistant(delta);
-            } catch {
+            } catch (err: any) {
+              if (err instanceof Error && !err.message.includes("JSON") && err.name !== "SyntaxError") {
+                throw err;
+              }
               textBuffer = line + "\n" + textBuffer;
               break;
             }
           }
         }
 
+        if (!assistantContent) {
+          assistantContent = "**No response returned from the agent.** The execution may have been interrupted or blocked by the AWS API. Please check the live security execution logs above for details.";
+        }
+
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantId ? { ...m, status: "complete" as const } : m
+            m.id === assistantId ? { ...m, content: assistantContent, status: "complete" as const } : m
           )
         );
 
