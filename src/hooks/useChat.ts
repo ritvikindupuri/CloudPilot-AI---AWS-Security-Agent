@@ -80,17 +80,19 @@ export const useChat = (
 
   // Load the active unified audit cache if it exists for the current AWS account
   useEffect(() => {
-    if (!credentials?.identity?.account) {
+    if (!credentials) {
       setAuditSummary(null);
       return;
     }
 
     const fetchLatestAudit = async () => {
       try {
-        const { data, error } = await supabase
-          .from("unified_audit_cache" as any)
-          .select("*")
-          .eq("account_id", credentials.identity!.account)
+        let dbQuery = supabase.from("unified_audit_cache" as any).select("*");
+        if (credentials.identity?.account) {
+          dbQuery = dbQuery.eq("account_id", credentials.identity.account);
+        }
+
+        const { data, error } = await dbQuery
           .order("last_refreshed_at", { ascending: false })
           .limit(1)
           .maybeSingle();
