@@ -105,10 +105,10 @@ export const useChat = (
           
           const score = Math.max(0,
             100 -
-            (cachedData.totals.severityCounts.CRITICAL || 0) * 20 -
-            (cachedData.totals.severityCounts.HIGH || 0) * 10 -
-            (cachedData.totals.severityCounts.MEDIUM || 0) * 5 -
-            (cachedData.totals.severityCounts.LOW || 0) * 2
+            Math.min(60, (cachedData.totals.severityCounts.CRITICAL || 0) * 20) -
+            Math.min(45, (cachedData.totals.severityCounts.HIGH || 0) * 8) -
+            Math.min(30, (cachedData.totals.severityCounts.MEDIUM || 0) * 3) -
+            Math.min(15, (cachedData.totals.severityCounts.LOW || 0) * 1)
           );
 
           setAuditSummary({

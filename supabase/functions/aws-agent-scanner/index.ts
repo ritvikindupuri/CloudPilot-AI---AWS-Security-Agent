@@ -562,12 +562,11 @@ const SEVERITY_ORDER: Record<UnifiedAuditSeverity, number> = {
 };
 
 function calculateAccountHealthScore(counts: Record<UnifiedAuditSeverity, number>): number {
-  const score =
-    100 -
-    counts.CRITICAL * 20 -
-    counts.HIGH * 10 -
-    counts.MEDIUM * 5 -
-    counts.LOW * 2;
+  const critDeduct = Math.min(60, (counts.CRITICAL || 0) * 20);
+  const highDeduct = Math.min(45, (counts.HIGH || 0) * 8);
+  const medDeduct = Math.min(30, (counts.MEDIUM || 0) * 3);
+  const lowDeduct = Math.min(15, (counts.LOW || 0) * 1);
+  const score = 100 - critDeduct - highDeduct - medDeduct - lowDeduct;
   return Math.max(0, score);
 }
 
