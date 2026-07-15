@@ -2460,10 +2460,9 @@ export const handler = async (req: Request): Promise<Response> => {
     const body = await req.json();
     const { toolCalls, awsConfig, userId, conversationId, notificationEmail, userHasConfirmedMutation, latestUserMessage } = body;
     const supabaseAdmin = createClient(ENV.supabaseUrl, ENV.supabaseServiceRoleKey);
-    const apiMessages: any[] = [];
-    let latestUnifiedAuditSummary: Record<string, any> | null = null;
-
-    for (const toolCall of toolCalls) {
+    const resultsList = await Promise.all(toolCalls.map(async (toolCall) => {
+      const apiMessages: any[] = [];
+      let latestUnifiedAuditSummary: Record<string, any> | null = null;
           if (toolCall.function.name === "manage_cost_rule") {
             const startTime = Date.now();
             try {
@@ -2611,7 +2610,7 @@ export const handler = async (req: Request): Promise<Response> => {
                     capturedAt: new Date().toISOString(),
                   }),
                 } as any);
-                continue;
+                return { apiMessages, latestUnifiedAuditSummary };
               }
 
               if (action === "acknowledge_drift") {
@@ -2657,7 +2656,7 @@ export const handler = async (req: Request): Promise<Response> => {
                     message: "The drift event has been resolved and the baseline has been updated to the current state.",
                   }),
                 } as any);
-                continue;
+                return { apiMessages, latestUnifiedAuditSummary };
               }
 
               throw new Error(`Unsupported drift baseline action '${action}'.`);
@@ -3037,15 +3036,21 @@ export const handler = async (req: Request): Promise<Response> => {
             }
           }
 
-    }
+      return { apiMessages, latestUnifiedAuditSummary };
+    }));
 
-    const results = apiMessages
-      .filter((m: any) => m.role === "tool")
-      .map((m: any) => ({
-        toolCallId: m.tool_call_id,
-        content: m.content,
-        auditSummary: latestUnifiedAuditSummary || undefined,
-      }));
+    const results = resultsList.flatMap((r) => {
+      const messages = r.apiMessages || [];
+      const auditSummary = r.latestUnifiedAuditSummary || undefined;
+      return messages
+        .filter((m: any) => m.role === "tool")
+        .map((m: any) => ({
+          toolCallId: m.tool_call_id,
+          content: m.content,
+          auditSummary,
+        }));
+    });
+
     return new Response(JSON.stringify({ results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
