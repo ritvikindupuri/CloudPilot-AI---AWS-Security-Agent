@@ -318,7 +318,20 @@ export const useChat = (
         timestamp: new Date(),
       };
 
-      setMessages((prev) => [...prev, userMsg]);
+      const assistantId = crypto.randomUUID();
+      let assistantContent = "";
+
+      setMessages((prev) => [
+        ...prev,
+        userMsg,
+        {
+          id: assistantId,
+          role: "assistant" as const,
+          content: "",
+          status: "streaming" as const,
+          timestamp: new Date(),
+        },
+      ]);
       setIsLoading(true);
 
       // Persist user message immediately
@@ -335,29 +348,13 @@ export const useChat = (
           } as any) as any).then();
       }
 
-      const assistantId = crypto.randomUUID();
-      let assistantContent = "";
-
       const upsertAssistant = (chunk: string) => {
         assistantContent += chunk;
-        setMessages((prev) => {
-          const last = prev[prev.length - 1];
-          if (last?.id === assistantId) {
-            return prev.map((m) =>
-              m.id === assistantId ? { ...m, content: assistantContent } : m
-            );
-          }
-          return [
-            ...prev,
-            {
-              id: assistantId,
-              role: "assistant" as const,
-              content: assistantContent,
-              status: "streaming" as const,
-              timestamp: new Date(),
-            },
-          ];
-        });
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, content: assistantContent } : m
+          )
+        );
       };
 
       try {
