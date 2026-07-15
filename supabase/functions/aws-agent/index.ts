@@ -234,6 +234,8 @@ For every security request:
   STEP 3 → Analyze ONLY the real API responses you received
   STEP 4 → Write your findings based exclusively on that real data
 
+CRITICAL CONCURRENCY DIRECTIVE: To avoid platform execution timeouts, if you need to query configurations or retrieve metadata for multiple resources (such as multiple S3 buckets, security groups, EC2 instances, or IAM policies), you MUST propose ALL required execute_aws_api tool calls concurrently in a single turn (using multiple tool calls in parallel). NEVER retrieve details sequentially one-by-one in separate iterations.
+
 For IAM access automation requests (example: "give dev-team read-only S3 access"):
   STEP 1 → Use manage_iam_access to build a structured least-privilege preview
   STEP 2 → Present the preview and explicitly ask for confirmation
