@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   ArrowLeft, Printer, Clock, AlertCircle, Loader2, Download,
@@ -701,88 +701,115 @@ const Report = () => {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
                 {auditCache.findingsForPanel && auditCache.findingsForPanel.length > 0 ? (
-                  auditCache.findingsForPanel.map((f) => {
-                    const isExpanded = expandedFindings[f.id] ?? false;
-                    const frameworks = getFrameworks(f.id, f.title);
-                    const details = getFindingDetails(f.title, f.resource, f.fixPrompt || "");
-                    
-                    return (
-                      <div key={f.id} className="rounded-xl border border-border bg-card/60 overflow-hidden transition-all duration-200">
-                        <button
-                          type="button"
-                          onClick={() => toggleFinding(f.id)}
-                          className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/20 transition-colors focus:outline-none"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: SEVERITY_COLORS[f.severity] }} />
-                            <div>
-                              <p className="text-sm font-semibold text-foreground">{f.title}</p>
-                              <p className="text-[11px] text-muted-foreground font-mono mt-0.5">Resource: {f.resource}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-mono font-semibold px-2 py-0.5 rounded border" style={{ color: SEVERITY_COLORS[f.severity], borderColor: `${SEVERITY_COLORS[f.severity]}25`, backgroundColor: `${SEVERITY_COLORS[f.severity]}08` }}>
-                              {f.severity}
-                            </span>
-                            {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground/60" /> : <ChevronDown className="w-4 h-4 text-muted-foreground/60" />}
-                          </div>
-                        </button>
-
-                        {isExpanded && (
-                          <div className="p-4 pt-0 border-t border-border/10 space-y-4 bg-muted/5 animate-fade-in">
-                            {/* Framework Badges */}
-                            <div className="space-y-1.5 pt-3">
-                              <p className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest">Framework Compliance Mapping</p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {frameworks.map((fw) => (
-                                  <span key={fw.name + fw.control} className="flex items-center gap-1 bg-primary/8 text-primary border border-primary/15 text-[10px] px-2 py-0.5 rounded font-medium">
-                                    <Shield className="w-3 h-3" />
-                                    <span className="font-bold">{fw.name}:</span>
-                                    <span>{fw.control}</span>
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Risk Explanation */}
-                            <div className="space-y-1.5">
-                              <p className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-                                <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
-                                Security Risk / Impact
-                              </p>
-                              <p className="text-xs text-muted-foreground leading-relaxed">
-                                {details.description}
-                              </p>
-                            </div>
-
-                            {/* Remediation steps */}
-                            {details.command && (
-                              <div className="space-y-1.5">
-                                <p className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-                                  <Lock className="w-3.5 h-3.5 text-emerald-400" />
-                                  Remediation CLI Command
-                                </p>
-                                <div className="relative">
-                                  <pre className="bg-muted border border-border rounded-lg p-3 text-[11px] font-mono text-foreground overflow-x-auto pr-10 leading-normal">
-                                    <code>{details.command}</code>
-                                  </pre>
-                                  <button
-                                    onClick={() => copyToClipboard(details.command || "")}
-                                    className="absolute top-2 right-2 p-1.5 rounded border border-border bg-card/85 text-muted-foreground hover:text-foreground transition-all hover:bg-muted/80"
-                                    title="Copy AWS CLI command"
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/40 text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                          <th className="px-4 py-3 font-semibold w-24">Severity</th>
+                          <th className="px-4 py-3 font-semibold">Finding</th>
+                          <th className="px-4 py-3 font-semibold w-48">Target Resource</th>
+                          <th className="px-4 py-3 font-semibold w-16 text-right"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {auditCache.findingsForPanel.map((f) => {
+                          const isExpanded = expandedFindings[f.id] ?? false;
+                          const frameworks = getFrameworks(f.id, f.title);
+                          const details = getFindingDetails(f.title, f.resource, f.fixPrompt || "");
+                          
+                          return (
+                            <React.Fragment key={f.id}>
+                              <tr 
+                                onClick={() => toggleFinding(f.id)}
+                                className={`border-b border-border/40 hover:bg-muted/20 transition-all cursor-pointer ${isExpanded ? "bg-muted/10" : ""}`}
+                              >
+                                <td className="px-4 py-3.5 align-middle">
+                                  <span 
+                                    className="text-[9px] font-mono font-bold px-2 py-0.5 rounded border inline-block text-center uppercase tracking-wide w-[72px]"
+                                    style={{ 
+                                      color: SEVERITY_COLORS[f.severity], 
+                                      borderColor: `${SEVERITY_COLORS[f.severity]}25`, 
+                                      backgroundColor: `${SEVERITY_COLORS[f.severity]}08` 
+                                    }}
                                   >
-                                    {copiedCommand === details.command ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
+                                    {f.severity}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3.5 align-middle">
+                                  <span className="text-xs font-semibold text-foreground leading-normal block">
+                                    {f.title}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3.5 align-middle font-mono text-[10px] text-muted-foreground max-w-[200px] truncate" title={f.resource}>
+                                  {f.resource.includes(":") ? f.resource.split(":").pop() : f.resource}
+                                </td>
+                                <td className="px-4 py-3.5 align-middle text-right text-muted-foreground/60">
+                                  {isExpanded ? <ChevronUp className="w-4 h-4 ml-auto" /> : <ChevronDown className="w-4 h-4 ml-auto" />}
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr>
+                                  <td colSpan={4} className="bg-muted/5 border-b border-border/50 px-6 py-5 space-y-4 animate-fade-in">
+                                    {/* Framework Compliance Mapping */}
+                                    <div className="space-y-1.5">
+                                      <p className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest">Compliance Baselines</p>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {frameworks.map((fw) => (
+                                          <span key={fw.name + fw.control} className="flex items-center gap-1 bg-primary/8 text-primary border border-primary/15 text-[10px] px-2 py-0.5 rounded font-medium">
+                                            <Shield className="w-3 h-3" />
+                                            <span className="font-bold">{fw.name}:</span>
+                                            <span>{fw.control}</span>
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Risk Explanation */}
+                                    <div className="space-y-1.5">
+                                      <p className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                                        <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
+                                        Risk Analysis
+                                      </p>
+                                      <p className="text-xs text-muted-foreground leading-relaxed">
+                                        {details.description}
+                                      </p>
+                                    </div>
+
+                                    {/* Remediation CLI Command */}
+                                    {details.command && (
+                                      <div className="space-y-1.5">
+                                        <p className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                                          <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                                          Remediation Command (AWS CLI)
+                                        </p>
+                                        <div className="relative">
+                                          <pre className="bg-muted border border-border rounded-lg p-3 text-[11px] font-mono text-foreground overflow-x-auto pr-10 leading-normal">
+                                            <code>{details.command}</code>
+                                          </pre>
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              copyToClipboard(details.command || "");
+                                            }}
+                                            className="absolute top-2 right-2 p-1.5 rounded border border-border bg-card/85 text-muted-foreground hover:text-foreground transition-all hover:bg-muted/80"
+                                            title="Copy command"
+                                          >
+                                            {copiedCommand === details.command ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 ) : (
                   <div className="rounded-xl border border-border border-dashed p-10 text-center space-y-3">
                     <ShieldCheck className="w-10 h-10 text-emerald-400 mx-auto" />
