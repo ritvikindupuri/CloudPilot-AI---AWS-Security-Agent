@@ -14,7 +14,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import {
   ResponsiveContainer, PieChart, Pie, Cell,
-  BarChart, Bar, XAxis, YAxis, Tooltip, Legend
+  BarChart, Bar, XAxis, YAxis, Tooltip
 } from "recharts";
 
 interface ReportMessage {
@@ -35,6 +35,7 @@ interface AuditFinding {
   resource: string;
   description?: string;
   remediation?: string;
+  fixPrompt?: string;
 }
 
 interface AuditCacheResponse {
@@ -74,6 +75,16 @@ const calculateHealthScore = (counts: any) => {
   return Math.max(0, score);
 };
 
+const resolveServiceName = (title: string, findingId: string) => {
+  const t = (title || "").toLowerCase();
+  const fid = (findingId || "").toLowerCase();
+  if (t.includes("s3") || t.includes("bucket") || fid.includes("s3")) return "S3";
+  if (t.includes("iam") || t.includes("mfa") || t.includes("user") || t.includes("access key") || fid.includes("iam")) return "IAM";
+  if (t.includes("instance") || t.includes("imds") || t.includes("security group") || t.includes("port") || t.includes("ebs") || t.includes("volume") || fid.includes("ec2")) return "EC2";
+  if (t.includes("cost") || t.includes("spend") || t.includes("billing") || fid.includes("cost")) return "Cost";
+  return "AWS";
+};
+
 const getFrameworks = (findingId: string, title: string) => {
   const lowercaseId = (findingId || "").toLowerCase();
   const lowercaseTitle = (title || "").toLowerCase();
@@ -110,6 +121,88 @@ const getFrameworks = (findingId: string, title: string) => {
     { name: "CIS AWS v3.0", control: "General Security Practice" },
     { name: "SOC 2 Type II", control: "CC6.1 (Access authorization)" }
   ];
+};
+
+const getFindingDetails = (title: string, resource: string, fixPrompt: string) => {
+  const t = (title || "").toLowerCase();
+  const res = resource || "<resource>";
+  
+  if (t.includes("public access") || t.includes("s3 public")) {
+    return {
+      description: `Public access blocks prevent external anonymous entities from reading or writing objects. Without public access blocks enabled, data stored in this bucket is exposed to the public internet, posing a critical security leak risk.`,
+      command: `aws s3api put-public-access-block \\
+  --bucket ${res} \\
+  --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"`
+    };
+  }
+  if (t.includes("mfa")) {
+    return {
+      description: `Multi-Factor Authentication (MFA) adds an extra layer of protection on top of username and password. Lacking MFA on console logins makes the account highly vulnerable to credential stuffing and phishing attacks.`,
+      command: `aws iam create-virtual-mfa-device \\
+  --virtual-mfa-device-name ${res}-mfa \\
+  --outfile QRCode.png \\
+  --bootstrap-method QRCodePNG`
+    };
+  }
+  if (t.includes("imds") || t.includes("metadata")) {
+    return {
+      description: `IMDSv1 is vulnerable to SSRF (Server-Side Request Forgery) attacks where an attacker can query instance metadata to extract IAM temporary credentials. Enforcing IMDSv2 requires session-oriented token authorization.`,
+      command: `aws ec2 modify-instance-metadata-options \\
+  --instance-id ${res} \\
+  --http-tokens required \\
+  --http-endpoint enabled`
+    };
+  }
+  if (t.includes("port") || t.includes("security group") || t.includes("ingress")) {
+    const portMatch = t.match(/port\s+(\d+)/i) || fixPrompt.match(/port\s+(\d+)/i);
+    const port = portMatch ? portMatch[1] : "22";
+    return {
+      description: `Opening administration ports (like SSH 22 or RDP 3389) wide open to the public internet (0.0.0.0/0) invites continuous brute-force attacks, port scanning, and exploit attempts. Access should be restricted to trusted CIDR blocks.`,
+      command: `aws ec2 revoke-security-group-ingress \\
+  --group-id ${res} \\
+  --protocol tcp \\
+  --port ${port} \\
+  --cidr 0.0.0.0/0 # Revokes open access`
+    };
+  }
+  if (t.includes("encryption")) {
+    return {
+      description: `Default bucket encryption ensures all objects stored in S3 are automatically encrypted at rest using AES-256 or AWS KMS keys, protecting raw data from physical drive extraction or accidental bucket policy exposure leaks.`,
+      command: `aws s3api put-bucket-encryption \\
+  --bucket ${res} \\
+  --server-side-encryption-configuration '{"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}'`
+    };
+  }
+  if (t.includes("lifecycle")) {
+    return {
+      description: `Object lifecycle policies automate data transition to cheaper storage classes (e.g. Glacier) or complete deletion after retention periods. Lacking these policies results in accumulating orphan files, inflating costs.`,
+      command: `aws s3api put-bucket-lifecycle-configuration \\
+  --bucket ${res} \\
+  --lifecycle-configuration '{"Rules": [{"ID": "ArchiveOldObjects", "Status": "Enabled", "Prefix": "", "Transitions": [{"Days": 90, "StorageClass": "GLACIER"}]}]}'`
+    };
+  }
+  if (t.includes("admin") || t.includes("administrator")) {
+    return {
+      description: `Granting AdministratorAccess policy to IAM users or roles violates the Principle of Least Privilege. Administrative access should only be assumed temporarily via IAM Roles rather than permanently attached to static identities.`,
+      command: `aws iam detach-user-policy \\
+  --user-name ${res} \\
+  --policy-arn arn:aws:iam::aws:policy/AdministratorAccess`
+    };
+  }
+  if (t.includes("key") || t.includes("rotation") || t.includes("inactive")) {
+    return {
+      description: `Unrotated or old active AWS Access Keys increase the attack surface if keys are leaked or hardcoded. Keys should be rotated every 90 days and inactive access keys should be deleted immediately.`,
+      command: `aws iam update-access-key \\
+  --user-name ${res} \\
+  --access-key-id <ACCESS_KEY_ID> \\
+  --status Inactive`
+    };
+  }
+  
+  return {
+    description: `Security posture config violation: "${title}" detected on resource "${resource}". Lacking compliant baseline security configurations.`,
+    command: `aws resource-groups list-group-resources --group-name ${res} # Review resource configuration`
+  };
 };
 
 const Report = () => {
@@ -218,8 +311,8 @@ const Report = () => {
   const copyToClipboard = (command: string) => {
     navigator.clipboard.writeText(command);
     setCopiedCommand(command);
-    toast.success("AWS CLI command copied to clipboard!");
-    setTimeout(() => setCopiedCommand(null), 2500);
+    toast.success("AWS CLI command copied!");
+    setTimeout(() => setCopiedCommand(null), 2000);
   };
 
   const downloadPdf = useCallback(async () => {
@@ -276,10 +369,22 @@ const Report = () => {
   const timestamp = message ? new Date(message.created_at) : null;
   const healthScore = auditCache ? calculateHealthScore(auditCache.totals.severityCounts) : 100;
   
+  // Scoring counts
+  const critCount = auditCache?.totals?.severityCounts?.CRITICAL || 0;
+  const highCount = auditCache?.totals?.severityCounts?.HIGH || 0;
+  const medCount = auditCache?.totals?.severityCounts?.MEDIUM || 0;
+  const lowCount = auditCache?.totals?.severityCounts?.LOW || 0;
+
+  const critDeduct = Math.min(60, critCount * 20);
+  const highDeduct = Math.min(45, highCount * 8);
+  const medDeduct = Math.min(30, medCount * 3);
+  const lowDeduct = Math.min(15, lowCount * 1);
+  const totalDeductions = critDeduct + highDeduct + medDeduct + lowDeduct;
+
   // Prepare Recharts Donut data
   const pieData = auditCache
     ? Object.entries(auditCache.totals.severityCounts)
-        .filter(([_, count]) => count > 0 && _ !== "INFO")
+        .filter(([key, count]) => count > 0 && key !== "INFO")
         .map(([severity, count]) => ({
           name: severity,
           value: count,
@@ -287,11 +392,11 @@ const Report = () => {
         }))
     : [];
 
-  // Prepare Recharts Service Bar data
+  // Prepare Recharts Service Bar data (resolving proper service names instead of UUIDs)
   const serviceCounts: Record<string, number> = {};
   if (auditCache?.findingsForPanel) {
     auditCache.findingsForPanel.forEach((f) => {
-      const srv = f.id.split("-")[0]?.toUpperCase() || "AWS";
+      const srv = resolveServiceName(f.title, f.id);
       serviceCounts[srv] = (serviceCounts[srv] || 0) + 1;
     });
   }
@@ -381,10 +486,10 @@ const Report = () => {
           {/* Header Row */}
           <div className="flex items-start justify-between border-b border-border pb-5">
             <div>
-              <p className="text-xs font-mono text-primary tracking-widest uppercase">INTERACTIVE SECURITY WORKSPACE</p>
-              <h1 className="text-2xl font-bold text-foreground mt-1">{conversation?.title || "Security Audit Findings"}</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Visualizing findings, risks, remediation steps, and scoring models for your AWS account.
+              <p className="text-xs font-mono text-primary tracking-widest uppercase">SECURITY INTELLIGENCE PLAN</p>
+              <h1 className="text-2xl font-bold text-foreground mt-1">AWS Account Security Overview</h1>
+              <p className="text-xs font-mono text-muted-foreground mt-1 tracking-wide">
+                TARGET AUDIT PROMPT: "{conversation?.title || "AWS Cloud Account Analysis"}"
               </p>
             </div>
             {timestamp && (
@@ -450,19 +555,19 @@ const Report = () => {
               <div className="grid grid-cols-2 gap-2 text-center">
                 <div className="bg-destructive/5 rounded-lg border border-destructive/10 p-2">
                   <span className="text-[10px] font-mono text-destructive uppercase block">Critical</span>
-                  <span className="text-lg font-bold text-destructive">{auditCache.totals.severityCounts.CRITICAL || 0}</span>
+                  <span className="text-lg font-bold text-destructive">{critCount}</span>
                 </div>
                 <div className="bg-orange-500/5 rounded-lg border border-orange-500/10 p-2">
                   <span className="text-[10px] font-mono text-orange-400 uppercase block">High</span>
-                  <span className="text-lg font-bold text-orange-400">{auditCache.totals.severityCounts.HIGH || 0}</span>
+                  <span className="text-lg font-bold text-orange-400">{highCount}</span>
                 </div>
                 <div className="bg-warning/5 rounded-lg border border-warning/10 p-2">
                   <span className="text-[10px] font-mono text-warning uppercase block">Medium</span>
-                  <span className="text-lg font-bold text-warning">{auditCache.totals.severityCounts.MEDIUM || 0}</span>
+                  <span className="text-lg font-bold text-warning">{medCount}</span>
                 </div>
                 <div className="bg-blue-500/5 rounded-lg border border-blue-500/10 p-2">
                   <span className="text-[10px] font-mono text-blue-400 uppercase block">Low</span>
-                  <span className="text-lg font-bold text-blue-400">{auditCache.totals.severityCounts.LOW || 0}</span>
+                  <span className="text-lg font-bold text-blue-400">{lowCount}</span>
                 </div>
               </div>
             </div>
@@ -490,42 +595,56 @@ const Report = () => {
 
           {/* Charts Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* Donut Chart */}
+            {/* Donut Chart with clean side legend */}
             <div className="rounded-xl border border-border bg-card p-5 space-y-4">
               <div>
                 <h3 className="text-sm font-semibold text-foreground">Findings Severity Distribution</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">Deduplicated severity counts of active exposures.</p>
               </div>
-              <div className="h-64 flex items-center justify-center">
-                {pieData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={pieData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={5}
-                        dataKey="value"
-                      >
-                        {pieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{ backgroundColor: "#1e293b", borderColor: "#334155" }}
-                        itemStyle={{ color: "#f8fafc" }}
-                      />
-                      <Legend verticalAlign="bottom" height={36} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="text-center space-y-2">
-                    <CheckCircle className="w-8 h-8 text-emerald-400 mx-auto" />
-                    <p className="text-xs text-muted-foreground">No critical, high, medium, or low security findings detected!</p>
-                  </div>
-                )}
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-center">
+                <div className="h-48 sm:col-span-3 flex items-center justify-center">
+                  {pieData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={pieData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={50}
+                          outerRadius={70}
+                          paddingAngle={4}
+                          dataKey="value"
+                        >
+                          {pieData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{ backgroundColor: "#1e293b", borderColor: "#334155" }}
+                          itemStyle={{ color: "#f8fafc" }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="text-center space-y-2">
+                      <CheckCircle className="w-8 h-8 text-emerald-400 mx-auto" />
+                      <p className="text-xs text-muted-foreground">No active security findings detected!</p>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Custom Grid Legend */}
+                <div className="sm:col-span-2 flex flex-col justify-center space-y-2.5">
+                  {pieData.map((entry) => (
+                    <div key={entry.name} className="flex items-center justify-between text-xs border-b border-border/30 pb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
+                        <span className="font-semibold text-foreground text-[11px]">{entry.name}</span>
+                      </div>
+                      <span className="font-mono text-muted-foreground text-[11px] font-bold">{entry.value}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -535,17 +654,17 @@ const Report = () => {
                 <h3 className="text-sm font-semibold text-foreground">Findings by AWS Service</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">Exposures sorted by primary AWS service components.</p>
               </div>
-              <div className="h-64 flex items-center justify-center">
+              <div className="h-48 flex items-center justify-center">
                 {barData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={barData} layout="vertical" margin={{ left: 10, right: 30 }}>
-                      <XAxis type="number" stroke="#64748b" fontSize={10} />
-                      <YAxis dataKey="name" type="category" stroke="#64748b" fontSize={10} />
+                    <BarChart data={barData} layout="vertical" margin={{ left: 10, right: 30, top: 10, bottom: 10 }}>
+                      <XAxis type="number" stroke="#64748b" fontSize={10} tickLine={false} />
+                      <YAxis dataKey="name" type="category" stroke="#64748b" fontSize={10} tickLine={false} />
                       <Tooltip
                         contentStyle={{ backgroundColor: "#1e293b", borderColor: "#334155" }}
                         itemStyle={{ color: "#f8fafc" }}
                       />
-                      <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]}>
+                      <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={16}>
                         {barData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill="#3b82f6" />
                         ))}
@@ -567,11 +686,13 @@ const Report = () => {
             
             {/* Left side: Accordions (takes 2 cols) */}
             <div className="lg:col-span-2 space-y-4">
-              <div>
-                <h2 className="text-lg font-bold text-foreground">Exposures & Remediation Steps</h2>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  Select a finding to expand its risk explanation, framework alignments, and fix scripts.
-                </p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-foreground">Exposures & Remediation Steps</h2>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Select a finding to expand its risk explanation, framework alignments, and fix scripts.
+                  </p>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -579,6 +700,7 @@ const Report = () => {
                   auditCache.findingsForPanel.map((f) => {
                     const isExpanded = expandedFindings[f.id] ?? false;
                     const frameworks = getFrameworks(f.id, f.title);
+                    const details = getFindingDetails(f.title, f.resource, f.fixPrompt || "");
                     
                     return (
                       <div key={f.id} className="rounded-xl border border-border bg-card/60 overflow-hidden transition-all duration-200">
@@ -625,12 +747,12 @@ const Report = () => {
                                 Security Risk / Impact
                               </p>
                               <p className="text-xs text-muted-foreground leading-relaxed">
-                                {f.description || "Exposure allows unauthorized administrative execution or public data leak due to overly broad wildcard configurations."}
+                                {details.description}
                               </p>
                             </div>
 
                             {/* Remediation steps */}
-                            {f.remediation && (
+                            {details.command && (
                               <div className="space-y-1.5">
                                 <p className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-1">
                                   <Lock className="w-3.5 h-3.5 text-emerald-400" />
@@ -638,14 +760,14 @@ const Report = () => {
                                 </p>
                                 <div className="relative">
                                   <pre className="bg-muted border border-border rounded-lg p-3 text-[11px] font-mono text-foreground overflow-x-auto pr-10 leading-normal">
-                                    <code>{f.remediation}</code>
+                                    <code>{details.command}</code>
                                   </pre>
                                   <button
-                                    onClick={() => copyToClipboard(f.remediation || "")}
+                                    onClick={() => copyToClipboard(details.command || "")}
                                     className="absolute top-2 right-2 p-1.5 rounded border border-border bg-card/85 text-muted-foreground hover:text-foreground transition-all hover:bg-muted/80"
                                     title="Copy AWS CLI command"
                                   >
-                                    {copiedCommand === f.remediation ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
+                                    {copiedCommand === details.command ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
                                   </button>
                                 </div>
                               </div>
@@ -679,28 +801,53 @@ const Report = () => {
                   <p>
                     CloudPilot AI evaluates your account's health score using a **Weighted Deduction Model**. Starting at **100 points**, deductions are applied dynamically based on the severity of active exposures:
                   </p>
-                  <ul className="space-y-2 border-l border-border pl-3 mt-2">
+                  
+                  {/* Dynamic deduction breakdown */}
+                  <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2 mt-2 font-mono text-[11px]">
+                    <div className="flex items-center justify-between text-muted-foreground border-b border-border pb-1">
+                      <span>BASE SCORE</span>
+                      <span>100 pts</span>
+                    </div>
+                    <div className="flex items-center justify-between text-destructive">
+                      <span>Critical ({critCount})</span>
+                      <span>-{critDeduct} pts</span>
+                    </div>
+                    <div className="flex items-center justify-between text-orange-400">
+                      <span>High ({highCount})</span>
+                      <span>-{highDeduct} pts <span className="text-[9px] text-muted-foreground">(Cap: -45)</span></span>
+                    </div>
+                    <div className="flex items-center justify-between text-warning">
+                      <span>Medium ({medCount})</span>
+                      <span>-{medDeduct} pts <span className="text-[9px] text-muted-foreground">(Cap: -30)</span></span>
+                    </div>
+                    <div className="flex items-center justify-between text-blue-400">
+                      <span>Low ({lowCount})</span>
+                      <span>-{lowDeduct} pts <span className="text-[9px] text-muted-foreground">(Cap: -15)</span></span>
+                    </div>
+                    <div className="flex items-center justify-between text-foreground border-t border-border pt-1.5 font-bold">
+                      <span>TOTAL DEDUCTIONS</span>
+                      <span>-{totalDeductions} pts</span>
+                    </div>
+                    <div className="flex items-center justify-between text-primary font-extrabold border-t-2 border-primary/20 pt-1.5 text-xs">
+                      <span>FINAL HEALTH SCORE</span>
+                      <span>{healthScore} / 100</span>
+                    </div>
+                  </div>
+
+                  <ul className="space-y-1.5 border-l border-border pl-3 mt-3 text-[11px]">
                     <li>
-                      <span className="font-bold text-destructive">Critical Findings:</span>
-                      <p className="text-[11px]">-20 points each (capped at a max deduction of 60 points).</p>
+                      <span className="font-bold text-destructive">Critical:</span> -20 pts each (capped at -60).
                     </li>
                     <li>
-                      <span className="font-bold text-orange-400">High Findings:</span>
-                      <p className="text-[11px]">-8 points each (capped at a max deduction of 45 points).</p>
+                      <span className="font-bold text-orange-400">High:</span> -8 pts each (capped at -45).
                     </li>
                     <li>
-                      <span className="font-bold text-warning">Medium Findings:</span>
-                      <p className="text-[11px]">-3 points each (capped at a max deduction of 30 points).</p>
+                      <span className="font-bold text-warning">Medium:</span> -3 pts each (capped at -30).
                     </li>
                     <li>
-                      <span className="font-bold text-blue-400">Low Findings:</span>
-                      <p className="text-[11px]">-1 point each (capped at a max deduction of 15 points).</p>
+                      <span className="font-bold text-blue-400">Low:</span> -1 pt each (capped at -15).
                     </li>
                   </ul>
-                  <div className="bg-muted/40 p-2.5 rounded border border-border font-mono text-[10px] text-foreground">
-                    <p className="font-bold uppercase tracking-wider text-[8px] text-muted-foreground">Score Equation</p>
-                    <p className="mt-1">Score = Max(0, 100 - Σ Deductions)</p>
-                  </div>
                 </div>
               </div>
 
