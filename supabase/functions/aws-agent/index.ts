@@ -1405,6 +1405,33 @@ async function runSafetyAudit(
     return { approved: true, reason: "No tool calls to audit." };
   }
 
+  let isAllReadOnly = true;
+  for (const tc of proposedToolCalls) {
+    const fnName = tc.function?.name || tc.name;
+    if (fnName === "run_unified_audit") {
+      continue;
+    }
+    if (fnName === "execute_aws_api") {
+      try {
+        const args = typeof tc.function?.arguments === "string"
+          ? JSON.parse(tc.function.arguments)
+          : (tc.function?.arguments || tc.arguments);
+        const op = (args?.operation || "").toLowerCase();
+        if (op.startsWith("get") || op.startsWith("list") || op.startsWith("describe")) {
+          continue;
+        }
+      } catch {
+        // fallback
+      }
+    }
+    isAllReadOnly = false;
+    break;
+  }
+
+  if (isAllReadOnly) {
+    return { approved: true, reason: "**APPROVED** read-only status and audit commands." };
+  }
+
   const latestUserMsg = [...apiMessages].reverse().find((m) => m.role === "user")?.content || "";
 
   const auditorPrompt = `You are the CloudPilot Safety Gate Judge. Your role is to audit proposed AWS API tool calls to ensure they are safe, compliant, do not perform accidental or excessive over-deletion, and strictly match the user's intent.
