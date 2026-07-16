@@ -830,13 +830,9 @@ const Report = () => {
                   <TrendingUp className="w-5 h-5 text-primary" />
                   <h3 className="text-sm font-semibold text-foreground">Scoring Methodology</h3>
                 </div>
-                <div className="text-xs text-muted-foreground space-y-3 leading-relaxed">
-                  <p>
-                    CloudPilot AI evaluates your account's health score using a **Weighted Deduction Model**. Starting at **100 points**, deductions are applied dynamically based on the severity of active exposures:
-                  </p>
-                  
+                <div className="space-y-4">
                   {/* Dynamic deduction breakdown */}
-                  <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2 mt-2 font-mono text-[11px]">
+                  <div className="bg-muted/30 border border-border rounded-lg p-3 space-y-2 font-mono text-[11px]">
                     <div className="flex items-center justify-between text-muted-foreground border-b border-border pb-1">
                       <span>BASE SCORE</span>
                       <span>100 pts</span>
@@ -867,20 +863,40 @@ const Report = () => {
                     </div>
                   </div>
 
-                  <ul className="space-y-1.5 border-l border-border pl-3 mt-3 text-[11px]">
-                    <li>
-                      <span className="font-bold text-destructive">Critical:</span> -20 pts each (capped at -60).
-                    </li>
-                    <li>
-                      <span className="font-bold text-orange-400">High:</span> -8 pts each (capped at -45).
-                    </li>
-                    <li>
-                      <span className="font-bold text-warning">Medium:</span> -3 pts each (capped at -30).
-                    </li>
-                    <li>
-                      <span className="font-bold text-blue-400">Low:</span> -1 pt each (capped at -15).
-                    </li>
-                  </ul>
+                  {/* Deduction Matrix Table */}
+                  <div className="overflow-hidden border border-border rounded-lg bg-muted/10">
+                    <table className="w-full text-left text-[11px] border-collapse">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/40 text-[9px] font-mono text-muted-foreground uppercase">
+                          <th className="px-2 py-1.5 font-semibold">Severity</th>
+                          <th className="px-2 py-1.5 font-semibold text-center">Weight</th>
+                          <th className="px-2 py-1.5 font-semibold text-right">Cap Limit</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40 font-mono">
+                        <tr>
+                          <td className="px-2 py-1.5 font-bold text-destructive">Critical</td>
+                          <td className="px-2 py-1.5 text-center text-foreground">-20 pts</td>
+                          <td className="px-2 py-1.5 text-right text-muted-foreground">-60 pts</td>
+                        </tr>
+                        <tr>
+                          <td className="px-2 py-1.5 font-bold text-orange-400">High</td>
+                          <td className="px-2 py-1.5 text-center text-foreground">-8 pts</td>
+                          <td className="px-2 py-1.5 text-right text-muted-foreground">-45 pts</td>
+                        </tr>
+                        <tr>
+                          <td className="px-2 py-1.5 font-bold text-warning">Medium</td>
+                          <td className="px-2 py-1.5 text-center text-foreground">-3 pts</td>
+                          <td className="px-2 py-1.5 text-right text-muted-foreground">-30 pts</td>
+                        </tr>
+                        <tr>
+                          <td className="px-2 py-1.5 font-bold text-blue-400">Low</td>
+                          <td className="px-2 py-1.5 text-center text-foreground">-1 pt</td>
+                          <td className="px-2 py-1.5 text-right text-muted-foreground">-15 pts</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
 
@@ -890,16 +906,38 @@ const Report = () => {
                   <ShieldCheck className="w-5 h-5 text-primary" />
                   <h3 className="text-sm font-semibold text-foreground">Risk Severity Standards</h3>
                 </div>
-                <div className="text-xs text-muted-foreground space-y-3 leading-relaxed">
-                  <p>
-                    Severities are mapped to risk classes following the **Common Vulnerability Scoring System (CVSS v3.1)** standards:
-                  </p>
-                  <ul className="space-y-1.5 list-disc list-inside">
-                    <li><span className="font-semibold text-destructive">Critical (CVSS 9.0–10.0):</span> Public access leaks, unauthenticated RCE, administrative credentials exposed in logs.</li>
-                    <li><span className="font-semibold text-orange-400">High (CVSS 7.0–8.9):</span> Ingress ports SSH/RDP wide open, MFA disabled on privileged users, unencrypted database storage.</li>
-                    <li><span className="font-semibold text-warning">Medium (CVSS 4.0–6.9):</span> Missing S3 Object Lock, unencrypted EBS storage, overly permissive IAM roles.</li>
-                    <li><span className="font-semibold text-blue-400">Low (CVSS 0.1–3.9):</span> S3 versioning disabled, lacking CloudWatch alarm thresholds.</li>
-                  </ul>
+                <div className="overflow-hidden border border-border rounded-lg bg-muted/10">
+                  <table className="w-full text-left text-[10px] border-collapse">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40 text-[9px] font-mono text-muted-foreground uppercase">
+                        <th className="px-2.5 py-1.5 font-semibold w-16">Class</th>
+                        <th className="px-2 py-1.5 font-semibold w-20">CVSS v3.1</th>
+                        <th className="px-2 py-1.5 font-semibold">Examples</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/40 font-medium">
+                      <tr>
+                        <td className="px-2.5 py-2 font-bold text-destructive uppercase">Critical</td>
+                        <td className="px-2 py-2 font-mono text-foreground">9.0–10.0</td>
+                        <td className="px-2 py-2 text-muted-foreground leading-normal">Public unauthenticated RCE, exposed credentials</td>
+                      </tr>
+                      <tr>
+                        <td className="px-2.5 py-2 font-bold text-orange-400 uppercase">High</td>
+                        <td className="px-2 py-2 font-mono text-foreground">7.0–8.9</td>
+                        <td className="px-2 py-2 text-muted-foreground leading-normal">Open SSH/RDP ports, MFA disabled on admin roles</td>
+                      </tr>
+                      <tr>
+                        <td className="px-2.5 py-2 font-bold text-warning uppercase">Medium</td>
+                        <td className="px-2 py-2 font-mono text-foreground">4.0–6.9</td>
+                        <td className="px-2 py-2 text-muted-foreground leading-normal">Missing Object Lock, overly permissive IAM roles</td>
+                      </tr>
+                      <tr>
+                        <td className="px-2.5 py-2 font-bold text-blue-400 uppercase">Low</td>
+                        <td className="px-2 py-2 font-mono text-foreground">0.1–3.9</td>
+                        <td className="px-2 py-2 text-muted-foreground leading-normal">Versioning disabled on buckets, missing tags</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
