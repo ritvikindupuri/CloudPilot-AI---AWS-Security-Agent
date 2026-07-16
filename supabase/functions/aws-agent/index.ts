@@ -1347,27 +1347,56 @@ async function getLLMResponse(
     input_schema: t.function.parameters
   }));
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": anthropicKey,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6",
-      max_tokens: 4000,
-      system: systemMessage,
-      messages: formattedMessages,
-      tools: anthropicTools,
-      ...(toolChoice === "required" ? { tool_choice: { type: "any" } } : {})
-    })
-  });
+  let attempts = 3;
+  let response: Response | null = null;
+  let delay = 1000;
 
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error("[CloudPilot Anthropic] API Error:", response.status, errText);
-    throw new Error(`Anthropic API error (${response.status}): ${errText}`);
+  for (let i = 0; i < attempts; i++) {
+    try {
+      response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": anthropicKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6",
+          max_tokens: 4000,
+          system: systemMessage,
+          messages: formattedMessages,
+          tools: anthropicTools,
+          ...(toolChoice === "required" ? { tool_choice: { type: "any" } } : {})
+        })
+      });
+
+      if (response.ok) {
+        break;
+      }
+
+      const isTransient = response.status === 529 || response.status === 429 || response.status >= 500;
+      if (!isTransient || i === attempts - 1) {
+        break;
+      }
+
+      console.warn(`[CloudPilot Anthropic] Transient error ${response.status}. Retrying in ${delay}ms...`);
+      await new Promise((r) => setTimeout(r, delay));
+      delay *= 2;
+    } catch (err) {
+      if (i === attempts - 1) {
+        throw err;
+      }
+      console.warn(`[CloudPilot Anthropic] Fetch exception: ${err}. Retrying in ${delay}ms...`);
+      await new Promise((r) => setTimeout(r, delay));
+      delay *= 2;
+    }
+  }
+
+  if (!response || !response.ok) {
+    const errText = response ? await response.text() : "Network error";
+    const status = response ? response.status : 0;
+    console.error("[CloudPilot Anthropic] API Error after retries:", status, errText);
+    throw new Error(`Anthropic API error (${status}): ${errText}`);
   }
 
   const text = await response.text();
