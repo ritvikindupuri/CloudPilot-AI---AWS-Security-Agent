@@ -602,29 +602,36 @@ const Report = () => {
                 <p className="text-xs text-muted-foreground mt-0.5">Deduplicated severity counts of active exposures.</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-center">
-                <div className="h-48 sm:col-span-3 flex items-center justify-center">
+                <div className="h-48 sm:col-span-3 flex items-center justify-center relative">
                   {pieData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={pieData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={50}
-                          outerRadius={70}
-                          paddingAngle={4}
-                          dataKey="value"
-                        >
-                          {pieData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          contentStyle={{ backgroundColor: "#1e293b", borderColor: "#334155" }}
-                          itemStyle={{ color: "#f8fafc" }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    <>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={pieData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={52}
+                            outerRadius={68}
+                            paddingAngle={3}
+                            dataKey="value"
+                            stroke="none"
+                          >
+                            {pieData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={{ backgroundColor: "#1e293b", borderColor: "#334155", borderRadius: "8px", fontSize: "11px" }}
+                            itemStyle={{ color: "#f8fafc" }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-[-2px]">
+                        <span className="text-2xl font-black text-foreground font-mono tracking-tight leading-none">{auditCache.totals.findings}</span>
+                        <span className="text-[8px] font-mono text-muted-foreground uppercase tracking-widest mt-1">Findings</span>
+                      </div>
+                    </>
                   ) : (
                     <div className="text-center space-y-2">
                       <CheckCircle className="w-8 h-8 text-emerald-400 mx-auto" />
@@ -634,14 +641,17 @@ const Report = () => {
                 </div>
                 
                 {/* Custom Grid Legend */}
-                <div className="sm:col-span-2 flex flex-col justify-center space-y-2.5">
+                <div className="sm:col-span-2 flex flex-col justify-center space-y-2">
                   {pieData.map((entry) => (
-                    <div key={entry.name} className="flex items-center justify-between text-xs border-b border-border/30 pb-1.5">
+                    <div 
+                      key={entry.name} 
+                      className="flex items-center justify-between text-xs bg-muted/20 border border-border/30 rounded-lg px-3 py-1.5 transition-all hover:bg-muted/30"
+                    >
                       <div className="flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
-                        <span className="font-semibold text-foreground text-[11px]">{entry.name}</span>
+                        <span className="font-bold text-foreground text-[10px] tracking-wide uppercase">{entry.name}</span>
                       </div>
-                      <span className="font-mono text-muted-foreground text-[11px] font-bold">{entry.value}</span>
+                      <span className="font-mono text-[10px] font-black text-foreground">{entry.value}</span>
                     </div>
                   ))}
                 </div>
