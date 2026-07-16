@@ -46,6 +46,7 @@ const ChatInterface = () => {
   const [vpcRoutingStatus, setVpcRoutingStatus] = useState<"inactive" | "requested">(() => {
     return localStorage.getItem("cloudpilot-vpc-status") === "requested" ? "requested" : "inactive";
   });
+  const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [subscriptionTier, setSubscriptionTier] = useState<string>("free");
 
@@ -192,15 +193,10 @@ const ChatInterface = () => {
     }
   };
 
-  const handleQuickAction = (prompt: string) => {
-    setInput(prompt);
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        textareaRef.current.style.height = "auto";
-        textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + "px";
-      }
-    }, 0);
+  const handleQuickAction = async (prompt: string) => {
+    setIsQuickActionsOpen(false);
+    setInput("");
+    await sendMessage(prompt, credentials, currentConvId);
   };
 
   const handleSaveNotificationEmail = (email: string) => {
@@ -567,7 +563,7 @@ const ChatInterface = () => {
                             </div>
 
                             <div className="pt-2 flex justify-start">
-                              <Dialog>
+                              <Dialog open={isQuickActionsOpen} onOpenChange={setIsQuickActionsOpen}>
                                 <DialogTrigger asChild>
                                   <Button variant="outline" size="sm" className="font-mono text-xs">
                                     Browse all 35+ Quick Actions
