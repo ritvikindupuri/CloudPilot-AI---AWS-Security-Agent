@@ -486,11 +486,7 @@ const Report = () => {
           {/* Header Row */}
           <div className="flex items-start justify-between border-b border-border pb-5">
             <div>
-              <p className="text-xs font-mono text-primary tracking-widest uppercase">SECURITY INTELLIGENCE PLAN</p>
               <h1 className="text-2xl font-bold text-foreground mt-1">AWS Account Security Overview</h1>
-              <p className="text-xs font-mono text-muted-foreground mt-1 tracking-wide">
-                TARGET AUDIT PROMPT: "{conversation?.title || "AWS Cloud Account Analysis"}"
-              </p>
             </div>
             {timestamp && (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono bg-card border border-border px-3 py-1.5 rounded-lg">
