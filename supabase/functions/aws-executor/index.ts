@@ -255,6 +255,10 @@ export const handler = async (req: Request): Promise<Response> => {
   try {
     const { service, commandName, config, params } = await req.json();
 
+    if (service === "S3" && (commandName === "PutObjectCommand" || commandName === "putObject" || commandName?.toLowerCase()?.includes("putobject")) && params && typeof params.Body === "string") {
+      params.Body = new TextEncoder().encode(params.Body);
+    }
+
     if (!service || !commandName) {
       return new Response(JSON.stringify({ error: "service and commandName are required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
