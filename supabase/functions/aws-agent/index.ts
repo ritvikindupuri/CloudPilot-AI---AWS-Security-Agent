@@ -5969,7 +5969,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
     await s3.send(new PutObjectCommand({
       Bucket: wormBucket,
       Key: logKey,
-      Body: JSON.stringify(payload, null, 2),
+      Body: new TextEncoder().encode(JSON.stringify(payload, null, 2)),
       ContentType: "application/json",
       ServerSideEncryption: "AES256",
     }));
