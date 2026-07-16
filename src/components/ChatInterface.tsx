@@ -513,9 +513,20 @@ const ChatInterface = () => {
                               </div>
                             </div>
                             
-                            <p className="text-[10px] text-muted-foreground leading-normal font-mono">
-                              Findings: {auditSummary.totals.findings} total · Overall Risk: {auditSummary.totals.overallRisk} · Refreshed {new Date(auditSummary.cache.lastRefreshedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                            </p>
+                            <div className="flex items-center justify-between gap-2 flex-wrap pt-2">
+                              <p className="text-[10px] text-muted-foreground leading-normal font-mono">
+                                Findings: {auditSummary.totals.findings} total · Overall Risk: {auditSummary.totals.overallRisk} · Refreshed {new Date(auditSummary.cache.lastRefreshedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              </p>
+                              <Button
+                                variant="terminal"
+                                size="xs"
+                                onClick={() => navigate("/report/latest")}
+                                className="font-mono text-[10px] px-2 py-1 h-auto flex items-center gap-1.5"
+                              >
+                                <FileText className="w-3.5 h-3.5 text-primary animate-pulse" />
+                                View Security Report
+                              </Button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -811,9 +822,20 @@ const ChatInterface = () => {
                     <p className="text-[9px] font-mono text-muted-foreground">LOW</p>
                   </div>
                 </div>
-                <p className="text-[10px] text-muted-foreground font-mono">
-                  Cache: {auditSummary.cache.status} · refreshed {new Date(auditSummary.cache.lastRefreshedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </p>
+                <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-border/40">
+                  <p className="text-[9px] text-muted-foreground font-mono">
+                    refreshed {new Date(auditSummary.cache.lastRefreshedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                  <Button
+                    variant="terminal"
+                    size="xs"
+                    onClick={() => navigate("/report/latest")}
+                    className="font-mono text-[9px] px-2 py-0.5 h-auto flex items-center gap-1"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-primary animate-pulse" />
+                    Open Report
+                  </Button>
+                </div>
               </div>
             )}
 
