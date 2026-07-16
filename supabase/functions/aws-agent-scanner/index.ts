@@ -2041,7 +2041,12 @@ async function runUnifiedAuditFresh(rawQuery: string, awsConfig: any) {
     },
     servicesAssessed,
     limitations,
-    findings,
+    findings: findings.map((f) => ({
+      id: f.id,
+      severity: f.severity,
+      title: f.title,
+      resource: f.resource,
+    })),
     findingsForPanel: findings.slice(0, 25).map((finding) => ({
       id: finding.id,
       severity: normalizeSeverityForUi(finding.severity),
@@ -2935,8 +2940,8 @@ export const handler = async (req: Request): Promise<Response> => {
               } catch {
                 resultStr = "{}";
               }
-              if (resultStr && resultStr.length > 100000) {
-                resultStr = resultStr.slice(0, 100000) + '... [TRUNCATED — response too large, narrow your query]';
+              if (resultStr && resultStr.length > 8000) {
+                resultStr = resultStr.slice(0, 8000) + '... [TRUNCATED — response too large, narrow your query]';
               }
 
               // ── Audit log: successful call ──────────────────────────────────
