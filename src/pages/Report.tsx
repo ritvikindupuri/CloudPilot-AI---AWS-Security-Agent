@@ -512,7 +512,7 @@ const Report = () => {
           {/* Top Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
             {/* Health Score Gauge */}
-            <div className="rounded-xl border border-border bg-card p-5 flex items-center justify-between md:col-span-2">
+            <div className="rounded-xl border border-border bg-card p-5 flex items-center md:col-span-2">
               <div className="space-y-2">
                 <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase flex items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4 text-primary" />
@@ -527,32 +527,6 @@ const Report = () => {
                 <p className="text-xs text-muted-foreground">
                   Score is calculated by applying severity-weighted penalty deductions to a base of 100.
                 </p>
-              </div>
-
-              {/* Glowing dial */}
-              <div className="relative w-24 h-24 flex items-center justify-center overflow-visible">
-                <svg className="overflow-visible w-full h-full" viewBox="0 0 100 100">
-                  <g transform="rotate(-90 50 50)">
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="40"
-                      className="stroke-muted fill-none"
-                      strokeWidth="8"
-                    />
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="40"
-                      className="fill-none transition-all duration-1000"
-                      stroke={healthScore >= 85 ? "#10b981" : healthScore >= 65 ? "#eab308" : "#ef4444"}
-                      strokeWidth="8"
-                      strokeDasharray={251}
-                      strokeDashoffset={251 - (251 * healthScore) / 100}
-                      strokeLinecap="round"
-                    />
-                  </g>
-                </svg>
               </div>
             </div>
 
