@@ -6208,7 +6208,7 @@ export const handler = async (req: Request): Promise<Response> => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { messages, credentials, notificationEmail, conversationId, geminiApiKey: clientGeminiKey } = body;
+    const { messages, credentials, notificationEmail, conversationId, geminiApiKey: clientGeminiKey, assistantId } = body;
     const resolvedGeminiKey = clientGeminiKey || RUNTIME_CONFIG.geminiApiKey;
 
     const supabaseAdmin = createClient(RUNTIME_CONFIG.supabaseUrl, RUNTIME_CONFIG.supabaseServiceRoleKey);
@@ -6309,6 +6309,15 @@ export const handler = async (req: Request): Promise<Response> => {
 
     const stream = new ReadableStream({
       async start(controller) {
+        // Set up keep-alive interval to prevent Supabase Gateway 60s timeout
+        const keepAliveInterval = setInterval(() => {
+          try {
+            controller.enqueue(new TextEncoder().encode(": keep-alive\n\n"));
+          } catch (err) {
+            console.warn("Failed to send keep-alive heartbeat:", err);
+          }
+        }, 15000);
+
         const sendMeta = (meta: any) => {
           try {
             controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ meta })}\n\n`));
@@ -6589,9 +6598,30 @@ export const handler = async (req: Request): Promise<Response> => {
             await new Promise((r) => setTimeout(r, 8));
           }
 
+          // Persist completed message to database from backend
+          if (conversationId && assistantId && finalResponseText) {
+            try {
+              await supabaseAdmin.from("messages").upsert({
+                id: assistantId,
+                conversation_id: conversationId,
+                role: "assistant",
+                content: finalResponseText,
+                created_at: new Date().toISOString()
+              });
+              await supabaseAdmin.from("conversations").update({
+                updated_at: new Date().toISOString()
+              }).eq("id", conversationId);
+              console.log(`[aws-agent] Backend successfully persisted message: ${assistantId}`);
+            } catch (dbErr) {
+              console.error("[aws-agent] Failed to persist message from backend:", dbErr);
+            }
+          }
+
+          clearInterval(keepAliveInterval);
           controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
           controller.close();
         } catch (err: any) {
+          clearInterval(keepAliveInterval);
           console.error("ReadableStream asynchronous execution failed:", err);
           try {
             controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ error: err.message || "Asynchronous execution failed" })}\n\n`));
