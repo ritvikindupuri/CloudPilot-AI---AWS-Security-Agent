@@ -1473,7 +1473,7 @@ ${JSON.stringify(proposedToolCalls, null, 2)}
 Audit Rules:
 1. Ensure the proposed actions strictly align with the user's explicit instructions.
 2. Reject actions that delete resources (like VPCs, EC2s, subnets, tables) unless the user explicitly requested deletion/teardown in their latest message.
-3. Reject actions that open security vulnerabilities (e.g. creating Security Group rules allowing all traffic on port 22/3389, opening wide open access, granting admin roles to untrusted principals).
+3. Reject actions that open security vulnerabilities (e.g. creating Security Group rules allowing all traffic on port 22/3389, opening wide open access, granting admin roles to untrusted principals) UNLESS the user explicitly requested an attack simulation, penetration test, or vulnerability verification in their message (e.g. simulating privilege escalation, testing open port rules). If it is part of a user-requested simulation/test, approve it but note the high-risk nature in the reason.
 4. Approve safe reads, status checks, and resource creation queries that align with the query.
 
 Formatting Rules for "reason":
