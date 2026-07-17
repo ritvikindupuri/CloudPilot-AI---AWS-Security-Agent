@@ -297,7 +297,9 @@ If you prefer to build a custom least-privilege role instead of using `Administr
 
 ## Agent Security & Safety Mechanisms
 
-Given the power of executing live AWS API calls, CloudPilot AI implements multiple layers of security to protect your environment and ensure safe operations:
+Given the power of executing live AWS API calls, CloudPilot AI implements multiple layers of security to protect your environment and ensure safe operations. For a detailed breakdown of our security architecture, validation gates, and threat models, please refer to our comprehensive **[SECURITY.md](file:///C:/Users/ritvi/.gemini/antigravity/scratch/aws-ai-agent/SECURITY.md)** posture manual.
+
+Our security guardrails include:
 
 - **Zero Simulation Tolerance:** The agent is strictly instructed to **never** fabricate or assume resource states. Every finding must be backed by a real AWS API response.
 - **Service Allowlisting:** The agent is restricted to 35 pre-approved security-relevant AWS services.

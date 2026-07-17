@@ -1,6 +1,16 @@
 # CloudPilot AI: Security Posture, Architecture & Threat Model
+**Author:** Ritvik Indupuri  
+**Version:** 1.0.0  
 
 This document provides an in-depth breakdown of the security measures, guardrails, and mitigations implemented across the CloudPilot AI platform. It serves as a technical reference for security teams, red teamers, and compliance auditors.
+
+## Table of Contents
+- [1. Executive Security Architecture](#1-executive-security-architecture)
+- [2. Zero-Trust Authentication & Session Credentials Model](#2-zero-trust-authentication--session-credentials-model)
+- [3. Server-Side Guardrails & Multi-Stage Safety Gates](#3-server-side-guardrails--multi-stage-safety-gates)
+- [4. Network Security & Private VPC Routing](#4-network-security--private-vpc-routing)
+- [5. Mitigation of Cloud-Specific Threat Vectors](#5-mitigation-of-cloud-specific-threat-vectors)
+- [6. WORM Compliance & Audit Trailing](#6-worm-compliance--audit-trailing)
 
 ---
 
