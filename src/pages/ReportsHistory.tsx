@@ -261,7 +261,7 @@ const ReportsHistory = () => {
                 <div
                   key={report.id}
                   className="group border border-border rounded-lg bg-card hover:border-primary/30 transition-all cursor-pointer"
-                  onClick={() => navigate(`/report/${report.id}`)}
+                  onClick={() => navigate(`/report/${report.id}?from=history`)}
                 >
                   <div className="flex items-start gap-4 p-4">
                     <div className="flex-shrink-0 mt-0.5">

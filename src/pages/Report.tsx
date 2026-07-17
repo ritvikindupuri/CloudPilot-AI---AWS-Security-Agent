@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft, Printer, Clock, AlertCircle, Loader2, Download,
   Shield, HelpCircle, Check, Copy, ChevronDown, ChevronUp,
@@ -214,9 +214,14 @@ const Report = () => {
   const [conversation, setConversation] = useState<ReportConversation | null>(null);
   const [auditCache, setAuditCache] = useState<AuditCacheResponse | null>(null);
   
+  const [searchParams] = useSearchParams();
+  const fromHistory = searchParams.get("from") === "history";
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<"dashboard" | "report">("report");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "report">(
+    fromHistory ? "report" : "dashboard"
+  );
   const [expandedFindings, setExpandedFindings] = useState<Record<string, boolean>>({});
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -293,6 +298,11 @@ const Report = () => {
 
         if (cache && cache.response) {
           setAuditCache(cache.response as AuditCacheResponse);
+          if (!fromHistory) {
+            setActiveTab("dashboard");
+          }
+        } else {
+          setActiveTab("report");
         }
       } catch (err: any) {
         console.error("Failed to load report data:", err);
@@ -435,7 +445,7 @@ const Report = () => {
         </div>
 
         {/* Tab Selection */}
-        {auditCache && (
+        {auditCache && fromHistory && (
           <div className="flex items-center bg-muted/65 p-1 rounded-lg border border-border">
             <button
               onClick={() => setActiveTab("dashboard")}
