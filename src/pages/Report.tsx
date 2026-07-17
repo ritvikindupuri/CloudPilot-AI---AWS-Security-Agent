@@ -518,26 +518,28 @@ const Report = () => {
               </div>
 
               {/* Glowing dial */}
-              <div className="relative w-24 h-24 flex items-center justify-center">
-                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    className="stroke-muted fill-none"
-                    strokeWidth="8"
-                  />
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="40"
-                    className="fill-none transition-all duration-1000"
-                    stroke={healthScore >= 85 ? "#10b981" : healthScore >= 65 ? "#eab308" : "#ef4444"}
-                    strokeWidth="8"
-                    strokeDasharray={251}
-                    strokeDashoffset={251 - (251 * healthScore) / 100}
-                    strokeLinecap="round"
-                  />
+              <div className="relative w-24 h-24 flex items-center justify-center overflow-visible">
+                <svg className="overflow-visible w-full h-full" viewBox="0 0 100 100">
+                  <g transform="rotate(-90 50 50)">
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      className="stroke-muted fill-none"
+                      strokeWidth="8"
+                    />
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      className="fill-none transition-all duration-1000"
+                      stroke={healthScore >= 85 ? "#10b981" : healthScore >= 65 ? "#eab308" : "#ef4444"}
+                      strokeWidth="8"
+                      strokeDasharray={251}
+                      strokeDashoffset={251 - (251 * healthScore) / 100}
+                      strokeLinecap="round"
+                    />
+                  </g>
                 </svg>
                 <div className="absolute flex flex-col items-center">
                   <span className="text-lg font-bold">{healthScore}%</span>
