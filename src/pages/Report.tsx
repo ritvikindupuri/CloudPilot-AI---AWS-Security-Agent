@@ -541,10 +541,6 @@ const Report = () => {
                     />
                   </g>
                 </svg>
-                <div className="absolute flex flex-col items-center">
-                  <span className="text-lg font-bold">{healthScore}%</span>
-                  <span className="text-[8px] font-mono text-muted-foreground uppercase">HEALTH</span>
-                </div>
               </div>
             </div>
 
