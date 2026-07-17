@@ -11,6 +11,7 @@ This document provides an in-depth breakdown of the security measures, guardrail
 - [4. Network Security & Private VPC Routing](#4-network-security--private-vpc-routing)
 - [5. Mitigation of Cloud-Specific Threat Vectors](#5-mitigation-of-cloud-specific-threat-vectors)
 - [6. WORM Compliance & Audit Trailing](#6-worm-compliance--audit-trailing)
+- [7. Model Selection Rationale: Anthropic Claude 3.5 Sonnet](#7-model-selection-rationale-anthropic-claude-35-sonnet)
 
 ---
 
@@ -151,3 +152,25 @@ To meet SOC 2, HIPAA, and PCI-DSS requirements, every execution log is stored in
 * **S3 Object Lock:** Execution logs are written to an S3 bucket configured with **S3 Object Lock** in **Compliance Mode**.
 * **Immutability:** Once a log is written, it is physically impossible to edit, delete, or overwrite it—even for the AWS root account holder—until the retention period expires.
 * **Audit Transparency:** Gives GRC teams a tamper-proof record of every AI-driven action and red-team simulation run on the platform.
+
+---
+
+## 7. Model Selection Rationale: Anthropic Claude 3.5 Sonnet
+
+CloudPilot AI standardizes on **Anthropic Claude 3.5 Sonnet** across all three model personas (Intent Classifier, Main Agent, and Safety Gate Judge) in its orchestration pipeline. The choice of model is driven by strict operational security, tool compliance, and alignment requirements:
+
+### 1. The Intent Classifier (Scope Isolation)
+* **The Requirement:** Fast, highly structured routing. The classifier must map user queries into exactly one of 9 domain-specific intents.
+* **Sonnet 3.5 Performance:** Lower-tier models frequently drift, hallucinating invalid categories or conversational replies. Sonnet 3.5 enforces 100% adherence to classification boundaries and strict output schemas, ensuring the correct toolset is selected.
+
+### 2. The Main Reasoning Agent (Action Generation)
+* **The Requirement:** Zero-tolerance tool execution. Generating invalid AWS SDK syntax or parameters causes pipeline failures, while incorrect permission evaluations can lead to security gaps.
+* **Sonnet 3.5 Performance:** Sonnet 3.5 leads the industry in complex, nested function calling. It reliably translates natural language requests into precise AWS JSON payloads without parameter hallucinations, respecting AWS IAM structures and CLI syntax.
+
+### 3. The Safety Gate Judge (Consensus Audit)
+* **The Requirement:** Strict, adversarial guardrail evaluation. The auditor must verify context and detect hidden prompt injection bypasses or unauthorized mutations.
+* **Sonnet 3.5 Performance:** Sonnet 3.5 has demonstrated state-of-the-art capability in safety alignment and adversarial instructions. It acts as an objective, secondary consensus gate, parsing raw payloads and rejecting operations that deviate from user intent.
+
+### 4. Pipeline Efficiency Benefits
+* **Unified Caching:** Standardizing on a single model family allows the Deno edge container to optimize API gateway caching, reducing overall latency.
+* **Consistent Context Alignment:** The three personas maintain identical formatting styles and context mapping logic, minimizing formatting errors when feeding outputs from one stage into another.
