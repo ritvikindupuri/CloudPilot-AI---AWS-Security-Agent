@@ -90,11 +90,13 @@ The executor runtime maintains a permanently hardcoded list of destructive actio
 For IAM and STS operations, a custom programmatic parser inspects the request parameters to detect privilege escalation vectors:
 * **Blocked Patterns:** Rejects `createUser`, `createAccessKey`, `putUserPolicy`, or `attachUserPolicy` if they grant broader access than the current session role holds.
 * **Evasion Protection:** Blocks `sts:AssumeRole` calls to prevent the agent from assuming unauthorized administrative roles in other AWS accounts.
+* **IAM Session Boundaries:** CloudPilot supports passing IAM Session Policies when generating temporary tokens. This physically restricts the agent's absolute privilege boundaries, ensuring it can never exceed the designated policy scope even if the model attempts to invoke unassigned privileges.
 
 ### Stage 5: Safety Gate Judge (LLM Consensus)
 After programmatic checks pass, a secondary, isolated LLM call (Claude 3.5 Sonnet) acts as the **Safety Gate Judge** to audit the final request:
 * **Intent Cross-Check:** Verifies that the proposed AWS commands strictly align with the user's explicit prompts.
 * **Vulnerability Guard:** Rejects rules that open security vulnerabilities (e.g. wide-open port 22/3389 security groups) **UNLESS** the user has explicitly requested an authorized **Attack Simulation** or Red-Team test.
+* **Autonomous Self-Correction Loop:** When the Safety Gate Judge blocks an action, the agent doesn't fail. Instead, the rejection feedback is fed back into the agent's memory as a mock tool response (e.g., *"Action blocked by Safety Gate: [Reason]"*). The agent then autonomously attempts to find a safe alternative configuration (e.g., narrowing security group CIDRs). This loop will retry up to 15 times inside Deno before halting.
 
 ---
 
