@@ -282,10 +282,11 @@ const Report = () => {
 
         if (conv) setConversation(conv as ReportConversation);
 
-        // Fetch latest audit cache details for dashboard graphs
+        // Fetch the audit cache that was created/refreshed closest to this report message
         const { data: cache } = await (supabase
           .from("unified_audit_cache" as any)
           .select("response, last_refreshed_at")
+          .lte("last_refreshed_at", msg.created_at)
           .order("last_refreshed_at", { ascending: false })
           .limit(1)
           .maybeSingle() as any);
