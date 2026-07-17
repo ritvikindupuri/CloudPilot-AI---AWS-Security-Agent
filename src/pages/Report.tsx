@@ -216,7 +216,7 @@ const Report = () => {
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<"dashboard" | "report">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "report">("report");
   const [expandedFindings, setExpandedFindings] = useState<Record<string, boolean>>({});
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -435,30 +435,32 @@ const Report = () => {
         </div>
 
         {/* Tab Selection */}
-        <div className="flex items-center bg-muted/65 p-1 rounded-lg border border-border">
-          <button
-            onClick={() => setActiveTab("dashboard")}
-            className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${
-              activeTab === "dashboard"
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Gauge className="w-3.5 h-3.5 text-primary" />
-            Interactive Dashboard
-          </button>
-          <button
-            onClick={() => setActiveTab("report")}
-            className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${
-              activeTab === "report"
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5 text-primary" />
-            AI Text Report
-          </button>
-        </div>
+        {auditCache && (
+          <div className="flex items-center bg-muted/65 p-1 rounded-lg border border-border">
+            <button
+              onClick={() => setActiveTab("dashboard")}
+              className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                activeTab === "dashboard"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Gauge className="w-3.5 h-3.5 text-primary" />
+              Interactive Dashboard
+            </button>
+            <button
+              onClick={() => setActiveTab("report")}
+              className={`flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                activeTab === "report"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5 text-primary" />
+              AI Text Report
+            </button>
+          </div>
+        )}
 
         <div className="flex items-center gap-2">
           <button
