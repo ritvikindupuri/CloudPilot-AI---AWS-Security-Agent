@@ -394,6 +394,7 @@ export const useChat = (
               notificationEmail: notificationEmail || null,
               conversationId: targetConvId || null,
               geminiApiKey: customGeminiKey || null,
+              assistantId: assistantId,
             }),
           }
         );
@@ -488,7 +489,30 @@ export const useChat = (
             .eq("id", targetConvId) as any).then();
         }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } catch (err: any) {
+        console.warn("[useChat] Catching stream error, checking database fallback:", err);
+        // Wait 1.5 seconds to let backend finalize the write if it was close
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        
+        try {
+          const { data: dbMsg } = await supabase
+            .from("messages" as any)
+            .select("content")
+            .eq("id", assistantId)
+            .maybeSingle() as any;
+            
+          if (dbMsg?.content) {
+            console.log("[useChat] Successfully recovered agent reply from database:", assistantId);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, content: dbMsg.content, status: "complete" as const } : m
+              )
+            );
+            return;
+          }
+        } catch (dbErr) {
+          console.warn("[useChat] Failed to query recovery message:", dbErr);
+        }
+
         const errorContent = `**Error:** ${err.message || "Something went wrong"}`;
         setMessages((prev) => {
           const last = prev[prev.length - 1];
