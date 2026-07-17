@@ -519,23 +519,23 @@ const Report = () => {
 
               {/* Glowing dial */}
               <div className="relative w-24 h-24 flex items-center justify-center">
-                <svg className="w-full h-full transform -rotate-90">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                   <circle
-                    cx="48"
-                    cy="48"
-                    r="38"
+                    cx="50"
+                    cy="50"
+                    r="40"
                     className="stroke-muted fill-none"
                     strokeWidth="8"
                   />
                   <circle
-                    cx="48"
-                    cy="48"
-                    r="38"
+                    cx="50"
+                    cy="50"
+                    r="40"
                     className="fill-none transition-all duration-1000"
                     stroke={healthScore >= 85 ? "#10b981" : healthScore >= 65 ? "#eab308" : "#ef4444"}
                     strokeWidth="8"
-                    strokeDasharray={238}
-                    strokeDashoffset={238 - (238 * healthScore) / 100}
+                    strokeDasharray={251}
+                    strokeDashoffset={251 - (251 * healthScore) / 100}
                     strokeLinecap="round"
                   />
                 </svg>
