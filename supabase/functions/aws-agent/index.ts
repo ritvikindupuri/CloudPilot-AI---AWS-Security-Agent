@@ -6588,6 +6588,18 @@ export const handler = async (req: Request): Promise<Response> => {
             }
           }
 
+          // Push a final execution log to make it clear that the agent is generating output
+          if (finalResponseText) {
+            const stepName = isStreamable ? "Agent" : "System";
+            const stepStatus = isStreamable ? "success" : "warning";
+            const stepMessage = isStreamable 
+              ? "Generating final security analysis report and streaming results..." 
+              : "Compiling block reason and recommendations...";
+            
+            liveExecutionLogs.push({ step: stepName, status: stepStatus, message: stepMessage });
+            sendMeta({ executionLogs: [...liveExecutionLogs] });
+          }
+
           // stream text chunks
           const chunkSize = 30;
           let index = 0;
