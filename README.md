@@ -4,7 +4,9 @@
 
 Real-time AWS security operations. Connect your credentials to audit, investigate, and remediate cloud infrastructure. An elite AWS cloud security operations agent built exclusively for professional security engineers, featuring zero simulation tolerance (always uses real AWS API calls).
 
-📚 **Read the full [Technical Documentation](TECHNICAL_DOCUMENTATION.md) for a comprehensive breakdown of the architecture, data flow, and codebase.**
+📚 **Read the full [Technical Documentation](file:///C:/Users/ritvi/.gemini/antigravity/scratch/aws-ai-agent/TECHNICAL_DOCUMENTATION.md) for a comprehensive breakdown of the architecture, data flow, and codebase.**
+
+🔒 **Review our comprehensive [Security Manual](file:///C:/Users/ritvi/.gemini/antigravity/scratch/aws-ai-agent/SECURITY.md) for a detailed breakdown of our Zero-Trust architecture, multi-stage guardrails, threat model, and compliance logging.**
 
 ---
 
