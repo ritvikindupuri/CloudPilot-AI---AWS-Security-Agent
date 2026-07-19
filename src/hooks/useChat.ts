@@ -538,7 +538,7 @@ export const useChat = (
         setIsLoading(false);
       }
     },
-    [messages, conversationId, notificationEmail]
+    [messages, conversationId, notificationEmail, createConversation, onConversationCreated, credentials]
   );
 
   const clearMessages = useCallback(() => {
