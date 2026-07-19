@@ -15,14 +15,14 @@ Real-time AWS security operations. Connect your credentials to audit, investigat
 ```mermaid
 sequenceDiagram
     participant User
-    participant Frontend as React Frontend
-    participant DB as Local Storage (Mock DB)
-    participant Gateway as Local Deno Gateway
-    participant Agent as aws-agent
-    participant Classifier as Anthropic Intent Classifier
-    participant LLM as Anthropic Claude 3.5 Sonnet
-    participant Judge as Safety Gate Judge (Claude)
-    participant AWS as AWS Account
+    participant Frontend as "React Frontend"
+    participant DB as "Local Storage (Mock DB)"
+    participant Gateway as "Local Deno Gateway"
+    participant Agent as "aws-agent"
+    participant Classifier as "Anthropic Intent Classifier"
+    participant LLM as "Anthropic Claude 3.5 Sonnet"
+    participant Judge as "Safety Gate Judge (Claude)"
+    participant AWS as "AWS Account"
 
     User->>Frontend: Enter query & credentials
     Frontend->>DB: Save credentials & context
