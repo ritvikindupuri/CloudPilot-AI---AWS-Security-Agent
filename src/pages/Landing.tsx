@@ -680,6 +680,68 @@ const Landing = () => {
         </div>
       </section>
 
+      {/* One-Click Quick Actions Showcase */}
+      <section className="py-20 border-t border-border/10 bg-[#040816]/30 relative z-10">
+        <div className="max-w-6xl mx-auto px-6">
+          <motion.div 
+            initial={{ opacity: 0, y: 15 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="max-w-2xl mb-12 text-center lg:text-left"
+          >
+            <span className="text-[10px] font-mono tracking-widest text-primary uppercase font-bold px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20">Pre-Built Workflows</span>
+            <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-[#f5f5f7] mt-3">25+ One-Click Security Playbooks</h2>
+            <p className="text-[#86868b] text-xs font-normal mt-2 leading-relaxed">
+              No prompt engineering required. Launch specialized AWS security audits, compliance evaluations, and red-teaming simulations with a single click.
+            </p>
+          </motion.div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            {[
+              {
+                category: "AUDIT WORKFLOWS",
+                color: "text-blue-400 border-blue-500/20 bg-blue-500/5",
+                items: ["S3 Public Access Scan", "Unified Account Audit", "IAM Posture Analysis", "EC2 Security Group Exposure", "RDS & Aurora Security", "Cost Anomaly Detection", "Overnight Drift Digest"]
+              },
+              {
+                category: "COMPLIANCE STANDARDS",
+                color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/5",
+                items: ["CIS AWS Benchmark v3.0", "CloudTrail Multi-Region Check", "GuardDuty Detector Status", "Security Hub Standard Audit", "NIST & PCI-DSS Scans"]
+              },
+              {
+                category: "ATTACK SIMULATIONS",
+                color: "text-rose-400 border-rose-500/20 bg-rose-500/5",
+                items: ["IAM Privilege Escalation", "Secrets Exposure Assessment", "S3 Exfiltration Paths", "Lateral Movement Mapping", "AI vs AI Attack Simulation", "Threat Detector Anomaly Audit"]
+              }
+            ].map((col, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 15 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4, delay: idx * 0.1 }}
+                className="border border-border/10 rounded-xl bg-[#090d1a]/50 p-6 flex flex-col justify-between"
+              >
+                <div>
+                  <div className={`inline-block text-[10px] font-mono font-bold tracking-widest px-2.5 py-1 rounded border mb-4 ${col.color}`}>
+                    {col.category}
+                  </div>
+                  <ul className="space-y-2.5">
+                    {col.items.map((item, itemIdx) => (
+                      <li key={itemIdx} className="flex items-center gap-2.5 text-xs text-muted-foreground font-sans">
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary/60" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Security Architecture */}
       <section id="security" className="py-20 border-t border-border/10 bg-[#040816]/50 relative z-10">
         <div className="max-w-3xl mx-auto px-6 text-center">
