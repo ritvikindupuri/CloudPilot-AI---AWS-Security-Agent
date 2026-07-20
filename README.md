@@ -14,7 +14,7 @@ Real-time AWS security operations. Connect your credentials to audit, investigat
 
 ## System Architecture
 
-![CloudPilot AI — Simplified Architecture](docs/images/cloudpilot_architecture.png)
+![CloudPilot AI — Simplified Architecture](https://i.imgur.com/h5ysf9w.png)
 <div align="center">
   <em>Figure 1: CloudPilot AI System Architecture and Request Flow</em>
 </div>
