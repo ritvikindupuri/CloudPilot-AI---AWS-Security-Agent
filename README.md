@@ -21,17 +21,17 @@ Real-time AWS security operations. Connect your credentials to audit, investigat
 
 ### Step-by-Step Architecture Flow
 
-1. **User Prompt & Credentials (Step 1)**: The Security Engineer inputs a security query or triggers a Quick Action via the React Web App (`src/pages/Landing.tsx`, `ChatInterface.tsx`). Credentials (access keys or AssumeRole ARN) are validated locally.
-2. **Identity & STS Session Token Exchange (Step 2)**: `aws-exchange-credentials` validates credentials against AWS STS and issues temporary 1-hour session tokens. Raw secret keys are **never stored** in any database.
-3. **Authentication & Session State (Step 3)**: Supabase Auth verifies JWT tokens while the Supabase Database tracks conversation state, findings, policies, and audit timelines.
-4. **AI Control Plane & 3-Model Chain (Step 4)**: The prompt reaches the `aws-agent` Orchestrator edge function, which runs a 3-stage LLM evaluation loop:
-   - **Intent Classifier:** Classifies intent and activates domain-specific tools (e.g. `direct_query`, `ops_automation`, `attack_simulation`).
+1. **User + React Web App (Step 1)**: The Security Engineer inputs a security query, triggers a Quick Action, or inspects findings via the React Web App (`src/pages/Landing.tsx`, `ChatInterface.tsx`).
+2. **Auth + AWS Credential Exchange (Step 2)**: Supabase Auth handles user identity and RBAC. `aws-exchange-credentials` validates keys or AssumeRole ARNs against AWS STS, issuing temporary 1-hour session tokens with **zero raw-key storage**.
+3. **aws-agent Orchestrator (Step 3)**: The prompt reaches the core `aws-agent` Orchestrator edge function, which executes a 3-stage LLM evaluation loop:
+   - **Intent Classifier:** Classifies intent and filters the active tool set.
    - **Claude Main Agent:** Generates proposed AWS SDK tool calls based on user intent.
-   - **Safety Gate Judge:** Audits proposed AWS tool calls against safety policies and outputs a live `[Safety Gate] APPROVED` or `REJECTED` verdict.
-5. **Tool Dispatch & Routing (Step 5)**: Approved tool calls are dispatched via the `aws-agent-tools` Router to the appropriate execution module.
-6. **Execution Engines & Proxying (Step 6)**: The `aws-executor` proxy dispatches requests to `aws-agent-scanner` (read-only audits, cost scans, drift detection) or `aws-agent-ops` (runbooks, IAM updates, security group changes, attack simulations).
-7. **Live AWS SDK Execution & Alerting (Step 7)**: `aws-executor` executes real AWS SDK API calls directly against the Customer AWS Account (`IAM`, `S3`, `EC2`, `VPC`, `CloudTrail`, `GuardDuty`, `SNS`, `Lambda`). Alerts are dispatched via `webhook-notify` to Slack, PagerDuty, or SNS.
-8. **Real API Response Synthesis (Step 8)**: Real AWS API JSON payloads return to `aws-agent`. Claude 3.5 Sonnet synthesizes executive summaries, findings tables, risk matrices, and exact CLI remediation blueprints, streaming live Markdown back to the React UI via SSE.
+   - **Safety Gate Judge:** Audits proposed tool calls and outputs a live `[Safety Gate] APPROVED` or `REJECTED` verdict.
+4. **aws-agent-tools Router (Step 4)**: Dispatches approved tool calls to specialized domain execution modules.
+5. **Execution Engines (Step 5)**: Routes execution to either `aws-agent-scanner` (security audits, cost scans, drift detection, direct queries) or `aws-agent-ops` (runbooks, IAM changes, security group changes, org ops, attack simulation).
+6. **aws-executor (Step 6)**: The centralized AWS SDK proxy handles authentication and dispatches real API calls (`v3Send`) against AWS endpoints.
+7. **Customer AWS Account & Integrations (Step 7)**: Executes commands directly against target AWS services (`IAM`, `S3`, `EC2`, `VPC`, `CloudTrail`, `CloudWatch`, `GuardDuty`, `Organizations`, `Cost Explorer`, `SNS`, `STS`, `Lambda`). Real-time alerts are sent to `Notifications` (Slack, PagerDuty, webhooks, SNS/email) and logged to `Compliance & Governance` (approval workflows, audit timelines, evidence exports).
+8. **Results Returned to App (Step 8)**: Real AWS API responses return to `aws-agent`. Claude synthesizes live findings, remediation guidance, reports, and approved actions, streaming live Markdown back to the React Web App via SSE.
 
 ---
 
