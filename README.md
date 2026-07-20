@@ -14,51 +14,24 @@ Real-time AWS security operations. Connect your credentials to audit, investigat
 
 ## System Architecture
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Frontend as "React Frontend"
-    participant DB as "Local Storage (Mock DB)"
-    participant Gateway as "Local Deno Gateway"
-    participant Agent as "aws-agent"
-    participant Classifier as "Anthropic Intent Classifier"
-    participant LLM as "Anthropic Claude 3.5 Sonnet"
-    participant Judge as "Safety Gate Judge (Claude)"
-    participant AWS as "AWS Account"
-
-    User->>Frontend: Enter query & credentials
-    Frontend->>DB: Save credentials & context
-    Frontend->>Gateway: Forward query & credentials
-    Gateway->>Agent: Route to Deno aws-agent
-    Agent->>Classifier: Classify query intent
-    Classifier-->>Agent: Returns intent category
-    Agent->>LLM: Forward query + intent-filtered tools
-    LLM-->>Agent: Returns proposed AWS tool calls
-    Agent->>Judge: Audit proposed AWS tool calls
-    Judge-->>Agent: Returns audit verdict (approved/rejected)
-    Note right of Agent: If approved, execute real AWS API calls
-    Agent->>AWS: Executes real AWS SDK calls (aws-executor)
-    AWS-->>Agent: Returns AWS API JSON response
-    Agent->>LLM: Provide API response context
-    LLM-->>Agent: Synthesizes final security analysis
-    Agent-->>Gateway: Returns streaming SSE chunks
-    Gateway-->>Frontend: Streams Markdown response
-    Frontend-->>User: Displays real-time insights
-```
+![CloudPilot AI — Simplified Architecture](docs/images/cloudpilot_architecture.png)
 <div align="center">
   <em>Figure 1: CloudPilot AI System Architecture and Request Flow</em>
 </div>
 
-### Architecture Explanation
+### Step-by-Step Architecture Flow
 
-1. **User Interaction**: The user accesses the React Frontend, inputs their AWS query (e.g., "Find exposed S3 buckets"), and provides their AWS credentials (either Access Keys or an AssumeRole ARN).
-2. **Request Handling**: The frontend securely sends the prompt and credentials to the Local Deno Gateway (`local-server.ts`), which mounts and executes the `aws-agent` module locally on port 54321.
-3. **Intent Classification**: Before engaging the main AI model, `aws-agent` sends the query to the Anthropic API for intent classification using Claude 3.5 Sonnet. The classifier categorizes the query into one of 9 domains (e.g., `security_audit`, `cost_analysis`, `drift_detection`), and only the relevant tool subset is selected for the main agent. This reduces token usage by 40-70% on focused queries.
-4. **AI Evaluation**: The local Deno router builds the system context (enforcing "zero simulation tolerance") and communicates with Claude 3.5 Sonnet via the Anthropic completions API, providing only the filtered tool definitions for the classified intent.
-5. **Safety Gate Judge**: Before executing any proposed AWS commands, a separate Claude 3.5 Sonnet reasoning call acts as a Safety Gate Judge to audit the proposed actions against the user's intent. If it detects unsafe, destructive, or irrelevant mutations (such as deleting active resources unless explicitly commanded), it blocks execution and feeds the reason back to the agent for self-correction.
-6. **AWS Integration**: Once approved, the local gateway dynamically instantiates an AWS SDK client using the user's provided credentials and executes the requested API call against the user's real AWS account via the `aws-executor` module.
-7. **Synthesis & Streaming**: The real AWS API responses are passed back to Claude. The model synthesizes an executive summary, findings table, detailed analysis, and exact CLI remediation commands. The gateway streams this response back to the React Frontend for real-time display via SSE.
-8. **Database Storage**: Conversations, user sessions, runbooks, compliance configurations, and drift baselines are persisted completely client-side inside the browser's `localStorage` mock client, guaranteeing zero setup and 100% offline data privacy.
+1. **User Prompt & Credentials (Step 1)**: The Security Engineer inputs a security query or triggers a Quick Action via the React Web App (`src/pages/Landing.tsx`, `ChatInterface.tsx`). Credentials (access keys or AssumeRole ARN) are validated locally.
+2. **Identity & STS Session Token Exchange (Step 2)**: `aws-exchange-credentials` validates credentials against AWS STS and issues temporary 1-hour session tokens. Raw secret keys are **never stored** in any database.
+3. **Authentication & Session State (Step 3)**: Supabase Auth verifies JWT tokens while the Supabase Database tracks conversation state, findings, policies, and audit timelines.
+4. **AI Control Plane & 3-Model Chain (Step 4)**: The prompt reaches the `aws-agent` Orchestrator edge function, which runs a 3-stage LLM evaluation loop:
+   - **Intent Classifier:** Classifies intent and activates domain-specific tools (e.g. `direct_query`, `ops_automation`, `attack_simulation`).
+   - **Claude Main Agent:** Generates proposed AWS SDK tool calls based on user intent.
+   - **Safety Gate Judge:** Audits proposed AWS tool calls against safety policies and outputs a live `[Safety Gate] APPROVED` or `REJECTED` verdict.
+5. **Tool Dispatch & Routing (Step 5)**: Approved tool calls are dispatched via the `aws-agent-tools` Router to the appropriate execution module.
+6. **Execution Engines & Proxying (Step 6)**: The `aws-executor` proxy dispatches requests to `aws-agent-scanner` (read-only audits, cost scans, drift detection) or `aws-agent-ops` (runbooks, IAM updates, security group changes, attack simulations).
+7. **Live AWS SDK Execution & Alerting (Step 7)**: `aws-executor` executes real AWS SDK API calls directly against the Customer AWS Account (`IAM`, `S3`, `EC2`, `VPC`, `CloudTrail`, `GuardDuty`, `SNS`, `Lambda`). Alerts are dispatched via `webhook-notify` to Slack, PagerDuty, or SNS.
+8. **Real API Response Synthesis (Step 8)**: Real AWS API JSON payloads return to `aws-agent`. Claude 3.5 Sonnet synthesizes executive summaries, findings tables, risk matrices, and exact CLI remediation blueprints, streaming live Markdown back to the React UI via SSE.
 
 ---
 
