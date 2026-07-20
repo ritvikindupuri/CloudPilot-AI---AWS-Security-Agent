@@ -5,6 +5,7 @@ import { ArrowRight, ChevronRight, Check, Shield, Cpu, RefreshCw, Database, Term
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import CloudPilotLogo from "@/components/CloudPilotLogo";
+import ThinkingIndicator from "@/components/ThinkingIndicator";
 
 // 3D Tilt interactive Glassmorphic Logo
 const ThreeDLogo = () => {
@@ -66,15 +67,14 @@ const ThreeDLogo = () => {
 const DEMO_CYCLES = [
   {
     query: "Scan S3 buckets for public access block gaps.",
-    classification: "direct_query",
-    terminalLogs: [
-      "» INIT  Stateless exchange requested via ephemeral token...",
-      "» CALL  s3:ListAllMyBuckets",
-      "✔ RESP  Found 3 active S3 Buckets in default registry",
-      "» CALL  s3:GetBucketPublicAccessBlock --bucket cp-prod-db-backups",
-      "✔ RESP  BlockPublicAcls=true, BlockPublicPolicy=true",
-      "» CALL  s3:GetBucketPublicAccessBlock --bucket cp-staging-assets",
-      "⚠ RESP  BlockPublicPolicy=false -- Public configuration exposed!",
+    thinkingLogs: [
+      { step: "Router", status: "info" as const, message: "Classifying query intent..." },
+      { step: "Router", status: "success" as const, message: "Activated 8 security tools for intent: **direct_query**" },
+      { step: "Safety Gate", status: "info" as const, message: "Auditing proposed AWS SDK calls..." },
+      { step: "Safety Gate", status: "success" as const, message: "Safety Gate Judge: **APPROVED**. Reason: Query is read-only S3 configuration audit." },
+      { step: "Execution", status: "info" as const, message: "Executing AWS SDK calls on account (`s3:ListAllMyBuckets`, `s3:GetBucketPublicAccessBlock`)..." },
+      { step: "Execution", status: "success" as const, message: "AWS API batch successfully executed (3 buckets retrieved)." },
+      { step: "Agent", status: "success" as const, message: "Generating final security analysis report and streaming results..." },
     ],
     renderResponse: () => (
       <div className="space-y-3 font-sans text-xs">
@@ -118,13 +118,14 @@ const DEMO_CYCLES = [
   },
   {
     query: "Audit my security groups for public SSH open ports.",
-    classification: "ops_automation",
-    terminalLogs: [
-      "» INIT  Scanning EC2 infrastructure...",
-      "» CALL  ec2:DescribeSecurityGroups",
-      "✔ RESP  Loaded 8 active security groups",
-      "» EVAL  Parsing ingress permission rules for 0.0.0.0/0 source...",
-      "⚠ ALERT Port 22 (SSH) open to public on group sg-98cf11",
+    thinkingLogs: [
+      { step: "Router", status: "info" as const, message: "Classifying query intent..." },
+      { step: "Router", status: "success" as const, message: "Activated 6 security tools for intent: **ops_automation**" },
+      { step: "Safety Gate", status: "info" as const, message: "Auditing proposed AWS SDK calls..." },
+      { step: "Safety Gate", status: "success" as const, message: "Safety Gate Judge: **APPROVED**. Reason: Read-only EC2 security group rule inspection." },
+      { step: "Execution", status: "info" as const, message: "Executing AWS SDK calls on account (`ec2:DescribeSecurityGroups`)..." },
+      { step: "Execution", status: "success" as const, message: "AWS API batch successfully executed (8 security groups evaluated)." },
+      { step: "Agent", status: "success" as const, message: "Generating final security analysis report and streaming results..." },
     ],
     renderResponse: () => (
       <div className="space-y-3 font-sans text-xs">
@@ -149,6 +150,41 @@ const DEMO_CYCLES = [
         </pre>
       </div>
     )
+  },
+  {
+    query: "Audit IAM for privilege escalation risks.",
+    thinkingLogs: [
+      { step: "Router", status: "info" as const, message: "Classifying query intent..." },
+      { step: "Router", status: "success" as const, message: "Activated 12 security tools for intent: **attack_simulation**" },
+      { step: "Safety Gate", status: "info" as const, message: "Auditing proposed IAM escalation policies..." },
+      { step: "Safety Gate", status: "success" as const, message: "Safety Gate Judge: **APPROVED**. Reason: Read-only privilege escalation scan." },
+      { step: "Execution", status: "info" as const, message: "Executing AWS API calls (`iam:GetAccountAuthorizationDetails`)..." },
+      { step: "Execution", status: "success" as const, message: "AWS API batch successfully executed (1 escalation path detected)." },
+      { step: "Agent", status: "success" as const, message: "Generating final security analysis report and streaming results..." },
+    ],
+    renderResponse: () => (
+      <div className="space-y-3 font-sans text-xs">
+        <h3 className="text-sm font-semibold text-white border-b border-border/20 pb-1.5 mt-2">IAM Privilege Escalation Assessment</h3>
+        <p className="text-muted-foreground">Evaluated IAM identities and discovered <strong className="text-foreground">1 critical escalation path</strong>:</p>
+        
+        <div className="p-3.5 rounded-lg bg-[#1b2244]/20 border border-border/40 space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="font-semibold text-foreground">User: dev-deployer</span>
+            <span className="bg-rose-500/20 text-rose-400 border border-rose-500/30 px-1.5 py-0.5 rounded text-[9px] font-bold">CRITICAL</span>
+          </div>
+          <ul className="space-y-1 pl-4 list-disc text-muted-foreground">
+            <li><strong className="text-foreground">Path:</strong> Granted <code className="bg-[#090d20] text-amber-300 px-1 py-0.5 rounded">iam:CreatePolicyVersion</code> permission.</li>
+            <li><strong className="text-foreground">Impact:</strong> Principal can attach an unrestricted policy version to gain AdministratorAccess.</li>
+          </ul>
+        </div>
+
+        <p className="font-semibold text-foreground mt-3">Remediation Blueprint:</p>
+        <pre className="bg-[#090d20] border border-border/40 rounded-lg p-3 text-[11px] font-mono text-foreground overflow-x-auto">
+{`aws iam delete-policy-version --policy-arn arn:aws:iam::123456789012:policy/DevDeployPolicy \\
+  --version-id v2`}
+        </pre>
+      </div>
+    )
   }
 ];
 
@@ -156,14 +192,14 @@ const AnimatedConsole = () => {
   const [cycleIndex, setCycleIndex] = useState(0);
   const [typedQuery, setTypedQuery] = useState("");
   const [phase, setPhase] = useState<"typing" | "routing" | "terminal" | "response">("typing");
-  const [visibleLogs, setVisibleLogs] = useState<string[]>([]);
+  const [visibleThinkingLogs, setVisibleThinkingLogs] = useState<Array<{ step: string; status: "info" | "success" | "warning" | "error"; message: string }>>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [typedQuery, visibleLogs, phase]);
+  }, [typedQuery, visibleThinkingLogs, phase]);
 
   const currentData = DEMO_CYCLES[cycleIndex];
 
@@ -173,7 +209,7 @@ const AnimatedConsole = () => {
     if (phase === "typing") {
       let charIdx = 0;
       setTypedQuery("");
-      setVisibleLogs([]);
+      setVisibleThinkingLogs([]);
       
       const interval = setInterval(() => {
         if (!active) return;
@@ -185,9 +221,9 @@ const AnimatedConsole = () => {
           clearInterval(interval);
           setTimeout(() => {
             if (active) setPhase("routing");
-          }, 800);
+          }, 600);
         }
-      }, 55);
+      }, 50);
 
       return () => {
         active = false;
@@ -196,9 +232,10 @@ const AnimatedConsole = () => {
     }
 
     if (phase === "routing") {
+      setVisibleThinkingLogs(currentData.thinkingLogs.slice(0, 2));
       const timeout = setTimeout(() => {
         if (active) setPhase("terminal");
-      }, 1000);
+      }, 900);
       return () => {
         active = false;
         clearTimeout(timeout);
@@ -206,19 +243,18 @@ const AnimatedConsole = () => {
     }
 
     if (phase === "terminal") {
-      let logIdx = 0;
+      let count = 2;
       const interval = setInterval(() => {
         if (!active) return;
-        if (logIdx < currentData.terminalLogs.length) {
-          setVisibleLogs(prev => [...prev, currentData.terminalLogs[logIdx]]);
-          logIdx++;
-        } else {
+        count++;
+        setVisibleThinkingLogs(currentData.thinkingLogs.slice(0, count));
+        if (count >= currentData.thinkingLogs.length) {
           clearInterval(interval);
           setTimeout(() => {
             if (active) setPhase("response");
-          }, 800);
+          }, 700);
         }
-      }, 500);
+      }, 450);
 
       return () => {
         active = false;
@@ -242,7 +278,7 @@ const AnimatedConsole = () => {
   }, [phase, cycleIndex]);
 
   return (
-    <div className="w-full max-w-2xl mx-auto rounded-xl border border-border/50 bg-[#080c1d]/90 shadow-2xl backdrop-blur-md overflow-hidden text-left flex flex-col h-[420px]">
+    <div className="w-full max-w-2xl mx-auto rounded-xl border border-border/50 bg-[#080c1d]/90 shadow-2xl backdrop-blur-md overflow-hidden text-left flex flex-col h-[460px]">
       {/* Header */}
       <div className="bg-[#0f1430] border-b border-border/40 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -280,27 +316,15 @@ const AnimatedConsole = () => {
             </motion.div>
           )}
 
-          {/* Thinking/Routing State */}
+          {/* ThinkingIndicator showing Intent Router & Safety Gate Judge Steps */}
           {(phase === "routing" || phase === "terminal") && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
-              className="flex gap-3 items-start"
+              className="-ml-5 -mr-5 -my-2"
             >
-              <div className="flex-shrink-0">
-                <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/25 flex items-center justify-center">
-                  <CloudPilotLogo className="w-4 h-4 text-primary" />
-                </div>
-              </div>
-              <div className="rounded-xl px-4 py-2.5 text-[12px] leading-relaxed bg-[#0f142c] border border-border/40 flex items-center gap-2 text-muted-foreground font-mono">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-                {phase === "routing" ? (
-                  <span>Routing request to stateless agent...</span>
-                ) : (
-                  <span>Executing: {visibleLogs[visibleLogs.length - 1]?.slice(2) || "AWS API queries..."}</span>
-                )}
-              </div>
+              <ThinkingIndicator logs={visibleThinkingLogs} />
             </motion.div>
           )}
 
