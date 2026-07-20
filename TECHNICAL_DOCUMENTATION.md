@@ -192,15 +192,15 @@ Building on the system architecture described in Section 1, this section traces 
 ```mermaid
 sequenceDiagram
     actor User
-    participant UI as React Frontend
-    participant DB as Supabase Database
-    participant EF as aws-agent
-    participant Judge as Safety Gate Judge (Claude)
-    participant Router as aws-agent-tools
-    participant Scanner as aws-agent-scanner
-    participant Executor as aws-executor
-    participant AI as Claude 3.5 Sonnet via Anthropic API
-    participant AWS as User AWS Account
+    participant UI as "React Frontend"
+    participant DB as "Supabase Database"
+    participant EF as "aws-agent"
+    participant Judge as "Safety Gate Judge (Claude)"
+    participant Router as "aws-agent-tools"
+    participant Scanner as "aws-agent-scanner"
+    participant Executor as "aws-executor"
+    participant AI as "Claude 3.5 Sonnet via Anthropic API"
+    participant AWS as "User AWS Account"
 
     Note over User,AWS: Example - Audit all S3 buckets for public access
 
@@ -444,11 +444,11 @@ The credential configuration described in Section 3 relies on a critical securit
 
 ```mermaid
 sequenceDiagram
-    participant User as User Browser
-    participant Panel as AwsCredentialsPanel
-    participant Exchange as aws-exchange-credentials
-    participant STS as AWS STS
-    participant Agent as aws-agent
+    participant User as "User Browser"
+    participant Panel as "AwsCredentialsPanel"
+    participant Exchange as "aws-exchange-credentials"
+    participant STS as "AWS STS"
+    participant Agent as "aws-agent"
 
     User->>Panel: Enters raw AWS credentials
     Panel->>Exchange: POST with method, accessKeyId, secretAccessKey, region
@@ -1988,12 +1988,12 @@ The approval system is built around two database tables — `approval_requests` 
 
 ```mermaid
 sequenceDiagram
-    participant User as Requesting User
-    participant Agent as aws-agent-ops
-    participant DB as approval_requests Table
-    participant Approver1 as Approver A
-    participant Approver2 as Approver B
-    participant AWS as AWS API
+    participant User as "Requesting User"
+    participant Agent as "aws-agent-ops"
+    participant DB as "approval_requests Table"
+    participant Approver1 as "Approver A"
+    participant Approver2 as "Approver B"
+    participant AWS as "AWS API"
 
     User->>Agent: Request high-risk operation
     Agent->>Agent: Evaluate risk level and environment
@@ -2312,9 +2312,9 @@ CloudPilot supports TOTP-based multi-factor authentication through the `MfaSetup
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant C as MfaSetup Component
-    participant A as Auth API
+    participant U as "User"
+    participant C as "MfaSetup Component"
+    participant A as "Auth API"
 
     U->>C: Click Enable MFA
     C->>A: mfa.enroll(factorType: totp)
@@ -2614,9 +2614,9 @@ The Team page is organized into three sections:
 
 ```mermaid
 sequenceDiagram
-    participant O as Owner/Admin
-    participant UI as Team Page
-    participant DB as Database
+    participant O as "Owner/Admin"
+    participant UI as "Team Page"
+    participant DB as "Database"
 
     O->>UI: Click Invite Member
     UI->>O: Show invite dialog (email + role selector)
