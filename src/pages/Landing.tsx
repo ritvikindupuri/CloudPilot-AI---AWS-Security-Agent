@@ -419,8 +419,7 @@ const PipelineFlow = () => {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.03)_0%,transparent_70%)] pointer-events-none" />
       
       <div className="text-center mb-12">
-        <span className="text-[10px] font-mono tracking-widest text-primary uppercase font-bold px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20">Execution Architecture</span>
-        <h3 className="text-xl font-semibold text-white mt-3">Stateless Security Transaction Flow</h3>
+        <h3 className="text-xl font-semibold text-white">Stateless Security Transaction Flow</h3>
       </div>
 
       <div className="relative flex flex-col lg:flex-row items-center justify-between gap-12 max-w-5xl mx-auto">
@@ -690,8 +689,7 @@ const Landing = () => {
             transition={{ duration: 0.5 }}
             className="max-w-2xl mb-12 text-center lg:text-left"
           >
-            <span className="text-[10px] font-mono tracking-widest text-primary uppercase font-bold px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20">Pre-Built Workflows</span>
-            <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-[#f5f5f7] mt-3">25+ One-Click Security Playbooks</h2>
+            <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-[#f5f5f7]">25+ One-Click Security Playbooks</h2>
             <p className="text-[#86868b] text-xs font-normal mt-2 leading-relaxed">
               No prompt engineering required. Launch specialized AWS security audits, compliance evaluations, and red-teaming simulations with a single click.
             </p>
