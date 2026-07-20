@@ -303,14 +303,15 @@ If you prefer to build a custom least-privilege role instead of using `Administr
 
 Given the power of executing live AWS API calls, CloudPilot AI implements multiple layers of security to protect your environment and ensure safe operations. For a detailed breakdown of our security architecture, validation gates, and threat models, please refer to our comprehensive **[SECURITY.md](file:///C:/Users/ritvi/.gemini/antigravity/scratch/aws-ai-agent/SECURITY.md)** posture manual.
 
-Our security guardrails include:
+Our security guardrails and data privacy architecture include:
 
+- **Stateless Zero-Credential Storage:** AWS secret keys are never saved to a database or disk. Credentials exist purely in transient client memory or temporary 1-hour AWS STS session tokens.
+- **Private VPC Endpoint Routing (AWS PrivateLink):** Supports private DNS routing inside your Virtual Private Cloud (VPC), ensuring AWS SDK API traffic never routes over the public internet.
+- **Dual-LLM Safety Gate Judge:** Every proposed tool call is pre-screened in real time by an independent Safety Gate Judge before dispatch, displaying a live `[Safety Gate] APPROVED` or `REJECTED` verdict in the UI.
+- **Configurable Least-Privilege IAM Scoping:** Connect using a Read-Only IAM Role (`SecurityAudit`) where AWS itself physically blocks write API calls, or enable Remediation mode under active Safety Gate Judge oversight.
+- **Immutable S3 WORM Compliance Logs:** Every transaction payload is automatically archived into your own S3 bucket configured with S3 Object Lock in WORM (Write-Once-Read-Many) Compliance Mode for forensic integrity.
 - **Zero Simulation Tolerance:** The agent is strictly instructed to **never** fabricate or assume resource states. Every finding must be backed by a real AWS API response.
-- **Service Allowlisting:** The agent is restricted to 35 pre-approved security-relevant AWS services.
 - **Destructive Operation Blocklist:** Highly sensitive operations (e.g., `closeAccount`, `terminateInstances`, `deleteBucket`) are hardcoded to be blocked.
-- **Strict Input Validation & Sanitization:** All inputs undergo strict regex formatting checks and length sanitization.
-- **Ephemeral Compute Isolation:** Agent logic runs in Supabase Edge Functions (Deno isolates) — zero global state or cross-tenant credential exposure.
-- **Mandatory Simulation Cleanup:** Test resources from attack simulations must be tagged, tracked, and cleaned up.
 
 ---
 
