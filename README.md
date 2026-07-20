@@ -8,7 +8,7 @@ Real-time AWS security operations. Connect your credentials to audit, investigat
 
 🔒 **Review our comprehensive [Security Manual](file:///C:/Users/ritvi/.gemini/antigravity/scratch/aws-ai-agent/SECURITY.md) for a detailed breakdown of our Zero-Trust architecture, multi-stage guardrails, threat model, and compliance logging.**
 
-🛡️ **Anthropic Cyber Verification Program Approved:** CloudPilot AI is formally authorized under Anthropic's Cyber Verification Program (Org ID: `38788112-a992-4ebe-a040-de2590eb13bf`, Ref: `TS-019f7d25-cd21-7464-9e6c-a5ce0f4040ea`) for dual-use defensive security tasks and uninhibited threat simulations.
+🛡️ **Anthropic Cyber Verification Program Approved:** CloudPilot AI is formally authorized under Anthropic's Cyber Verification Program for dual-use defensive security tasks and uninhibited threat simulations.
 
 ---
 

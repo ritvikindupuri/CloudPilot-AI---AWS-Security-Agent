@@ -597,7 +597,7 @@ const Landing = () => {
           >
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[11px] font-mono shadow-lg shadow-emerald-500/5">
               <Shield className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Anthropic Cyber Verification Program Approved (Org ID: 38788112-a992-4ebe-a040-de2590eb13bf)</span>
+              <span>Anthropic Cyber Verification Program Approved</span>
             </div>
           </motion.div>
         </motion.div>

@@ -180,7 +180,7 @@ CloudPilot AI standardizes on **Anthropic Claude 3.5 Sonnet** across all three m
 
 ## 8. Anthropic Cyber Verification Program Authorization
 
-CloudPilot AI is formally authorized under **Anthropic's Cyber Verification Program** (Organization ID: `38788112-a992-4ebe-a040-de2590eb13bf`, Approval Reference: `TS-019f7d25-cd21-7464-9e6c-a5ce0f4040ea`). 
+CloudPilot AI is formally authorized under **Anthropic's Cyber Verification Program** for dual-use defensive security tasks and threat simulations. 
 
 ### Purpose & Safeguard Adjustments
 * **Dual-Use Security Activities:** Default AI safety classifiers have been adjusted for CloudPilot AI's organization to enable authorized, dual-use defensive security tasks—including live IAM privilege escalation auditing, penetration testing simulations, red-teaming checks, and automated vulnerability scanning.
