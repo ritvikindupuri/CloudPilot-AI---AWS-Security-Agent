@@ -4,11 +4,11 @@
 
 Real-time AWS security operations. Connect your credentials to audit, investigate, and remediate cloud infrastructure. An elite AWS cloud security operations agent built exclusively for professional security engineers, featuring zero simulation tolerance (always uses real AWS API calls).
 
-📚 **Read the full [Technical Documentation](file:///C:/Users/ritvi/.gemini/antigravity/scratch/aws-ai-agent/TECHNICAL_DOCUMENTATION.md) for a comprehensive breakdown of the architecture, data flow, and codebase.**
+**Read the full [Technical Documentation](TECHNICAL_DOCUMENTATION.md) for a comprehensive breakdown of the architecture, data flow, and codebase.**
 
-🔒 **Review our comprehensive [Security Manual](file:///C:/Users/ritvi/.gemini/antigravity/scratch/aws-ai-agent/SECURITY.md) for a detailed breakdown of our Zero-Trust architecture, multi-stage guardrails, threat model, and compliance logging.**
+**Review our comprehensive [Security Manual](SECURITY.md) for a detailed breakdown of our Zero-Trust architecture, multi-stage guardrails, threat model, and compliance logging.**
 
-🛡️ **Anthropic Cyber Verification Program Approved:** CloudPilot AI is formally authorized under Anthropic's Cyber Verification Program for dual-use defensive security tasks and uninhibited threat simulations.
+**Anthropic Cyber Verification Program Approved:** CloudPilot AI is formally authorized under Anthropic's Cyber Verification Program for dual-use defensive security tasks and uninhibited threat simulations.
 
 ---
 
@@ -301,7 +301,7 @@ If you prefer to build a custom least-privilege role instead of using `Administr
 
 ## Agent Security & Safety Mechanisms
 
-Given the power of executing live AWS API calls, CloudPilot AI implements multiple layers of security to protect your environment and ensure safe operations. For a detailed breakdown of our security architecture, validation gates, and threat models, please refer to our comprehensive **[SECURITY.md](file:///C:/Users/ritvi/.gemini/antigravity/scratch/aws-ai-agent/SECURITY.md)** posture manual.
+Given the power of executing live AWS API calls, CloudPilot AI implements multiple layers of security to protect your environment and ensure safe operations. For a detailed breakdown of our security architecture, validation gates, and threat models, please refer to our comprehensive **[SECURITY.md](SECURITY.md)** posture manual.
 
 Our security guardrails and data privacy architecture include:
 
