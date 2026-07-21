@@ -540,9 +540,10 @@ With the backend credential flow established in Sections 3–4, this section det
 
 | Component | File | Description |
 |-----------|------|-------------|
-| **ChatInterface** | `src/components/ChatInterface.tsx` | Main workspace. Orchestrates chat layout, input handling, sidebar toggling (credentials, history, findings, quick actions, capabilities list), new chat creation, conversation management, auto-scroll, and S3 report archival. Includes a "Reports" button linking to `/reports` and an "Operations" link to `/operations`. |
+| **ChatInterface** | `src/components/ChatInterface.tsx` | Main workspace. Orchestrates chat layout, input handling, **Scan Mode Selector Bar (Fast Scan vs. Deep Audit toggle with Info Dialog)**, sidebar toggling (credentials, history, findings, quick actions, capabilities list), new chat creation, conversation management, auto-scroll, and S3 report archival. Includes a "Reports" button linking to `/reports` and an "Operations" link to `/operations`. |
 | **ChatMessage** | `src/components/ChatMessage.tsx` | Renders individual user/assistant messages. Parses Markdown with `react-markdown` and `remark-gfm`. Includes action buttons: **Download PDF**, **Add to S3**, **View Report**, and **Copy Link**. |
 | **ThinkingIndicator** | `src/components/ThinkingIndicator.tsx` | Animated "Agent is thinking..." indicator with three bouncing dots and the CloudPilot logo. |
+| **ScanModeIcons** | `src/components/ScanModeIcons.tsx` | Custom vector SVG icons for **FastScanIcon** (glowing lightning bolt with orbital radar trace) and **DeepAuditIcon** (scanning lens with target crosshair). |
 | **AwsCredentialsPanel** | `src/components/AwsCredentialsPanel.tsx` | Secure form for AWS credential input with framer-motion expand/collapse. Supports Access Key and Assume Role methods. Includes region selector (16 regions), security notice, connection status with masked key preview, and pre-flight permission capability checklist. |
 | **QuickActions** | `src/components/QuickActions.tsx` | Provides **55+ pre-built security prompts** organized into **8 color-coded categories**: Audit (blue, 13 actions), Compliance (green, 4 actions), Attack Simulation (red, 11 actions), Incident Response (orange, 6 actions), GuardDuty (pink, 5 actions), Remediation (yellow, 16 actions), Reporting & Alerts (purple, 4 actions), and CloudWatch (cyan, 6 actions). Each prompt populates the input box for review before sending. |
 | **FindingsPanel** | `src/components/FindingsPanel.tsx` | Real-time summary of security findings with severity badges (CRIT red, HIGH orange, MED yellow, LOW blue) and aggregate counts. Clickable findings send targeted investigation prompts. |
@@ -557,7 +558,7 @@ With the backend credential flow established in Sections 3–4, this section det
 | Hook | File | Description |
 |------|------|-------------|
 | `useAuth` | `src/hooks/useAuth.ts` | Manages Supabase Auth session state. Exposes `user`, `loading`, `signIn`, `signUp`, `signOut`. Subscribes to `onAuthStateChange`. |
-| `useChat` | `src/hooks/useChat.ts` | Manages active conversation messages. Loads from DB, sends to edge function, consumes SSE stream via `ReadableStream` reader with `TextDecoder`, line-by-line parser for `data:` events and `[DONE]` termination. Persists messages on completion. |
+| `useChat` | `src/hooks/useChat.ts` | Manages active conversation messages. Loads from DB, sends `scanMode` ("fast" \| "deep") to edge function, consumes SSE stream via `ReadableStream` reader with `TextDecoder`, line-by-line parser for `data:` events and `[DONE]` termination. Persists messages on completion. |
 | `useChatHistory` | `src/hooks/useChatHistory.ts` | CRUD on `conversations` table. Provides `fetchConversations`, `createConversation`, `updateTitle`, `deleteConversation`, `clearAllHistory`, `touchConversation`. |
 
 ### Design System

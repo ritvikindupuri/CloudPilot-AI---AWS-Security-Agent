@@ -35,14 +35,25 @@ Real-time AWS security operations. Connect your credentials to audit, investigat
 
 ---
 
-## Smart Intent Router — Two-Model Architecture
+## Smart Intent Router & Dual Scan Engines
 
-CloudPilot AI employs a lightweight LLM-based intent router that classifies each user query before engaging the main agent:
+CloudPilot AI features a **Dual Scan Engine architecture** combined with a lightweight LLM intent router, allowing users to choose the optimal balance of speed, cost, and reasoning depth:
+
+### Scan Modes
+
+| Mode | Engine / Model | Speed | Ideal Use Cases |
+|------|---------------|-------|-----------------|
+| **⚡ Fast Scan** | Claude 3.5 Sonnet | ~2–5 sec | Quick security audits, listing S3 buckets, inspecting security group rules, and everyday interactive queries. |
+| **🔍 Deep Audit** | Claude 3 Opus / Extended Reasoning | ~10–20 sec | Multi-pass CIS Benchmark evaluations, nested security group cross-references, IAM privilege escalation path discovery, and historical CloudTrail event correlation. |
+
+### Intent Classifier Matrix
+
+The Intent Router pre-classifies queries to select only the required tool subset:
 
 | Component | Model | Purpose |
 |-----------|-------|---------|
 | **Intent Classifier** | Claude 3.5 Sonnet | Single-shot query classification into 9 intent categories (~100-200ms) |
-| **Main Agent** | Claude 3.5 Sonnet | Multi-iteration agentic loop with filtered tool set (up to 15 iterations) |
+| **Main Agent** | Claude 3.5 Sonnet / Claude 3 Opus | Multi-iteration agentic loop with filtered tool set (up to 15 iterations) |
 | **Safety Gate Judge** | Claude 3.5 Sonnet | Audits proposed AWS API tool calls against safety policies and user intent |
 
 ### Intent Categories
@@ -59,11 +70,12 @@ CloudPilot AI employs a lightweight LLM-based intent router that classifies each
 | `direct_query` | 1 tool | "List my S3 buckets" |
 | `general` | All 15 tools | Ambiguous or multi-domain queries |
 
-### Why Claude 3.5 Sonnet?
+### Why Claude 3.5 Sonnet & Claude 3 Opus?
 
 - **Top-Tier Tool Calling**: Native function-calling and tool-use support with near-zero hallucination rates, ensuring correct AWS SDK payloads.
 - **Advanced Cloud Reasoning**: Excellent understanding of cloud security benchmarks, IAM structures, cost vectors, and drift patterns.
 - **Safety Gate Integration**: High-precision evaluation of API payloads against user safety rules, preventing accidental data loss or security breaches.
+- **Anthropic Cyber Verification Program**: Fully authorized under `Org ID: 38788112-a992-4ebe-a040-de2590eb13bf`, enabling uninhibited security auditing and red-teaming across both model tiers.
 
 ---
 
