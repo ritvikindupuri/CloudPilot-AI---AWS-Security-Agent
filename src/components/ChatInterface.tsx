@@ -702,7 +702,7 @@ const ChatInterface = () => {
                 <TooltipContent side="top" className="max-w-xs bg-card border-border p-3 text-xs shadow-xl space-y-1">
                   <div className="flex items-center gap-1.5 font-bold text-primary text-xs">
                     <FastScanIcon className="w-4 h-4 text-primary" />
-                    <span>⚡ Fast Scan (Claude 3.5 Sonnet)</span>
+                    <span>Fast Scan (Claude 3.5 Sonnet)</span>
                   </div>
                   <p className="text-muted-foreground text-[11px] leading-relaxed">
                     <strong>Speed:</strong> ~2–5 seconds.<br />
@@ -730,7 +730,7 @@ const ChatInterface = () => {
                 <TooltipContent side="top" className="max-w-xs bg-card border-border p-3 text-xs shadow-xl space-y-1">
                   <div className="flex items-center gap-1.5 font-bold text-blue-400 text-xs">
                     <DeepAuditIcon className="w-4 h-4 text-blue-400" />
-                    <span>🔍 Deep Audit (Claude 3 Opus)</span>
+                    <span>Deep Audit (Claude 3 Opus)</span>
                   </div>
                   <p className="text-muted-foreground text-[11px] leading-relaxed">
                     <strong>Speed:</strong> ~10–20 seconds.<br />
