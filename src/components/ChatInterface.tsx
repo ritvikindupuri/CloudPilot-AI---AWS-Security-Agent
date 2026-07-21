@@ -178,12 +178,14 @@ const ChatInterface = () => {
     clearMessages();
   };
 
+  const [scanMode, setScanMode] = useState<"fast" | "deep">("fast");
+
   const handleSend = async () => {
     const trimmed = input.trim();
     if (!trimmed || isLoading || !credentials?.session) return;
     setInput("");
 
-    await sendMessage(trimmed, credentials, currentConvId);
+    await sendMessage(trimmed, credentials, currentConvId, scanMode);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -196,7 +198,7 @@ const ChatInterface = () => {
   const handleQuickAction = async (prompt: string) => {
     setIsQuickActionsOpen(false);
     setInput("");
-    await sendMessage(prompt, credentials, currentConvId);
+    await sendMessage(prompt, credentials, currentConvId, scanMode);
   };
 
   const handleSaveNotificationEmail = (email: string) => {
@@ -674,6 +676,43 @@ const ChatInterface = () => {
                 <div ref={bottomRef} />
               </div>
             )}
+          </div>
+
+          {/* Scan Mode Selector & Quick Actions Control Bar */}
+          <div className="px-4 py-2 border-t border-border bg-card/70 flex items-center justify-between gap-2 max-w-3xl mx-auto text-xs">
+            <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border/40">
+              <button
+                type="button"
+                onClick={() => setScanMode("fast")}
+                className={`px-2.5 py-1 rounded text-[11px] font-mono transition-all flex items-center gap-1 ${
+                  scanMode === "fast"
+                    ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <span>⚡ Fast Scan (Sonnet 3.5)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setScanMode("deep")}
+                className={`px-2.5 py-1 rounded text-[11px] font-mono transition-all flex items-center gap-1 ${
+                  scanMode === "deep"
+                    ? "bg-blue-600 text-white font-semibold shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <span>🔍 Deep Audit (Opus / Extended Reasoning)</span>
+              </button>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsQuickActionsOpen(true)}
+              className="text-[11px] h-7 gap-1 text-primary border-primary/30 hover:bg-primary/10"
+            >
+              <Sparkles className="w-3 h-3" /> Quick Actions
+            </Button>
           </div>
 
           {/* Input area */}

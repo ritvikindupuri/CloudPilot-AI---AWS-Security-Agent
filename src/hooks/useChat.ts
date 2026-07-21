@@ -288,7 +288,8 @@ export const useChat = (
     async (
       content: string,
       credentials: AwsCredentials | null,
-      convId?: string | null
+      convId?: string | null,
+      scanMode: "fast" | "deep" = "fast"
     ) => {
       if (!credentials) return;
 
@@ -395,6 +396,7 @@ export const useChat = (
               conversationId: targetConvId || null,
               geminiApiKey: customGeminiKey || null,
               assistantId: assistantId,
+              scanMode: scanMode || "fast",
             }),
           }
         );
