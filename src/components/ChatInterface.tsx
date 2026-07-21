@@ -16,6 +16,7 @@ import OnboardingWizard from "@/components/OnboardingWizard";
 import MfaSetup from "@/components/MfaSetup";
 import WebhookSettings from "@/components/WebhookSettings";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
+import { FastScanIcon, DeepAuditIcon } from "@/components/ScanModeIcons";
 import { useChat } from "@/hooks/useChat";
 import { useAuth } from "@/hooks/useAuth";
 import { useChatHistory } from "@/hooks/useChatHistory";
@@ -685,24 +686,26 @@ const ChatInterface = () => {
                 <button
                   type="button"
                   onClick={() => setScanMode("fast")}
-                  className={`px-2.5 py-1 rounded text-[11px] font-mono transition-all flex items-center gap-1 ${
+                  className={`px-2.5 py-1 rounded text-[11px] font-mono transition-all flex items-center gap-1.5 ${
                     scanMode === "fast"
                       ? "bg-primary text-primary-foreground font-semibold shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <span>⚡ Fast Scan (Sonnet 3.5)</span>
+                  <FastScanIcon className="w-3.5 h-3.5" />
+                  <span>Fast Scan (Sonnet 3.5)</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setScanMode("deep")}
-                  className={`px-2.5 py-1 rounded text-[11px] font-mono transition-all flex items-center gap-1 ${
+                  className={`px-2.5 py-1 rounded text-[11px] font-mono transition-all flex items-center gap-1.5 ${
                     scanMode === "deep"
                       ? "bg-blue-600 text-white font-semibold shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <span>🔍 Deep Audit (Opus / Extended Reasoning)</span>
+                  <DeepAuditIcon className="w-3.5 h-3.5" />
+                  <span>Deep Audit (Opus / Extended Reasoning)</span>
                 </button>
               </div>
 
@@ -731,7 +734,8 @@ const ChatInterface = () => {
                   <div className="space-y-3 pt-2 text-xs">
                     <div className="border border-border/60 rounded-lg p-3 bg-muted/30 space-y-1">
                       <div className="flex items-center gap-1.5 font-bold text-primary text-xs">
-                        <span>⚡ Fast Scan (Claude 3.5 Sonnet)</span>
+                        <FastScanIcon className="w-4 h-4 text-primary" />
+                        <span>Fast Scan (Claude 3.5 Sonnet)</span>
                       </div>
                       <p className="text-muted-foreground text-[11px] leading-relaxed">
                         <strong>Speed:</strong> ~2–5 seconds.<br />
@@ -741,7 +745,8 @@ const ChatInterface = () => {
 
                     <div className="border border-blue-500/30 rounded-lg p-3 bg-blue-500/5 space-y-1">
                       <div className="flex items-center gap-1.5 font-bold text-blue-400 text-xs">
-                        <span>🔍 Deep Audit (Claude 3 Opus / Extended Reasoning)</span>
+                        <DeepAuditIcon className="w-4 h-4 text-blue-400" />
+                        <span>Deep Audit (Claude 3 Opus / Extended Reasoning)</span>
                       </div>
                       <p className="text-muted-foreground text-[11px] leading-relaxed">
                         <strong>Speed:</strong> ~10–20 seconds.<br />

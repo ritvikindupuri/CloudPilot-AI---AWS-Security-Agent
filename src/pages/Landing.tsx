@@ -649,8 +649,8 @@ const Landing = () => {
               },
               {
                 icon: Cpu,
-                title: "Smart Intent Routing",
-                desc: "Classifies natural user prompts, loading only the exact AWS API tools required to limit token footprints."
+                title: "Dual Scan Engines",
+                desc: "Single-click toggle between Fast Scan (Claude 3.5 Sonnet) for 2-second audits and Deep Audit (Claude 3 Opus) for multi-pass CIS benchmarks."
               },
               {
                 icon: RefreshCw,
