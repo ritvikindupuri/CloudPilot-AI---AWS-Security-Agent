@@ -12,23 +12,28 @@ Real-time AWS security operations. Connect your credentials to audit, investigat
 
 ## System Architecture
 
-![CloudPilot AI — Simplified Architecture](https://i.imgur.com/YFuCjwL.png)
+![CloudPilot AI — System Architecture and Request Flow](https://i.imgur.com/4uQbqr3.png)
 <div align="center">
-  <em>Figure 1: CloudPilot AI System Architecture and Request Flow</em>
+  <em>Figure 1: CloudPilot AI End-to-End System Architecture and Request Flow</em>
 </div>
 
 ### Step-by-Step Architecture Flow
 
-1. **User + React Web App (Step 1)**: The Security Engineer inputs a security query, triggers a Quick Action, or inspects findings via the React Web App (`src/pages/Landing.tsx`, `ChatInterface.tsx`).
-2. **Auth + AWS Credential Exchange (Step 2)**: Supabase Auth handles user identity and RBAC. `aws-exchange-credentials` validates keys or AssumeRole ARNs against AWS STS, issuing temporary 1-hour session tokens with **zero raw-key storage**.
-3. **aws-agent Orchestrator (Step 3)**: The prompt reaches the core `aws-agent` Orchestrator edge function, which executes a 3-stage LLM evaluation loop:
-   - **Intent Classifier:** Classifies intent and filters the active tool set.
+1. **User + React Web App & Scan Mode Selector (Step 1)**: The Security Engineer inputs a prompt or triggers a Quick Action via the React Web App (`src/pages/Landing.tsx`, `ChatInterface.tsx`). The user selects the active AI engine via the **Scan Mode** toggle bar:
+   - **⚡ Fast Scan (Sonnet 3.5)**: Standard single-pass execution for quick audits, security group checks, and everyday queries (~2–5 sec).
+   - **🔍 Deep Security Audit (Opus / Deep Reasoning)**: Extended multi-pass execution for CIS Benchmark evaluations, IAM privilege escalation paths, and CloudTrail correlation (~10–20 sec).
+2. **Auth + AWS Credential Exchange (Step 2)**: Supabase Auth handles user identity and RBAC. `aws-exchange-credentials` validates access keys or AssumeRole ARNs against AWS STS, issuing temporary 1-hour session tokens with **zero raw-key storage**.
+3. **aws-agent Orchestrator (Step 3)**: The prompt reaches the core `aws-agent` Orchestrator edge function, which executes a 4-stage pipeline:
+   - **Intent Classifier:** Classifies query intent and filters the active tool set.
    - **Claude Main Agent:** Generates proposed AWS SDK tool calls based on user intent.
+   - **Scan Mode Router:** Evaluates request complexity and applies single-pass or extended reasoning execution strategies.
    - **Safety Gate Judge:** Audits proposed tool calls and outputs a live `[Safety Gate] APPROVED` or `REJECTED` verdict.
-4. **aws-agent-tools Router (Step 4)**: Dispatches approved tool calls to specialized domain execution modules.
-5. **Execution Engines (Step 5)**: Routes execution to either `aws-agent-scanner` (security audits, cost scans, drift detection, direct queries) or `aws-agent-ops` (runbooks, IAM changes, security group changes, org ops, attack simulation).
-6. **aws-executor (Step 6)**: The centralized AWS SDK proxy handles authentication and dispatches real API calls (`v3Send`) against AWS endpoints.
-7. **Customer AWS Account & Integrations (Step 7)**: Executes commands directly against target AWS services (`IAM`, `S3`, `EC2`, `VPC`, `CloudTrail`, `CloudWatch`, `GuardDuty`, `Organizations`, `Cost Explorer`, `SNS`, `STS`, `Lambda`). Real-time alerts are sent to `Notifications` (Slack, PagerDuty, webhooks, SNS/email) and logged to `Compliance & Governance` (approval workflows, audit timelines, evidence exports).
+4. **aws-agent-tools Router & Execution Path (Step 4)**: Dispatches tool calls by domain through the appropriate path:
+   - **Fast Scan Path (Single-Pass)**: Direct, single-pass tool execution (~2–5 sec).
+   - **Deep Audit Path (Multi-Pass)**: Extended reasoning and recursive, multi-step tool execution (~10–20 sec).
+5. **Domain Execution Engines (Step 5)**: Routes execution to either `aws-agent-scanner` (security audits, cost scans, drift detection, direct queries) or `aws-agent-ops` (runbooks, IAM changes, security group changes, org ops, attack simulation).
+6. **aws-executor (Step 6)**: Centralized AWS SDK proxy executing single-pass or recursive multi-pass API calls directly against AWS endpoints.
+7. **Customer AWS Account & Deep Audit Capabilities (Step 7)**: Executes commands directly against AWS services (`IAM`, `S3`, `EC2`, `VPC`, `CloudTrail`, `CloudWatch`, `GuardDuty`, `Organizations`, `Cost Explorer`, `SNS`, `STS`, `Lambda`). In Deep Audit mode, unlocks CIS Benchmark evaluation, IAM privilege escalation path discovery, nested security group analysis, cross-account trust analysis, S3 ACL/policy inspection, and CloudTrail historical correlation. Real-time alerts route to `Notifications` (Slack, PagerDuty, webhooks, SNS/email) and log to `Compliance & Governance` (approval workflows, audit timelines, evidence exports).
 8. **Results Returned to App (Step 8)**: Real AWS API responses return to `aws-agent`. Claude synthesizes live findings, remediation guidance, reports, and approved actions, streaming live Markdown back to the React Web App via SSE.
 
 ---
