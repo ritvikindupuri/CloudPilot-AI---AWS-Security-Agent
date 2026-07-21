@@ -680,29 +680,77 @@ const ChatInterface = () => {
 
           {/* Scan Mode Selector & Quick Actions Control Bar */}
           <div className="px-4 py-2 border-t border-border bg-card/70 flex items-center justify-between gap-2 max-w-3xl mx-auto text-xs">
-            <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border/40">
-              <button
-                type="button"
-                onClick={() => setScanMode("fast")}
-                className={`px-2.5 py-1 rounded text-[11px] font-mono transition-all flex items-center gap-1 ${
-                  scanMode === "fast"
-                    ? "bg-primary text-primary-foreground font-semibold shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <span>⚡ Fast Scan (Sonnet 3.5)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setScanMode("deep")}
-                className={`px-2.5 py-1 rounded text-[11px] font-mono transition-all flex items-center gap-1 ${
-                  scanMode === "deep"
-                    ? "bg-blue-600 text-white font-semibold shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <span>🔍 Deep Audit (Opus / Extended Reasoning)</span>
-              </button>
+            <div className="flex items-center gap-1.5 font-sans">
+              <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border/40">
+                <button
+                  type="button"
+                  onClick={() => setScanMode("fast")}
+                  className={`px-2.5 py-1 rounded text-[11px] font-mono transition-all flex items-center gap-1 ${
+                    scanMode === "fast"
+                      ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <span>⚡ Fast Scan (Sonnet 3.5)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScanMode("deep")}
+                  className={`px-2.5 py-1 rounded text-[11px] font-mono transition-all flex items-center gap-1 ${
+                    scanMode === "deep"
+                      ? "bg-blue-600 text-white font-semibold shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <span>🔍 Deep Audit (Opus / Extended Reasoning)</span>
+                </button>
+              </div>
+
+              {/* Scan Mode Info Dialog */}
+              <Dialog>
+                <DialogTrigger asChild>
+                  <button
+                    type="button"
+                    className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors"
+                    title="Compare Scan Modes"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5" />
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md bg-card border-border">
+                  <DialogHeader>
+                    <DialogTitle className="text-base font-bold flex items-center gap-2">
+                      <Settings2 className="w-4 h-4 text-primary" />
+                      Scan Mode Comparison
+                    </DialogTitle>
+                    <DialogDescription className="text-xs text-muted-foreground">
+                      Choose the AI reasoning engine tailored to your audit requirements.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-3 pt-2 text-xs">
+                    <div className="border border-border/60 rounded-lg p-3 bg-muted/30 space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold text-primary text-xs">
+                        <span>⚡ Fast Scan (Claude 3.5 Sonnet)</span>
+                      </div>
+                      <p className="text-muted-foreground text-[11px] leading-relaxed">
+                        <strong>Speed:</strong> ~2–5 seconds.<br />
+                        <strong>Best for:</strong> Single-service checks, listing buckets, inspecting security group rules, and everyday interactive queries.
+                      </p>
+                    </div>
+
+                    <div className="border border-blue-500/30 rounded-lg p-3 bg-blue-500/5 space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold text-blue-400 text-xs">
+                        <span>🔍 Deep Audit (Claude 3 Opus / Extended Reasoning)</span>
+                      </div>
+                      <p className="text-muted-foreground text-[11px] leading-relaxed">
+                        <strong>Speed:</strong> ~10–20 seconds.<br />
+                        <strong>Best for:</strong> Multi-pass CIS Benchmark audits, complex IAM privilege escalation path mapping, nested security group cross-references, and historical CloudTrail event correlation.
+                      </p>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
 
             <Button
