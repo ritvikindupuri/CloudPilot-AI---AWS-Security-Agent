@@ -1,6 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, ShieldAlert, Check, X } from "lucide-react";
+import { ShieldCheck, ShieldAlert, Check, X, Sparkles } from "lucide-react";
+import { FastScanIcon, DeepAuditIcon } from "./ScanModeIcons";
 import { AwsCredentials } from "./AwsCredentialsPanel";
 
 const POLICY_COVERED_PREFIXES = [
@@ -18,6 +19,8 @@ interface QuickActionPermissionsDialogProps {
   requiredPermissions: string[];
   credentials: AwsCredentials | null;
   onConfirm: () => void;
+  recommendedMode?: "fast" | "deep";
+  recommendationReason?: string;
 }
 
 export function QuickActionPermissionsDialog({
@@ -28,6 +31,8 @@ export function QuickActionPermissionsDialog({
   requiredPermissions,
   credentials,
   onConfirm,
+  recommendedMode = "fast",
+  recommendationReason,
 }: QuickActionPermissionsDialogProps) {
   const canAutoGrant = Boolean(
     credentials?.permissions?.["iam:AttachUserPolicy"] ||
@@ -50,6 +55,29 @@ export function QuickActionPermissionsDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto pr-2 mt-4 space-y-4">
+          {/* Smart Mode Recommendation Banner */}
+          <div className={`border rounded-lg p-3 text-xs flex items-start gap-2.5 ${
+            recommendedMode === "deep"
+              ? "bg-blue-500/10 border-blue-500/30 text-blue-300"
+              : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+          }`}>
+            {recommendedMode === "deep" ? (
+              <DeepAuditIcon className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+            ) : (
+              <FastScanIcon className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+            )}
+            <div>
+              <span className="font-bold block text-xs mb-0.5">
+                {recommendedMode === "deep" ? "🔍 Deep Audit Recommended" : "⚡ Fast Scan Optimal"}
+              </span>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                {recommendationReason || (recommendedMode === "deep"
+                  ? "Multi-pass recursive analysis recommended for full attack path mapping and compliance benchmarking."
+                  : "Single-pass execution handles this query fast (~2–5s) with low token footprint.")}
+              </p>
+            </div>
+          </div>
+
           <div className="border border-border/80 rounded-lg bg-card/60 p-3 text-xs leading-relaxed text-muted-foreground border-blue-500/10">
             <span className="font-bold text-foreground block mb-1">Action Description</span>
             {prompt}
