@@ -25,9 +25,6 @@ For security operations with absolute privacy requirements, the backend supports
 
 By tightly coupling LLM reasoning capabilities with strict, restricted, and auditable AWS API execution, CloudPilot AI empowers security teams to conduct complex authorized attack simulations, map compliance against major frameworks (CIS, NIST, PCI-DSS), perform incident response, and generate context-aware CLI remediation commands—all from a single, unified interface.
 
-> [!NOTE]
-> **Anthropic Cyber Verification Program Authorization:** CloudPilot AI is formally authorized under Anthropic's Cyber Verification Program. Default AI safety guardrails are adjusted for dual-use defensive security tasks, enabling uninhibited IAM privilege escalation auditing, red-teaming simulations, and automated vulnerability scanning without false-positive refusal blocks.
-
 ---
 
 ## Table of Contents

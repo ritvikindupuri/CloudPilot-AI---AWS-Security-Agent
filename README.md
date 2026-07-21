@@ -8,8 +8,6 @@ Real-time AWS security operations. Connect your credentials to audit, investigat
 
 **Review our comprehensive [Security Manual](SECURITY.md) for a detailed breakdown of our Zero-Trust architecture, multi-stage guardrails, threat model, and compliance logging.**
 
-**Anthropic Cyber Verification Program Approved:** CloudPilot AI is formally authorized under Anthropic's Cyber Verification Program for dual-use defensive security tasks and uninhibited threat simulations.
-
 ---
 
 ## System Architecture
@@ -75,7 +73,6 @@ The Intent Router pre-classifies queries to select only the required tool subset
 - **Top-Tier Tool Calling**: Native function-calling and tool-use support with near-zero hallucination rates, ensuring correct AWS SDK payloads.
 - **Advanced Cloud Reasoning**: Excellent understanding of cloud security benchmarks, IAM structures, cost vectors, and drift patterns.
 - **Safety Gate Integration**: High-precision evaluation of API payloads against user safety rules, preventing accidental data loss or security breaches.
-- **Anthropic Cyber Verification Program**: Fully authorized under `Org ID: 38788112-a992-4ebe-a040-de2590eb13bf`, enabling uninhibited security auditing and red-teaming across both model tiers.
 
 ---
 

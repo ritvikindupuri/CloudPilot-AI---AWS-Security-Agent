@@ -12,7 +12,6 @@ This document provides an in-depth breakdown of the security measures, guardrail
 - [5. Mitigation of Cloud-Specific Threat Vectors](#5-mitigation-of-cloud-specific-threat-vectors)
 - [6. WORM Compliance & Audit Trailing](#6-worm-compliance--audit-trailing)
 - [7. Model Selection Rationale: Anthropic Claude 3.5 Sonnet](#7-model-selection-rationale-anthropic-claude-35-sonnet)
-- [8. Anthropic Cyber Verification Program Authorization](#8-anthropic-cyber-verification-program-authorization)
 
 ---
 
@@ -175,13 +174,3 @@ CloudPilot AI standardizes on **Anthropic Claude 3.5 Sonnet** across all three m
 ### 4. Pipeline Efficiency Benefits
 * **Unified Caching:** Standardizing on a single model family allows the Deno edge container to optimize API gateway caching, reducing overall latency.
 * **Consistent Context Alignment:** The three personas maintain identical formatting styles and context mapping logic, minimizing formatting errors when feeding outputs from one stage into another.
-
----
-
-## 8. Anthropic Cyber Verification Program Authorization
-
-CloudPilot AI is formally authorized under **Anthropic's Cyber Verification Program** for dual-use defensive security tasks and threat simulations. 
-
-### Purpose & Safeguard Adjustments
-* **Dual-Use Security Activities:** Default AI safety classifiers have been adjusted for CloudPilot AI's organization to enable authorized, dual-use defensive security tasks—including live IAM privilege escalation auditing, penetration testing simulations, red-teaming checks, and automated vulnerability scanning.
-* **Uninterrupted Operations:** This authorization eliminates model-side false positive blocks during complex attack simulation audits, ensuring that security engineers receive uninterrupted, high-fidelity security analysis while maintaining strict adherence to prohibited-use boundaries (such as C2 infrastructure or ransomware).
