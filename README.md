@@ -20,8 +20,8 @@ Real-time AWS security operations. Connect your credentials to audit, investigat
 ### Step-by-Step Architecture Flow
 
 1. **User + React Web App & Scan Mode Selector (Step 1)**: The Security Engineer inputs a prompt or triggers a Quick Action via the React Web App (`src/pages/Landing.tsx`, `ChatInterface.tsx`). The user selects the active AI engine via the **Scan Mode** toggle bar:
-   - **⚡ Fast Scan**: Uses **Claude 3.5 Sonnet** for standard single-pass execution (~2–5 sec) on quick audits, security group checks, and everyday queries.
-   - **🔍 Deep Security Audit**: Uses **Claude 3 Opus** (with extended reasoning limits) for multi-pass execution (~10–20 sec) on CIS Benchmark evaluations, IAM privilege escalation paths, and CloudTrail correlation.
+   - ** Fast Scan**: Uses **Claude 3.5 Sonnet** for standard single-pass execution (~2–5 sec) on quick audits, security group checks, and everyday queries.
+   - ** Deep Security Audit**: Uses **Claude 3 Opus** (with extended reasoning limits) for multi-pass execution (~10–20 sec) on CIS Benchmark evaluations, IAM privilege escalation paths, and CloudTrail correlation.
 2. **Auth + AWS Credential Exchange (Step 2)**: Supabase Auth handles user identity and RBAC. `aws-exchange-credentials` validates access keys or AssumeRole ARNs against AWS STS, issuing temporary 1-hour session tokens with **zero raw-key storage**.
 3. **aws-agent Orchestrator (Step 3)**: The prompt reaches the core `aws-agent` Orchestrator edge function, which executes a 4-stage pipeline:
    - **Intent Classifier:** Classifies query intent and filters the active tool set.
