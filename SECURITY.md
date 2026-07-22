@@ -109,6 +109,31 @@ After programmatic checks pass, a secondary, isolated LLM call (Claude 3.5 Sonne
 * **Vulnerability Guard:** Rejects rules that open security vulnerabilities (e.g. wide-open port 22/3389 security groups) **UNLESS** the user has explicitly requested an authorized **Attack Simulation** or Red-Team test.
 * **Autonomous Self-Correction Loop:** When the Safety Gate Judge blocks an action, the agent doesn't fail. Instead, the rejection feedback is fed back into the agent's memory as a mock tool response (e.g., *"Action blocked by Safety Gate: [Reason]"*). The agent then autonomously attempts to find a safe alternative configuration (e.g., narrowing security group CIDRs). This loop will retry up to 15 times inside Deno before halting.
 
+### Attack Simulation Safeguards & Operational Philosophy
+
+To safely run attack simulation prompts (such as privilege escalation discovery, exfiltration path mapping, or lateral movement tests) without exposing the user's AWS environments to malicious compromise, CloudPilot enforces four core architectural pillars:
+
+1. **Attack Simulations are Read-Only Scans (No Actual Damage)**
+   Most "attack simulation" prompts (like mapping privilege escalation paths or S3 exfiltration routes) do not actually execute an attack. Instead, they are passive, read-only vulnerability scans:
+   - The agent reads the IAM configuration and reports: *"This user has permissions that could allow them to assume AdminRole."*
+   - No real permissions are modified, no data is exfiltrated, and no damage is done. It is purely an analytical audit.
+
+2. **The Safety Gate Judge Blocks Mutating Actions**
+   If a prompt attempts to perform a real, mutating action (like actually creating a new admin account, changing a security group, or disabling CloudTrail logging), the Safety Gate Judge intercepts it:
+   - It classifies the action as a mutation.
+   - It immediately blocks execution and demands explicit, manual user confirmation and approval before any AWS API write call is dispatched.
+
+3. **The AWS IAM Boundary (The Ultimate Sandbox)**
+   The agent has no credentials of its own. It runs exclusively using the temporary AWS STS session tokens provided by the active user:
+   - If an attacker gains access to the chat, they cannot execute any command that the user's own IAM policy does not allow.
+   - If the user connected a read-only Access Key (like `SecurityAudit`), AWS itself will block any attempt to create resources, delete logs, or change permissions. The application cannot bypass AWS's native access controls.
+
+4. **Sandboxed Pen Testing is Separated**
+   For prompts that do launch resources (like the Auto Pen Test which spins up a temporary vulnerable EC2 instance to test detection alerts):
+   - It requires explicit user approval first.
+   - It is isolated to a brand-new, temporary VPC sandbox.
+   - The agent automates the immediate teardown and deletion of all created resources once the simulation is complete.
+
 ---
 
 ## 4. Network Security & Private VPC Routing
