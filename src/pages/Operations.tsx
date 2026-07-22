@@ -612,6 +612,55 @@ const Operations = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        {/* How to Populate Guidance Banner */}
+        <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-start gap-3">
+          <HelpCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <h4 className="text-sm font-semibold text-foreground">How is this dashboard populated?</h4>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Operations data is generated dynamically in real time as you query the security agent in the main console. Run one of these prompt commands in the chat interface to populate the metrics below:
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+              <div className="bg-background/40 p-2.5 rounded border border-border/80 flex flex-col justify-between">
+                <div>
+                  <span className="font-semibold text-[11px] block mb-1 text-primary">⚡ Runbooks</span>
+                  <p className="text-[10px] text-muted-foreground mb-2">Triggers when executing playbooks.</p>
+                </div>
+                <code className="text-[9px] bg-muted px-1.5 py-1 rounded text-foreground font-mono block select-all cursor-pointer hover:bg-muted/80 transition-colors">
+                  "Run the public S3 lockdown playbook in dry-run"
+                </code>
+              </div>
+              <div className="bg-background/40 p-2.5 rounded border border-border/80 flex flex-col justify-between">
+                <div>
+                  <span className="font-semibold text-[11px] block mb-1 text-emerald-400">⚡ Configuration Drift</span>
+                  <p className="text-[10px] text-muted-foreground mb-2">Compares live states against baselines.</p>
+                </div>
+                <code className="text-[9px] bg-muted px-1.5 py-1 rounded text-foreground font-mono block select-all cursor-pointer hover:bg-muted/80 transition-colors">
+                  "Capture baseline for security groups"
+                </code>
+              </div>
+              <div className="bg-background/40 p-2.5 rounded border border-border/80 flex flex-col justify-between">
+                <div>
+                  <span className="font-semibold text-[11px] block mb-1 text-blue-400">⚡ Cost & Event Rules</span>
+                  <p className="text-[10px] text-muted-foreground mb-2">Registers thresholds & event filters.</p>
+                </div>
+                <code className="text-[9px] bg-muted px-1.5 py-1 rounded text-foreground font-mono block select-all cursor-pointer hover:bg-muted/80 transition-colors">
+                  "Alert me if daily spend exceeds $200"
+                </code>
+              </div>
+              <div className="bg-background/40 p-2.5 rounded border border-border/80 flex flex-col justify-between">
+                <div>
+                  <span className="font-semibold text-[11px] block mb-1 text-orange-400">⚡ High-Risk Approvals</span>
+                  <p className="text-[10px] text-muted-foreground mb-2">Queues during write mutations.</p>
+                </div>
+                <code className="text-[9px] bg-muted px-1.5 py-1 rounded text-foreground font-mono block select-all cursor-pointer hover:bg-muted/80 transition-colors">
+                  "Close open ports on security group sg-12345"
+                </code>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div id="tour-step-1" className={`grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 transition-all duration-300 ${tourStep === 1 ? "relative z-40 ring-4 ring-primary ring-offset-4 ring-offset-background p-1 rounded-xl shadow-[0_0_30px_rgba(var(--primary),0.55)] scale-[1.01] bg-primary/5" : ""}`}>
           {[
             { label: "Event Policies", value: eventPolicies.length, icon: Shield },
