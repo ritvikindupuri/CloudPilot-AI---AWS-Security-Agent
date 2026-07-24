@@ -468,40 +468,42 @@ const ChatInterface = () => {
                         {auditSummary ? <Check className="w-4 h-4" /> : <Gauge className="w-4 h-4" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-semibold flex items-center gap-1.5 flex-wrap">
-                          Step 2: Run first security audit
-                          {auditSummary && <span className="text-[10px] bg-green-500/10 text-green-400 px-1.5 py-0.5 rounded font-mono">Score: {auditSummary.accountHealthScore}/100</span>}
-                        </h3>
-                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                          Analyze your AWS configurations across IAM, S3, Security Groups, and Costs to map compliance and compute your health score.
-                        </p>
+                         <h3 className="text-sm font-semibold flex items-center gap-1.5 flex-wrap">
+                            Step 2: Run first security audit
+                            {auditSummary && <span className="text-[10px] bg-green-500/10 text-green-400 px-1.5 py-0.5 rounded font-mono">Score: {auditSummary.accountHealthScore}/100</span>}
+                          </h3>
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                            Analyze your AWS configurations across IAM, S3, Security Groups, and Costs to map compliance and compute your security score.
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {credentials && !auditSummary && (
+                        <div className="mt-3">
+                          <Button 
+                            variant="terminal" 
+                            size="xs" 
+                            onClick={() => handleQuickAction("Show me everything wrong with my AWS account. Run a formal unified audit across IAM, S3, security groups, EC2, and cost exposure. Return a neatly formatted report with an executive summary, top three issues, recommended fix order, and notable patterns.")}
+                            disabled={isLoading}
+                            className="font-mono text-xs"
+                          >
+                            Run Account Security Scan
+                          </Button>
+                        </div>
+                      )}
 
-                        {credentials && !auditSummary && (
-                          <div className="mt-3">
-                            <Button 
-                              variant="terminal" 
-                              size="xs" 
-                              onClick={() => handleQuickAction("Show me everything wrong with my AWS account. Run a formal unified audit across IAM, S3, security groups, EC2, and cost exposure. Return a neatly formatted report with an executive summary, top three issues, recommended fix order, and notable patterns.")}
-                              disabled={isLoading}
-                              className="font-mono text-xs"
-                            >
-                              Run Account Security Scan
-                            </Button>
-                          </div>
-                        )}
-
-                        {auditSummary && (
-                          <div className="mt-4 pt-3 border-t border-border/40 space-y-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                              <div className="space-y-1">
-                                <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Account Health Score</p>
-                                <div className="flex items-baseline gap-1">
-                                  <span className={`text-2xl font-black ${scoreColor}`}>
-                                    {auditSummary.accountHealthScore}
-                                  </span>
-                                  <span className="text-xs text-muted-foreground">/ 100</span>
-                                </div>
+                      {auditSummary && (
+                        <div className="mt-4 pt-3 border-t border-border/40 space-y-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">Account Security Score</p>
+                              <div className="flex items-baseline gap-1">
+                                <span className={`text-2xl font-black ${scoreColor}`}>
+                                  {auditSummary.accountHealthScore}
+                                </span>
+                                <span className="text-xs text-muted-foreground">/ 100</span>
                               </div>
+                            </div>
                               <div className="grid grid-cols-4 gap-1.5">
                                 {[
                                   { label: "CRIT", value: auditSummary.totals.severityCounts.CRITICAL, className: "text-destructive" },
