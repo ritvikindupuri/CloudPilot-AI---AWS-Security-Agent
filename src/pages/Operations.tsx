@@ -243,6 +243,7 @@ const Operations = () => {
   const [tourStep, setTourStep] = useState<number | null>(null);
   const [automationRuns, setAutomationRuns] = useState<AutomationRunRow[]>([]);
   const [eventActivity, setEventActivity] = useState<GuardianEventActivityRow[]>([]);
+  const [guardianCreds, setGuardianCreds] = useState<GuardianCredentialRow[]>([]);
   const [approvalRequests, setApprovalRequests] = useState<ApprovalRequestRow[]>([]);
   const [approvalActions, setApprovalActions] = useState<ApprovalActionRow[]>([]);
   const [evidenceExports, setEvidenceExports] = useState<ComplianceEvidenceExportRow[]>([]);
