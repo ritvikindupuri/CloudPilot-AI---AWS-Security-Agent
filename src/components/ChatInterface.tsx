@@ -475,10 +475,8 @@ const ChatInterface = () => {
                           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                             Analyze your AWS configurations across IAM, S3, Security Groups, and Costs to map compliance and compute your security score.
                           </p>
-                        </div>
-                      </div>
-                      
-                      {credentials && !auditSummary && (
+                          
+                          {credentials && !auditSummary && (
                         <div className="mt-3">
                           <Button 
                             variant="terminal" 
