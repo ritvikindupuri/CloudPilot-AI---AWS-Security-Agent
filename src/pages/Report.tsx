@@ -244,25 +244,61 @@ const Report = () => {
       try {
         let msg: any = null;
         let resolvedMsgId = messageId;
+        let fetchedCache: any = null;
 
         // Auto-resolve latest report if requested
         if (messageId === "latest") {
-          const { data: latestMsg, error: latestMsgErr } = await (supabase
-            .from("messages" as any)
-            .select("id, content, created_at, conversation_id")
-            .eq("role", "assistant")
-            .order("created_at", { ascending: false })
+          // Fetch the absolute latest unified audit cache first so the dashboard is up-to-date
+          const { data: latestCache } = await (supabase
+            .from("unified_audit_cache" as any)
+            .select("response, last_refreshed_at")
+            .order("last_refreshed_at", { ascending: false })
             .limit(1)
             .maybeSingle() as any);
-          
-          if (latestMsgErr || !latestMsg) {
-            setError("No historical reports found in database.");
-            setLoading(false);
-            return;
+
+          if (latestCache && latestCache.response) {
+            fetchedCache = latestCache;
+            // Fetch the latest assistant message overall to act as the report reference
+            const { data: latestMsg } = await (supabase
+              .from("messages" as any)
+              .select("id, content, created_at, conversation_id")
+              .eq("role", "assistant")
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle() as any);
+
+            if (latestMsg) {
+              msg = latestMsg;
+              resolvedMsgId = latestMsg.id;
+            } else {
+              msg = {
+                id: "latest-cache",
+                content: "This report was generated directly from the latest AWS audit snapshot. No conversational AI report text is available.",
+                created_at: latestCache.last_refreshed_at,
+                conversation_id: "none",
+              };
+              resolvedMsgId = "latest-cache";
+            }
+          } else {
+            // Fallback if no cache exists yet
+            const { data: latestMsg, error: latestMsgErr } = await (supabase
+              .from("messages" as any)
+              .select("id, content, created_at, conversation_id")
+              .eq("role", "assistant")
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle() as any);
+            
+            if (latestMsgErr || !latestMsg) {
+              setError("No historical reports or audit scans found.");
+              setLoading(false);
+              return;
+            }
+            msg = latestMsg;
+            resolvedMsgId = latestMsg.id;
           }
-          msg = latestMsg;
-          resolvedMsgId = latestMsg.id;
         } else {
+          // Specific message ID requested - fetch that exact report
           const { data: fetchMsg, error: msgErr } = await (supabase
             .from("messages" as any)
             .select("id, content, created_at, conversation_id")
@@ -279,32 +315,45 @@ const Report = () => {
 
         setMessage(msg as ReportMessage);
 
-        // Fetch conversation details
-        const { data: conv } = await (supabase
-          .from("conversations" as any)
-          .select("title")
-          .eq("id", msg.conversation_id)
-          .single() as any);
+        // Fetch conversation details if we have a valid conversation ID
+        if (msg && msg.conversation_id && msg.conversation_id !== "none") {
+          const { data: conv } = await (supabase
+            .from("conversations" as any)
+            .select("title")
+            .eq("id", msg.conversation_id)
+            .single() as any);
 
-        if (conv) setConversation(conv as ReportConversation);
+          if (conv) setConversation(conv as ReportConversation);
+        } else {
+          setConversation({ title: "AWS Security Audit Snapshot" });
+        }
 
-        // Fetch the audit cache that was created/refreshed closest to this report message
-        const { data: cache } = await (supabase
-          .from("unified_audit_cache" as any)
-          .select("response, last_refreshed_at")
-          .lte("last_refreshed_at", msg.created_at)
-          .order("last_refreshed_at", { ascending: false })
-          .limit(1)
-          .maybeSingle() as any);
-
-        if (cache && cache.response) {
-          setAuditCache(cache.response as AuditCacheResponse);
+        // Fetch the corresponding cache
+        if (fetchedCache) {
+          setAuditCache(fetchedCache.response as AuditCacheResponse);
           if (!fromHistory) {
             setActiveTab("dashboard");
           }
         } else {
-          setActiveTab("report");
+          // Fetch the audit cache that was created/refreshed closest to this report message
+          const { data: cache } = await (supabase
+            .from("unified_audit_cache" as any)
+            .select("response, last_refreshed_at")
+            .lte("last_refreshed_at", msg.created_at)
+            .order("last_refreshed_at", { ascending: false })
+            .limit(1)
+            .maybeSingle() as any);
+
+          if (cache && cache.response) {
+            setAuditCache(cache.response as AuditCacheResponse);
+            if (!fromHistory) {
+              setActiveTab("dashboard");
+            }
+          } else {
+            setActiveTab("report");
+          }
         }
+
       } catch (err: any) {
         console.error("Failed to load report data:", err);
         setError("An unexpected error occurred loading report details.");
