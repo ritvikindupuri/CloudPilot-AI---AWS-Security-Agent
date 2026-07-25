@@ -1294,7 +1294,8 @@ async function getLLMResponse(
   apiMessages: any[],
   filteredTools: any[],
   toolChoice: "required" | "auto" | "none",
-  resolvedGeminiKey: string
+  resolvedGeminiKey: string,
+  modelName?: string
 ): Promise<{ content: string | null; tool_calls?: any[] }> {
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!anthropicKey) {
@@ -1361,7 +1362,7 @@ async function getLLMResponse(
           "content-type": "application/json"
         },
         body: JSON.stringify({
-          model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6",
+          model: modelName || Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6",
           max_tokens: 4000,
           system: systemMessage,
           messages: formattedMessages,
@@ -6208,7 +6209,7 @@ export const handler = async (req: Request): Promise<Response> => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { messages, credentials, notificationEmail, conversationId, geminiApiKey: clientGeminiKey, assistantId } = body;
+    const { messages, credentials, notificationEmail, conversationId, geminiApiKey: clientGeminiKey, assistantId, scanMode } = body;
     const resolvedGeminiKey = clientGeminiKey || RUNTIME_CONFIG.geminiApiKey;
 
     const supabaseAdmin = createClient(RUNTIME_CONFIG.supabaseUrl, RUNTIME_CONFIG.supabaseServiceRoleKey);
@@ -6362,7 +6363,11 @@ export const handler = async (req: Request): Promise<Response> => {
 
             let responseMessage: any;
             try {
-              const llmResp = await getLLMResponse(apiMessages, filteredTools, toolChoice, resolvedGeminiKey);
+              const selectedModel = scanMode === "deep"
+                ? (Deno.env.get("ANTHROPIC_DEEP_MODEL") || "claude-3-opus-20240229")
+                : (Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6");
+
+              const llmResp = await getLLMResponse(apiMessages, filteredTools, toolChoice, resolvedGeminiKey, selectedModel);
               responseMessage = {
                 role: "assistant",
                 content: llmResp.content,
