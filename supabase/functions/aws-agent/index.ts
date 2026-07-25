@@ -1265,7 +1265,7 @@ async function classifyIntent(
         "content-type": "application/json"
       },
       body: JSON.stringify({
-        model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6",
+        model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5",
         max_tokens: 100,
         system: INTENT_CLASSIFIER_PROMPT,
         messages: [
@@ -1498,7 +1498,7 @@ Return your response strictly in the following JSON format:
         "content-type": "application/json"
       },
       body: JSON.stringify({
-        model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6",
+        model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5",
         max_tokens: 500,
         system: "You are a strict, automated JSON-only security auditor. Return ONLY a single raw JSON object matching the requested schema. Do not output any markdown formatting, wrappers, or conversational explanations.",
         messages: [
@@ -6365,7 +6365,7 @@ export const handler = async (req: Request): Promise<Response> => {
             try {
               const selectedModel = scanMode === "deep"
                 ? (Deno.env.get("ANTHROPIC_DEEP_MODEL") || "claude-opus-5")
-                : (Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6");
+                : (Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5");
 
               const llmResp = await getLLMResponse(apiMessages, filteredTools, toolChoice, resolvedGeminiKey, selectedModel);
               responseMessage = {

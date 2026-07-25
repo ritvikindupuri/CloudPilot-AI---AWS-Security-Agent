@@ -650,7 +650,7 @@ const Landing = () => {
               {
                 icon: Cpu,
                 title: "Dual Scan Engines",
-                desc: "Single-click toggle between Fast Scan (Claude 3.5 Sonnet) for 2-second audits and Deep Audit (Claude Opus 5) for multi-pass CIS benchmarks."
+                desc: "Single-click toggle between Fast Scan (Claude Sonnet 5) for 2-second audits and Deep Audit (Claude Opus 5) for multi-pass CIS benchmarks."
               },
               {
                 icon: RefreshCw,
