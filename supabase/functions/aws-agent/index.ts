@@ -6364,7 +6364,7 @@ export const handler = async (req: Request): Promise<Response> => {
             let responseMessage: any;
             try {
               const selectedModel = scanMode === "deep"
-                ? (Deno.env.get("ANTHROPIC_DEEP_MODEL") || "claude-3-5-opus-20241022")
+                ? (Deno.env.get("ANTHROPIC_DEEP_MODEL") || "claude-opus-5")
                 : (Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6");
 
               const llmResp = await getLLMResponse(apiMessages, filteredTools, toolChoice, resolvedGeminiKey, selectedModel);

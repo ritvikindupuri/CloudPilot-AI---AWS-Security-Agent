@@ -21,11 +21,11 @@ Real-time AWS security operations. Connect your credentials to audit, investigat
 
 1. **User + React Web App & Scan Mode Selector (Step 1)**: The Security Engineer inputs a prompt or triggers a Quick Action via the React Web App (`src/pages/Landing.tsx`, `ChatInterface.tsx`). The user selects the active AI engine via the **Scan Mode** toggle bar:
    - **Fast Scan:** Uses **Claude 3.5 Sonnet** for standard single-pass execution (~2–5 sec) on quick audits, security group checks, and everyday queries.
-   - **Deep Security Audit:** Uses **Claude 3.5 Opus (Opus 5)** (with extended reasoning limits) for multi-pass execution (~10–20 sec) on CIS Benchmark evaluations, IAM privilege escalation paths, and CloudTrail correlation.
+   - **Deep Security Audit:** Uses **Claude Opus 5** (with extended reasoning limits) for multi-pass execution (~10–20 sec) on CIS Benchmark evaluations, IAM privilege escalation paths, and CloudTrail correlation.
 2. **Auth + AWS Credential Exchange (Step 2)**: Supabase Auth handles user identity and RBAC. `aws-exchange-credentials` validates access keys or AssumeRole ARNs against AWS STS, issuing temporary 1-hour session tokens with **zero raw-key storage**.
 3. **aws-agent Orchestrator (Step 3)**: The prompt reaches the core `aws-agent` Orchestrator edge function, which executes a 4-stage pipeline:
    - **Intent Classifier:** Classifies query intent and filters the active tool set.
-   - **Claude Main Agent:** Generates proposed AWS SDK tool calls using **Claude 3.5 Sonnet** (Fast Scan) or **Claude 3.5 Opus (Opus 5)** (Deep Audit).
+   - **Claude Main Agent:** Generates proposed AWS SDK tool calls using **Claude 3.5 Sonnet** (Fast Scan) or **Claude Opus 5** (Deep Audit).
    - **Scan Mode Router:** Evaluates request complexity and applies single-pass or extended reasoning execution strategies.
    - **Safety Gate Judge:** Audits proposed tool calls and outputs a live `[Safety Gate] APPROVED` or `REJECTED` verdict.
 4. **aws-agent-tools Router & Execution Path (Step 4)**: Dispatches tool calls by domain through the appropriate path:
@@ -47,7 +47,7 @@ CloudPilot AI features a **Dual Scan Engine architecture** combined with a light
 | Mode | Engine / Model | Speed | Ideal Use Cases |
 |------|---------------|-------|-----------------|
 | **⚡ Fast Scan** | Claude 3.5 Sonnet | ~2–5 sec | Quick security audits, listing S3 buckets, inspecting security group rules, and everyday interactive queries. |
-| **🔍 Deep Audit** | Claude 3.5 Opus (Opus 5) / Extended Reasoning | ~10–20 sec | Multi-pass CIS Benchmark evaluations, nested security group cross-references, IAM privilege escalation path discovery, and historical CloudTrail event correlation. |
+| **🔍 Deep Audit** | Claude Opus 5 / Extended Reasoning | ~10–20 sec | Multi-pass CIS Benchmark evaluations, nested security group cross-references, IAM privilege escalation path discovery, and historical CloudTrail event correlation. |
 
 ### Intent Classifier Matrix
 
@@ -56,7 +56,7 @@ The Intent Router pre-classifies queries to select only the required tool subset
 | Component | Model | Purpose |
 |-----------|-------|---------|
 | **Intent Classifier** | Claude 3.5 Sonnet | Single-shot query classification into 9 intent categories (~100-200ms) |
-| **Main Agent** | Claude 3.5 Sonnet / Claude 3.5 Opus (Opus 5) | Multi-iteration agentic loop with filtered tool set (up to 15 iterations) |
+| **Main Agent** | Claude 3.5 Sonnet / Claude Opus 5 | Multi-iteration agentic loop with filtered tool set (up to 15 iterations) |
 | **Safety Gate Judge** | Claude 3.5 Sonnet | Audits proposed AWS API tool calls against safety policies and user intent |
 
 ### Intent Categories
@@ -73,7 +73,7 @@ The Intent Router pre-classifies queries to select only the required tool subset
 | `direct_query` | 1 tool | "List my S3 buckets" |
 | `general` | All 15 tools | Ambiguous or multi-domain queries |
 
-### Why Claude 3.5 Sonnet & Claude 3.5 Opus?
+### Why Claude 3.5 Sonnet & Claude Opus 5?
 
 - **Top-Tier Tool Calling**: Native function-calling and tool-use support with near-zero hallucination rates, ensuring correct AWS SDK payloads.
 - **Advanced Cloud Reasoning**: Excellent understanding of cloud security benchmarks, IAM structures, cost vectors, and drift patterns.
@@ -167,8 +167,8 @@ ANTHROPIC_API_KEY="your-anthropic-api-key-here"
 # Default for Fast Scan is claude-sonnet-4-6
 ANTHROPIC_MODEL="claude-sonnet-4-6"
 
-# Default for Deep Audit is claude-3-5-opus-20241022 (Claude 3.5 Opus / Opus 5)
-ANTHROPIC_DEEP_MODEL="claude-3-5-opus-20241022"
+# Default for Deep Audit is claude-opus-5 (Claude Opus 5)
+ANTHROPIC_DEEP_MODEL="claude-opus-5"
 ```
 
 ### 3. Start the Development Server
