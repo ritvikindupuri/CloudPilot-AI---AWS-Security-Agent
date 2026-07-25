@@ -197,10 +197,20 @@ const ChatInterface = () => {
     }
   };
 
-  const handleQuickAction = async (prompt: string) => {
+  const handleQuickAction = (prompt: string) => {
     setIsQuickActionsOpen(false);
-    setInput("");
-    await sendMessage(prompt, credentials, currentConvId, scanMode);
+    setInput(prompt);
+    
+    // Auto-focus the input box and adjust size
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.style.height = "auto";
+          textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + "px";
+        }
+      }, 50);
+    }
   };
 
   const handleSaveNotificationEmail = (email: string) => {
