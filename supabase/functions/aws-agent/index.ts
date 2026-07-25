@@ -1354,6 +1354,7 @@ async function getLLMResponse(
 
   for (let i = 0; i < attempts; i++) {
     try {
+      const currentModel = modelName || Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5";
       response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
@@ -1362,7 +1363,7 @@ async function getLLMResponse(
           "content-type": "application/json"
         },
         body: JSON.stringify({
-          model: modelName || Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6",
+          model: currentModel,
           max_tokens: 4000,
           system: systemMessage,
           messages: formattedMessages,
@@ -1373,6 +1374,33 @@ async function getLLMResponse(
 
       if (response.ok) {
         break;
+      }
+
+      // Check for model_not_found / permission_denied for Claude 5 models
+      if (response.status === 400) {
+        try {
+          const errData = JSON.parse(await response.clone().text());
+          const errorMsg = errData?.error?.message || "";
+          if (errorMsg.includes("model") || errorMsg.includes("not found") || errorMsg.includes("permission")) {
+            let fallbackModel: string | null = null;
+            if (currentModel.includes("opus-5")) {
+              fallbackModel = "claude-3-opus-20240229"; // fallback to standard Opus
+            } else if (currentModel.includes("sonnet-5")) {
+              fallbackModel = "claude-3-5-sonnet-latest"; // fallback to standard Sonnet 3.5
+            } else if (currentModel.includes("opus")) {
+              fallbackModel = "claude-3-5-sonnet-latest"; // fallback to Sonnet 3.5 if Opus 3 also fails
+            }
+            
+            if (fallbackModel) {
+              console.warn(`[CloudPilot Anthropic] Model ${currentModel} not available on this API key. Falling back to ${fallbackModel}...`);
+              modelName = fallbackModel;
+              attempts = Math.max(attempts, i + 2);
+              continue;
+            }
+          }
+        } catch {
+          // Ignore parse errors on error response
+        }
       }
 
       const isTransient = response.status === 529 || response.status === 429 || response.status >= 500;
