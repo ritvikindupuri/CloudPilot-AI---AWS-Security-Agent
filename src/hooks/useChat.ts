@@ -491,7 +491,7 @@ export const useChat = (
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             .eq("id", targetConvId) as any).then();
         }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } catch (err: any) {
         console.warn("[useChat] Catching stream error, checking database fallback:", err);
         // Wait 1.5 seconds to let backend finalize the write if it was close
         await new Promise((resolve) => setTimeout(resolve, 1500));
