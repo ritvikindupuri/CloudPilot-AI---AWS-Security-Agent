@@ -67,12 +67,11 @@ const SEVERITY_COLORS: Record<string, string> = {
 
 const calculateHealthScore = (counts: any) => {
   if (!counts) return 100;
-  const score =
-    100 -
-    (counts.CRITICAL || 0) * 20 -
-    (counts.HIGH || 0) * 10 -
-    (counts.MEDIUM || 0) * 5 -
-    (counts.LOW || 0) * 2;
+  const critDeduct = Math.min(60, (counts.CRITICAL || counts.critical || 0) * 20);
+  const highDeduct = Math.min(45, (counts.HIGH || counts.high || 0) * 8);
+  const medDeduct = Math.min(30, (counts.MEDIUM || counts.medium || 0) * 3);
+  const lowDeduct = Math.min(15, (counts.LOW || counts.low || 0) * 1);
+  const score = 100 - critDeduct - highDeduct - medDeduct - lowDeduct;
   return Math.max(0, score);
 };
 
