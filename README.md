@@ -25,7 +25,7 @@ Real-time AWS security operations. Connect your credentials to audit, investigat
 2. **Auth + AWS Credential Exchange (Step 2)**: Supabase Auth handles user identity and RBAC. `aws-exchange-credentials` validates access keys or AssumeRole ARNs against AWS STS, issuing temporary 1-hour session tokens with **zero raw-key storage**.
 3. **aws-agent Orchestrator (Step 3)**: The prompt reaches the core `aws-agent` Orchestrator edge function, which executes a 4-stage pipeline:
    - **Intent Classifier:** Classifies query intent and filters the active tool set.
-   - **Claude Main Agent:** Generates proposed AWS SDK tool calls using **Claude Sonnet 5** (Fast Scan) or **Claude Opus 5** (Deep Audit).
+   - **Claude Main Agent:** Generates proposed AWS SDK tool calls using a **ReAct (Reasoning and Acting)** agentic loop on **Claude Sonnet 5** (Fast Scan) or **Claude Opus 5** (Deep Audit).
    - **Scan Mode Router:** Evaluates request complexity and applies single-pass or extended reasoning execution strategies.
    - **Safety Gate Judge:** Audits proposed tool calls and outputs a live `[Safety Gate] APPROVED` or `REJECTED` verdict.
 4. **aws-agent-tools Router & Execution Path (Step 4)**: Dispatches tool calls by domain through the appropriate path:
@@ -56,7 +56,7 @@ The Intent Router pre-classifies queries to select only the required tool subset
 | Component | Model | Purpose |
 |-----------|-------|---------|
 | **Intent Classifier** | Claude Sonnet 5 | Single-shot query classification into 9 intent categories (~100-200ms) |
-| **Main Agent** | Claude Sonnet 5 / Claude Opus 5 | Multi-iteration agentic loop with filtered tool set (up to 15 iterations) |
+| **Main Agent** | Claude Sonnet 5 / Claude Opus 5 | Multi-iteration **ReAct (Reasoning and Acting)** loop with filtered tool set (up to 15 iterations) |
 | **Safety Gate Judge** | Claude Sonnet 5 | Audits proposed AWS API tool calls against safety policies and user intent |
 
 ### Intent Categories
