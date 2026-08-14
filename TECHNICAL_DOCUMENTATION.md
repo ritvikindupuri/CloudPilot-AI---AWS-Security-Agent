@@ -573,20 +573,21 @@ The UI follows a **"Tactical Clarity"** design philosophy—dark charcoal backgr
 
 The frontend architecture described in Section 5 communicates primarily with a single backend entry point: the `aws-agent` edge function. This section details its internal logic, system prompt engineering, and agentic loop mechanics.
 
-The `aws-agent` edge function (`supabase/functions/aws-agent/index.ts`, 1,337 lines) runs on Deno, guaranteeing ephemeral, isolated compute per request. It employs a **two-model architecture**: a fast intent classifier (Claude 3.5 Sonnet) determines the query domain, followed by the main agentic model (Claude 3.5 Sonnet) operating with only the relevant tool subset, and a secondary Safety Gate Judge pass to audit proposed mutations.
+The `aws-agent` edge function (`supabase/functions/aws-agent/index.ts`, 1,337 lines) runs on Deno, guaranteeing ephemeral, isolated compute per request. It employs a **two-model architecture**: a fast intent classifier (Claude Sonnet 5) determines the query domain, followed by the main agentic model (Claude Sonnet 5) operating with only the relevant tool subset, and a secondary Safety Gate Judge pass to audit proposed mutations.
 
 ### Core Responsibilities
 
 1. **Input Validation** — Validates message arrays (max 100), content lengths (max 50,000 chars), credential formats via regex, and requires `sessionToken`
-2. **Intent Classification** — Uses Claude 3.5 Sonnet for a single-shot classification of user intent into one of 9 categories, selecting only the relevant tool subset
-3. **System Prompt Injection** — Constructs the AI context with Zero Simulation Tolerance rules, tool usage protocols (scoped to classified intent), attack simulation lifecycle, output format mandates, S3 archival instructions, and SNS notification instructions
-4. **Agentic Tool-Call Loop** — Up to 15 iterations of AI-tool interactions using Claude 3.5 Sonnet with the filtered tool set, auditing all actions before execution
-5. **Safety Gate Judge** — Audits every proposed AWS command using Claude 3.5 Sonnet before execution to catch unauthorized or unintended mutations
-6. **SSE Streaming** — Streams the final Markdown response as 30-character chunks at 8ms intervals
+2. **Intent Classification** — Uses Claude Sonnet 5 for a single-shot classification of user intent into one of 9 categories, selecting only the relevant tool subset
+3. **Agent Skills Engine** — Loads a domain-specific specialist persona based on the classified intent (e.g., 🔐 Security Audit Specialist, 💰 FinOps Cost Analyst) and injects specialized system instructions into the agent context. The active skill badge is streamed to the UI via SSE metadata.
+4. **System Prompt Injection** — Constructs the AI context with Zero Simulation Tolerance rules, tool usage protocols (scoped to classified intent), the active skill supplement, attack simulation lifecycle, output format mandates, S3 archival instructions, and SNS notification instructions
+5. **Agentic Tool-Call Loop** — Up to 15 iterations of AI-tool interactions using Claude Sonnet 5 with the filtered tool set, auditing all actions before execution
+6. **Safety Gate Judge** — Audits every proposed AWS command using Claude Sonnet 5 before execution to catch unauthorized or unintended mutations
+7. **SSE Streaming** — Streams the final Markdown response as 30-character chunks at 8ms intervals
 
 ### Intent Router — LLM-Based Tool Selection
 
-Before entering the agentic loop, `aws-agent` invokes Claude 3.5 Sonnet to classify the user's intent into one of 9 categories. Based on this classification, only the relevant tools are included in the main agent's context, reducing token usage and improving accuracy.
+Before entering the agentic loop, `aws-agent` invokes Claude Sonnet 5 to classify the user's intent into one of 9 categories. Based on this classification, only the relevant tools are included in the main agent's context, reducing token usage and improving accuracy.
 
 | Intent | Tool Subset | Example Queries |
 |--------|-------------|-----------------|
@@ -602,7 +603,7 @@ Before entering the agentic loop, `aws-agent` invokes Claude 3.5 Sonnet to class
 
 ```mermaid
 flowchart TD
-    A[User Query + Conversation Context] --> B[Claude 3.5 Sonnet Intent Classifier]
+    A[User Query + Conversation Context] --> B[Claude Sonnet 5 Intent Classifier]
     B --> C{Classified Intent}
     C -- security_audit --> D[4 tools selected]
     C -- cost_analysis --> E[3 tools selected]
@@ -613,15 +614,16 @@ flowchart TD
     C -- event_automation --> J[3 tools selected]
     C -- direct_query --> K[1 tool selected]
     C -- general --> L[All 15 tools]
-    D --> M[Claude 3.5 Sonnet Main Agentic Loop with filtered tools]
-    E --> M
-    F --> M
-    G --> M
-    H --> M
-    I --> M
-    J --> M
-    K --> M
-    L --> M
+    D --> SK[Agent Skills Engine loads specialist persona]
+    E --> SK
+    F --> SK
+    G --> SK
+    H --> SK
+    I --> SK
+    J --> SK
+    K --> SK
+    L --> SK
+    SK --> M[Claude Sonnet 5 Main Agentic Loop with filtered tools + skill supplement]
 ```
 
 <div align="center">
@@ -632,19 +634,68 @@ flowchart TD
 
 This diagram shows the two-stage model architecture:
 
-1. **Classification Stage:** The user's latest message and last 3 conversation messages are sent to Claude 3.5 Sonnet with a structured classification prompt. The model returns a single category string (e.g., `security_audit`). If classification fails, the system falls back to `general` which includes all 15 tools.
+1. **Classification Stage:** The user's latest message and last 3 conversation messages are sent to Claude Sonnet 5 with a structured classification prompt. The model returns a single category string (e.g., `security_audit`). If classification fails, the system falls back to `general` which includes all 15 tools.
 
 2. **Tool Filtering:** The classified intent maps to a pre-defined tool subset via `INTENT_TOOL_MAP`. For example, a cost query only sees `execute_aws_api`, `run_cost_anomaly_scan`, and `manage_cost_rule` — 3 tools instead of 15. This reduces the tool definition tokens by ~80% for focused queries.
 
-3. **Main Agent:** Claude 3.5 Sonnet receives the full system prompt, conversation history, and the **filtered** tool set. It then enters the standard agentic loop (up to 15 iterations).
+3. **Agent Skills Engine:** After tool filtering, the `AGENT_SKILLS` map loads a domain-specific specialist persona matching the classified intent. The skill's `systemSupplement` — containing prioritized instructions, output format requirements, and domain expertise directives — is appended to the main system prompt. The active skill badge (e.g., `🔐 Security Audit Specialist`) is streamed to the frontend via SSE metadata and displayed in the chat UI.
 
-**Why Claude 3.5 Sonnet Was Chosen:**
+4. **Main Agent:** Claude Sonnet 5 receives the full system prompt (now augmented with the active skill supplement), conversation history, and the **filtered** tool set. It then enters the standard agentic loop (up to 15 iterations).
+
+**Why Claude Sonnet 5 Was Chosen:**
 
 The model selection for CloudPilot AI was driven by three operational requirements specific to an agentic security tool:
 
-- **Industry-standard reasoning:** Claude 3.5 Sonnet provides state-of-the-art logical reasoning, crucial for complex cloud environments where identity boundaries, security group scopes, and compliance baselines must be evaluated accurately.
-- **Tool-calling accuracy at scale:** CloudPilot exposes 15 complex tools with nested JSON schemas. Claude 3.5 Sonnet demonstrates unmatched function-calling precision, ensuring the agentic loop consistently selects and generates correct AWS SDK inputs.
-- **Double-Audited Safety:** Claude 3.5 Sonnet handles the Safety Gate Judge role with high-fidelity consensus auditing. It easily detects when proposed operations deviate from user commands or violate safe operations policies.
+- **Industry-standard reasoning:** Claude Sonnet 5 provides state-of-the-art logical reasoning, crucial for complex cloud environments where identity boundaries, security group scopes, and compliance baselines must be evaluated accurately.
+- **Tool-calling accuracy at scale:** CloudPilot exposes 15 complex tools with nested JSON schemas. Claude Sonnet 5 demonstrates unmatched function-calling precision, ensuring the agentic loop consistently selects and generates correct AWS SDK inputs.
+- **Double-Audited Safety:** Claude Sonnet 5 handles the Safety Gate Judge role with high-fidelity consensus auditing. It easily detects when proposed operations deviate from user commands or violate safe operations policies.
+
+### Agent Skills Engine — Domain-Specific Persona Injection
+
+The Agent Skills Engine extends the Intent Router by mapping each classified intent to a **specialized agent persona**. While the Intent Router selects *which tools* the agent can use, the Skills Engine controls *how the agent thinks* by injecting domain-specific system instructions.
+
+#### Implementation Details
+
+The `AGENT_SKILLS` constant (defined in `index.ts`) maps each `AgentIntent` to a skill object containing:
+
+```typescript
+const AGENT_SKILLS: Record<AgentIntent, {
+  name: string;              // Human-readable skill name
+  badge: string;             // Emoji + name displayed in the UI
+  systemSupplement: string;  // Injected into the system prompt
+}>
+```
+
+#### Skill Injection Flow
+
+1. **Intent fires** → `classifyIntent()` returns `security_audit`
+2. **Tool filter** → `INTENT_TOOL_MAP["security_audit"]` narrows to 4 tools
+3. **Skill load** → `AGENT_SKILLS["security_audit"]` loads the Security Audit Specialist
+4. **System prompt augmented** → The skill's `systemSupplement` is appended to the system message with a `---` separator
+5. **UI badge streamed** → `sendMeta({ activeSkill: { name, badge } })` delivers the badge to the frontend via SSE
+6. **ReAct loop begins** → The agent now operates as a domain specialist with focused instructions
+
+#### Skill Definitions
+
+| Skill | Persona | Key Directives |
+|-------|---------|----------------|
+| Security Audit Specialist | Elite AWS security auditor | CIS Benchmark mapping, explicit resource IDs, structured findings tables, actionable remediation commands |
+| FinOps Cost Analyst | Cost optimization expert | Exact dollar amounts from Cost Explorer, idle resource detection, ROI-prioritized savings |
+| Drift Detection Engineer | Configuration drift specialist | Baseline comparison, before/after diffs, security exposure flagging |
+| AWS Organizations Expert | Multi-account governance specialist | OU hierarchy mapping, SCP gap analysis, MFA/CloudTrail coverage auditing |
+| Incident Response Operator | Runbook execution specialist | Sequential step execution, confirmation gates before destructive actions, structured action logs |
+| Red Team Simulation Expert | Authorized penetration tester | Privilege escalation path discovery, MITRE ATT&CK mappings, attack phase simulation |
+| Event Automation Specialist | CloudTrail event policy engineer | Event analysis with timestamps/source IPs, SCP conflict validation, JSON policy output |
+| Direct Query Agent | Precise resource query agent | Single-pass execution, raw structured output, ARNs/regions/timestamps in all responses |
+| General Cloud Security Assistant | Full-capability generalist | Comprehensive multi-domain coverage with full tool set |
+
+#### Why Domain-Specific Personas Improve Output Quality
+
+Without the Skills Engine, the agent receives the same generic system prompt for every query — whether the user asks to list S3 buckets or simulate a privilege escalation attack. The Skills Engine solves this by:
+
+- **Prioritizing output structure:** Each skill defines the expected output format (tables, diffs, JSON, attack path reports), eliminating generic prose responses.
+- **Enforcing domain constraints:** For example, the Security Audit Specialist is explicitly instructed to never skip resource IDs or use placeholder values.
+- **Reducing reasoning ambiguity:** By narrowing the agent's objectives to 4 specific priorities per skill, the model spends fewer tokens deliberating and more tokens executing.
 
 ### System Prompt Engineering
 

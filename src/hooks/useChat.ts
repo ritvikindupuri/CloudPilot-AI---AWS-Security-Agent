@@ -74,6 +74,7 @@ export const useChat = (
   const [auditSummary, setAuditSummary] = useState<AuditSummary | null>(null);
   const [liveRunbook, setLiveRunbook] = useState<LiveRunbookExecution | null>(null);
   const [executionLogs, setExecutionLogs] = useState<any[]>([]);
+  const [activeSkill, setActiveSkill] = useState<{ name: string; badge: string } | null>(null);
 
   const currentMessagesConvIdRef = useRef<string | null>(conversationId);
   const justCreatedConvRef = useRef<string | null>(null);
@@ -448,6 +449,10 @@ export const useChat = (
               if (logs) {
                 setExecutionLogs(logs);
               }
+              const skill = parsed.meta?.activeSkill;
+              if (skill) {
+                setActiveSkill(skill);
+              }
               const delta = parsed.choices?.[0]?.delta?.content as string | undefined;
               if (delta) upsertAssistant(delta);
             } catch (err: any) {
@@ -547,6 +552,7 @@ export const useChat = (
   const clearMessages = useCallback(() => {
     setMessages([]);
     setAuditSummary(null);
+    setActiveSkill(null);
   }, []);
   const findings: Finding[] = (auditSummary?.findingsForPanel || []).map((finding) => ({
     id: finding.id,
@@ -557,5 +563,5 @@ export const useChat = (
     fixPrompt: finding.fixPrompt,
   }));
 
-  return { messages, isLoading, sendMessage, clearMessages, auditSummary, findings, liveRunbook, executionLogs };
+  return { messages, isLoading, sendMessage, clearMessages, auditSummary, findings, liveRunbook, executionLogs, activeSkill };
 };

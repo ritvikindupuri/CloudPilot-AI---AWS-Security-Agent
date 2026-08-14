@@ -96,7 +96,7 @@ const ChatInterface = () => {
     await signOut();
   };
 
-  const { messages, isLoading, sendMessage, clearMessages, auditSummary, findings, liveRunbook, executionLogs } = useChat(
+  const { messages, isLoading, sendMessage, clearMessages, auditSummary, findings, liveRunbook, executionLogs, activeSkill } = useChat(
     currentConvId,
     credentials,
     notificationEmail,
@@ -683,6 +683,17 @@ const ChatInterface = () => {
                       }
                     />
                   ))
+                )}
+                {activeSkill && isLoading && (
+                  <div className="flex justify-center my-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20 shadow-sm backdrop-blur-sm">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                      </span>
+                      {activeSkill.badge}
+                    </div>
+                  </div>
                 )}
                 {showThinking && <ThinkingIndicator logs={executionLogs} />}
                 <div ref={bottomRef} />

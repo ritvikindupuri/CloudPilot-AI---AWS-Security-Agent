@@ -23,8 +23,9 @@ Real-time AWS security operations. Connect your credentials to audit, investigat
    - **Fast Scan:** Uses **Claude Sonnet 5** for standard single-pass execution (~2–5 sec) on quick audits, security group checks, and everyday queries.
    - **Deep Security Audit:** Uses **Claude Opus 5** (with extended reasoning limits) for multi-pass execution (~10–20 sec) on CIS Benchmark evaluations, IAM privilege escalation paths, and CloudTrail correlation.
 2. **Auth + AWS Credential Exchange (Step 2)**: Supabase Auth handles user identity and RBAC. `aws-exchange-credentials` validates access keys or AssumeRole ARNs against AWS STS, issuing temporary 1-hour session tokens with **zero raw-key storage**.
-3. **aws-agent Orchestrator (Step 3)**: The prompt reaches the core `aws-agent` Orchestrator edge function, which executes a 4-stage pipeline:
-   - **Intent Classifier:** Classifies query intent and filters the active tool set.
+3. **aws-agent Orchestrator (Step 3)**: The prompt reaches the core `aws-agent` Orchestrator edge function, which executes a 5-stage pipeline:
+   - **Intent Classifier:** Classifies query intent into one of 9 categories and filters the active tool set.
+   - **Agent Skills Engine:** Loads a domain-specific specialist persona (e.g., 🔐 Security Audit Specialist) and injects specialized system instructions into the agent's context.
    - **Claude Main Agent:** Generates proposed AWS SDK tool calls using a **ReAct (Reasoning and Acting)** agentic loop on **Claude Sonnet 5** (Fast Scan) or **Claude Opus 5** (Deep Audit).
    - **Scan Mode Router:** Evaluates request complexity and applies single-pass or extended reasoning execution strategies.
    - **Safety Gate Judge:** Audits proposed tool calls and outputs a live `[Safety Gate] APPROVED` or `REJECTED` verdict.
@@ -73,6 +74,26 @@ The Intent Router pre-classifies queries to select only the required tool subset
 | `direct_query` | 1 tool | "List my S3 buckets" |
 | `general` | All 15 tools | Ambiguous or multi-domain queries |
 
+### Agent Skills Engine — Dynamic Persona Injection
+
+After the Intent Classifier selects the query domain, the **Agent Skills Engine** activates a domain-specific specialist persona. Each intent category maps to a unique skill that injects specialized system instructions into the agent's context before the ReAct loop begins:
+
+| Intent | Activated Skill | What It Does |
+|--------|----------------|---------------|
+| `security_audit` | 🔐 Security Audit Specialist | Prioritizes CIS Benchmark mapping, explicit resource IDs, structured findings tables, and actionable remediation commands |
+| `cost_analysis` | 💰 FinOps Cost Analyst | Focuses on exact dollar breakdowns by service/region, idle resource flagging, and ROI-prioritized savings |
+| `drift_detection` | 📊 Drift Detection Engineer | Compares live state against baselines, outputs before/after diffs with timestamps and change types |
+| `org_management` | 🏢 AWS Organizations Expert | Maps OU hierarchy, audits SCPs for gaps, flags accounts lacking MFA or CloudTrail coverage |
+| `ops_automation` | ⚡ Incident Response Operator | Executes runbook steps sequentially with real API calls, requires confirmation before destructive actions |
+| `attack_simulation` | 🎯 Red Team Simulation Expert | Discovers privilege escalation paths, maps lateral movement, outputs MITRE ATT&CK technique mappings |
+| `event_automation` | 🔔 Event Automation Specialist | Analyzes CloudTrail events, defines response policies, validates against existing SCPs and IAM boundaries |
+| `direct_query` | 🔍 Direct Query Agent | Single-pass execution, raw structured output (tables/JSON), includes ARNs, regions, and timestamps |
+| `general` | ☁️ General Cloud Security Assistant | Full tool set with comprehensive, multi-domain coverage |
+
+The active skill badge is displayed in real-time in the chat UI (e.g., `🔐 Security Audit Specialist`) so users always know which specialist persona is driving the analysis.
+
+**Why this matters:** Instead of a generic agent answering every query the same way, the Skills Engine transforms the agent into a domain expert for each task — producing more structured, actionable, and contextually relevant output.
+
 ### Why Claude Sonnet 5 & Claude Opus 5?
 
 - **Top-Tier Tool Calling**: Native function-calling and tool-use support with near-zero hallucination rates, ensuring correct AWS SDK payloads.
@@ -98,6 +119,7 @@ This approach is simpler than AWS EventBridge because it runs inside the databas
 
 - **Live AWS API Execution**: Connect your credentials to audit, investigate, and remediate cloud infrastructure using real AWS API responses.
 - **Smart Intent Router**: LLM-based query classification selects only relevant tools per query, reducing token usage by 40-70%.
+- **Agent Skills Engine**: Dynamically activates domain-specific specialist personas (Security Audit Specialist, FinOps Cost Analyst, Red Team Expert, etc.) based on query intent, transforming the agent from a generalist into a focused domain expert for each task.
 - **Pre-Flight IAM Boundary Checks**: The application automatically evaluates your principal's permissions upon connection, presenting a green/red checklist.
 - **PrivateLink / VPC Endpoints**: CloudPilot backend can be deployed inside an AWS VPC with VPC Endpoints (AWS PrivateLink), allowing API calls to never traverse the public internet.
 - **WORM Audit Logging**: Every AWS SDK call payload is streamed into an immutable, Write-Once-Read-Many (WORM) S3 bucket.
@@ -188,28 +210,91 @@ Open your browser to the local URL provided (usually `http://localhost:8080`). A
 
 ## How to Use CloudPilot AI
 
-### 1. Connect your AWS Account
-Upon launching the application, you will be guided by the **Getting Started** checklist.
-* **Access Keys:** Create an IAM user with `SecurityAudit` and `IAMFullAccess` policies, generate Access Keys, and paste them into the onboarding panel (Step 1).
-* **Assume Role:** If you prefer cross-account role auditing, configure the Role ARN under the "Assume Role" tab.
-* **IAM Pre-Flight Check:** The application automatically runs a capability checklist to verify what permissions are active.
+This step-by-step walkthrough covers every feature of CloudPilot AI. Follow these steps in order to go from zero to a fully operational security command center.
 
-### 2. Run Interactive Tours
-Navigate to the specialized control planes in the navigation tabs and start the guided, auto-scrolling walkthroughs:
-* **Operations Control Plane (`/operations`):** Click **Start Tour** at the top. The UI will dim, highlighting and centering each operational dashboard card (Event Policies, Cost Rules, Drift Baselines, Runbooks, Audit Timelines) to show you how to audit and automate real-time AWS activity.
-* **Compliance Control Plane (`/compliance`):** Click **Start Tour** to spotlight the framework compliance dials, interactive audit checklists, and framework selectors (SOC 2, ISO 27001, HIPAA, PCI-DSS).
+### Step 1: Launch the Application & Create an Account
+1. Open the application URL in your browser (locally: `http://localhost:8080`, or the deployed URL).
+2. You will land on the **CloudPilot AI landing page** showcasing the platform's capabilities.
+3. Click **Get Started** or **Sign In** in the top-right corner.
+4. Create an account using your email address, or sign in with an existing account. You must verify your email before proceeding.
+5. After signing in, you will be redirected to the **main dashboard**.
 
-### 3. Query the AI Security Agent
-Type your security questions or commands into the main Chat interface. Examples:
-* *"Audit my S3 buckets for public access"*
-* *"Show me any security groups with port 22 open to the world"*
-* *"Create a secure VPC infrastructure layout for us-east-1"*
-* *"Are there any idle EC2 instances costing me money?"*
+### Step 2: Connect Your AWS Account
+1. On first login, the **Getting Started checklist** appears in the left panel. This checklist tracks your onboarding progress.
+2. Click **Step 1: Connect AWS Credentials** to open the AWS Credentials panel.
+3. You have two connection methods:
+   - **Access Keys (recommended for personal accounts):** Paste your IAM Access Key ID and Secret Access Key. The application immediately validates them against AWS STS and issues a temporary 1-hour session token. Your raw keys are **never stored** — they exist only in memory.
+   - **Assume Role (recommended for cross-account auditing):** Enter the Role ARN (e.g., `arn:aws:iam::123456789012:role/CloudPilot-AuditRole`). The application calls `sts:AssumeRole` to obtain temporary credentials.
+4. After successful connection, the **IAM Pre-Flight Check** automatically runs. This evaluates your principal's permissions and displays a green ✅ / red ❌ checklist showing which capabilities are available (e.g., S3 read, IAM audit, CloudTrail access, Security Group modification).
+5. A green checkmark appears on Step 1 of the Getting Started checklist.
 
-### 4. Investigate & Remediate
-* **Interactive Findings:** Browse findings dynamically in the right-hand inspection panel.
-* **Remediation CLI:** Copy the exact, context-aware AWS CLI commands generated by the agent to secure your infrastructure.
-* **S3 Report Archival:** Click **Add to S3** or **Download PDF** to generate compliance records of your security audits.
+### Step 3: Choose Your Scan Mode
+Before querying the agent, select your preferred AI engine using the **Scan Mode toggle bar** at the bottom of the chat interface:
+- **⚡ Fast Scan (Claude Sonnet 5):** Best for quick, focused queries — security group checks, listing resources, single-service audits. Responds in ~2–5 seconds.
+- **🔍 Deep Audit (Claude Opus 5):** Best for comprehensive, multi-service analysis — full CIS Benchmark evaluations, IAM privilege escalation path discovery, CloudTrail event correlation. Responds in ~10–20 seconds with extended reasoning.
+
+You can switch between modes at any time. The toggle is always visible below the chat input.
+
+### Step 4: Use Quick Action Prompts
+Instead of typing from scratch, CloudPilot provides **prebuilt Quick Action prompts** organized by category. Click the **Quick Actions** button (grid icon) next to the chat input to browse:
+- **Security Audits:** "Run a full security audit", "Check S3 public access", "Audit IAM policies"
+- **Cost Analysis:** "Show my cost breakdown", "Find idle resources", "Set a budget alert"
+- **Drift Detection:** "Capture a baseline", "Show overnight drift", "Compare against last snapshot"
+- **Incident Response:** "Run incident response playbook", "Isolate compromised instance"
+- **Attack Simulation:** "Simulate privilege escalation", "Map lateral movement paths"
+- **Event Automation:** "If anyone opens port 22, close it automatically", "Replay CloudTrail events"
+
+When you click a Quick Action, it populates the chat input so you can **review, customize, or add context** before sending. For example, you might append a specific region or resource name to narrow the scope.
+
+### Step 5: Query the AI Security Agent (Chat Interface)
+Type your security question or command into the main chat input and press Enter (or click Send). Here's what happens behind the scenes:
+1. **Intent Classification:** The agent classifies your query into one of 9 intent categories (security audit, cost analysis, drift detection, etc.).
+2. **Agent Skills Engine:** Based on the classified intent, a **domain-specific specialist persona** activates. You'll see a badge appear in the chat (e.g., `🔐 Security Audit Specialist` or `💰 FinOps Cost Analyst`) indicating which expert is handling your request.
+3. **Tool Filtering:** Only the relevant tools for your query are loaded, reducing noise and improving accuracy.
+4. **ReAct Loop Execution:** The agent executes a multi-iteration reasoning loop — dynamically selecting AWS SDK tools, invoking them against your live account, evaluating results, and iterating until it has a complete answer.
+5. **Safety Gate:** Every proposed AWS API call is pre-screened by an independent Safety Gate Judge. You'll see live `[Safety Gate] APPROVED` or `REJECTED` verdicts in the execution logs.
+6. **Streaming Response:** The agent streams its findings back in real-time as structured Markdown — including findings tables, severity ratings, remediation commands, and compliance mappings.
+
+Example queries to try:
+- *"Audit my S3 buckets for public access"* → Activates 🔐 Security Audit Specialist
+- *"Where am I wasting money?"* → Activates 💰 FinOps Cost Analyst
+- *"What changed since last night?"* → Activates 📊 Drift Detection Engineer
+- *"Simulate privilege escalation on my IAM roles"* → Activates 🎯 Red Team Simulation Expert
+- *"If anyone opens port 22, close it automatically"* → Activates 🔔 Event Automation Specialist
+- *"List my EC2 instances in us-east-1"* → Activates 🔍 Direct Query Agent
+
+### Step 6: Inspect Findings & Remediate
+After the agent completes its analysis:
+1. **Findings Panel (right sidebar):** Click on any finding to expand its details — severity level, affected resource ID, CIS Benchmark mapping, and the exact AWS CLI remediation command.
+2. **Account Health Score:** A real-time score (0–100) is calculated based on finding severity, displayed at the top of the dashboard. Scoring uses weighted deductions: Critical (-20), High (-8), Medium (-3), Low (-1), each with caps to prevent score collapse.
+3. **Copy Remediation Commands:** Each finding includes a context-aware AWS CLI command you can copy and execute directly in your terminal to fix the issue.
+4. **One-Click Fix Prompts:** Click the **Fix** button on any finding to auto-populate a remediation prompt in the chat, letting the agent execute the fix for you (requires write permissions).
+
+### Step 7: Archive Reports & Export Evidence
+1. **Add to S3:** Click the **Add to S3** button on any agent response to archive the full security report to your S3 bucket in WORM (Write-Once-Read-Many) compliance mode.
+2. **Download PDF:** Click **Download PDF** to generate a local PDF copy of the security report for offline review or compliance evidence.
+3. **Email Reports via SNS:** Configure a notification email in the settings panel. The agent automatically creates an SNS topic, subscribes your email, and sends report summaries after each audit.
+
+### Step 8: Explore the Operations Control Plane
+Navigate to the **Operations** tab (`/operations`) for a centralized dashboard of all automated security operations:
+1. **Event Policies:** View and manage CloudTrail event response rules (e.g., auto-close port 22 if opened).
+2. **Cost Rules:** Set budget thresholds and anomaly alerts.
+3. **Drift Baselines:** View captured configuration baselines and track deviations.
+4. **Runbook History:** See all executed runbooks with step-by-step logs and outcomes.
+5. **Audit Timelines:** Browse a chronological log of every agent action taken on your account.
+6. Click **Start Tour** at the top of the page for a guided, auto-scrolling walkthrough that highlights each section.
+
+### Step 9: Explore the Compliance Control Plane
+Navigate to the **Compliance** tab (`/compliance`) for framework-specific compliance tracking:
+1. **Framework Selector:** Choose from SOC 2, ISO 27001, HIPAA, PCI-DSS v4.0, CIS AWS Foundations, NIST 800-53, and more.
+2. **Compliance Dials:** Visual gauges showing your compliance percentage per framework.
+3. **Interactive Checklists:** Drill into specific controls with pass/fail status and remediation guidance.
+4. Click **Start Tour** for a guided walkthrough of the compliance features.
+
+### Step 10: Manage Your Team
+1. Navigate to the **Team** section in settings.
+2. **Invite members** by email — CloudPilot handles shadow accounts for users who haven't signed up yet.
+3. Team members can share conversations, audit histories, and compliance reports.
 
 ---
 
