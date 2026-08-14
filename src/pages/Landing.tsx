@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, ChevronRight, Check, Shield, Cpu, RefreshCw, Database, Terminal, User, Loader2, Send, MessageSquare, Gavel } from "lucide-react";
+import { ArrowRight, ChevronRight, Check, Shield, Cpu, RefreshCw, Database, Terminal, User, Loader2, Send, MessageSquare, Gavel, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import CloudPilotLogo from "@/components/CloudPilotLogo";
@@ -70,6 +70,7 @@ const DEMO_CYCLES = [
     thinkingLogs: [
       { step: "Router", status: "info" as const, message: "Classifying query intent..." },
       { step: "Router", status: "success" as const, message: "Activated 8 security tools for intent: **direct_query**" },
+      { step: "Skills Engine", status: "success" as const, message: "Skill activated: 🔍 Direct Query Agent" },
       { step: "Safety Gate", status: "info" as const, message: "Auditing proposed AWS SDK calls..." },
       { step: "Safety Gate", status: "success" as const, message: "Safety Gate Judge: **APPROVED**. Reason: Query is read-only S3 configuration audit." },
       { step: "Execution", status: "info" as const, message: "Executing AWS SDK calls on account (`s3:ListAllMyBuckets`, `s3:GetBucketPublicAccessBlock`)..." },
@@ -121,6 +122,7 @@ const DEMO_CYCLES = [
     thinkingLogs: [
       { step: "Router", status: "info" as const, message: "Classifying query intent..." },
       { step: "Router", status: "success" as const, message: "Activated 6 security tools for intent: **ops_automation**" },
+      { step: "Skills Engine", status: "success" as const, message: "Skill activated: 🔐 Security Audit Specialist" },
       { step: "Safety Gate", status: "info" as const, message: "Auditing proposed AWS SDK calls..." },
       { step: "Safety Gate", status: "success" as const, message: "Safety Gate Judge: **APPROVED**. Reason: Read-only EC2 security group rule inspection." },
       { step: "Execution", status: "info" as const, message: "Executing AWS SDK calls on account (`ec2:DescribeSecurityGroups`)..." },
@@ -156,6 +158,7 @@ const DEMO_CYCLES = [
     thinkingLogs: [
       { step: "Router", status: "info" as const, message: "Classifying query intent..." },
       { step: "Router", status: "success" as const, message: "Activated 12 security tools for intent: **attack_simulation**" },
+      { step: "Skills Engine", status: "success" as const, message: "Skill activated: 🎯 Red Team Simulation Expert" },
       { step: "Safety Gate", status: "info" as const, message: "Auditing proposed IAM escalation policies..." },
       { step: "Safety Gate", status: "success" as const, message: "Safety Gate Judge: **APPROVED**. Reason: Read-only privilege escalation scan." },
       { step: "Execution", status: "info" as const, message: "Executing AWS API calls (`iam:GetAccountAuthorizationDetails`)..." },
@@ -376,7 +379,7 @@ const PipelineFlow = () => {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setActiveStep((prev) => (prev + 1) % 6);
+      setActiveStep((prev) => (prev + 1) % 7);
     }, 2500);
     return () => clearInterval(interval);
   }, []);
@@ -391,6 +394,11 @@ const PipelineFlow = () => {
       title: "Stateless Router",
       desc: "Classifies intent to minimize permission footprint.",
       icon: Cpu,
+    },
+    {
+      title: "Skills Engine",
+      desc: "Loads domain-specific specialist persona for the query.",
+      icon: Sparkles,
     },
     {
       title: "STS Token Exchange",
@@ -448,7 +456,7 @@ const PipelineFlow = () => {
                 {step.desc}
               </p>
 
-              {idx < 5 && (
+              {idx < 6 && (
                 <div className="hidden lg:block absolute top-7 left-[calc(50%+2rem)] right-[calc(-50%+2rem)] h-[3px] bg-border/20 overflow-hidden">
                   <div className={`h-full bg-gradient-to-r from-transparent via-primary to-transparent w-16 transition-transform duration-1000 ${
                     isActive ? "animate-flow-arrow" : "hidden"
@@ -639,7 +647,7 @@ const Landing = () => {
             initial="hidden"
             whileInView="show"
             viewport={{ once: true }}
-            className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6"
+            className="grid sm:grid-cols-2 lg:grid-cols-5 gap-6"
           >
             {[
               {
@@ -651,6 +659,11 @@ const Landing = () => {
                 icon: Cpu,
                 title: "Dual Scan Engines",
                 desc: "Single-click toggle between Fast Scan (Claude Sonnet 5) for 2-second audits and Deep Audit (Claude Opus 5) for multi-pass CIS benchmarks."
+              },
+              {
+                icon: Sparkles,
+                title: "Agent Skills Engine",
+                desc: "Dynamically activates domain-specific specialist personas — Security Auditor, FinOps Analyst, Red Team Expert — transforming the agent into a focused expert per query."
               },
               {
                 icon: RefreshCw,

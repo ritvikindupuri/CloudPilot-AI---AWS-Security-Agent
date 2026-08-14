@@ -214,87 +214,113 @@ This step-by-step walkthrough covers every feature of CloudPilot AI. Follow thes
 
 ### Step 1: Launch the Application & Create an Account
 1. Open the application URL in your browser (locally: `http://localhost:8080`, or the deployed URL).
-2. You will land on the **CloudPilot AI landing page** showcasing the platform's capabilities.
-3. Click **Get Started** or **Sign In** in the top-right corner.
-4. Create an account using your email address, or sign in with an existing account. You must verify your email before proceeding.
-5. After signing in, you will be redirected to the **main dashboard**.
+2. You will land on the **CloudPilot AI landing page** — click **Get Started** or **Sign In** in the top-right corner.
+3. Create an account using your email address and verify it via the confirmation link sent to your inbox.
+4. After signing in, you are redirected to the **main dashboard** — this is your security command center.
 
-### Step 2: Connect Your AWS Account
-1. On first login, the **Getting Started checklist** appears in the left panel. This checklist tracks your onboarding progress.
-2. Click **Step 1: Connect AWS Credentials** to open the AWS Credentials panel.
-3. You have two connection methods:
-   - **Access Keys (recommended for personal accounts):** Paste your IAM Access Key ID and Secret Access Key. The application immediately validates them against AWS STS and issues a temporary 1-hour session token. Your raw keys are **never stored** — they exist only in memory.
-   - **Assume Role (recommended for cross-account auditing):** Enter the Role ARN (e.g., `arn:aws:iam::123456789012:role/CloudPilot-AuditRole`). The application calls `sts:AssumeRole` to obtain temporary credentials.
-4. After successful connection, the **IAM Pre-Flight Check** automatically runs. This evaluates your principal's permissions and displays a green ✅ / red ❌ checklist showing which capabilities are available (e.g., S3 read, IAM audit, CloudTrail access, Security Group modification).
+### Step 2: Navigate the Dashboard
+The main dashboard has three key areas:
+- **Left Sidebar:** Your conversation history. Click **+ New Chat** to start a fresh conversation, or click any previous conversation to resume it.
+- **Center Panel:** The main chat interface where you interact with the AI security agent.
+- **Right Sidebar (Findings Panel):** Appears automatically after an audit completes, showing all discovered security findings sorted by severity. Click any finding to expand its details.
+
+At the top of the page, you'll find navigation tabs:
+- **Dashboard** — Main chat interface (default view)
+- **Operations** — Automated security operations control plane
+- **Compliance** — Framework-specific compliance tracking
+- **Report** — Detailed audit reports with health scores
+
+### Step 3: Connect Your AWS Account
+1. On first login, the **Getting Started checklist** appears in the left panel. This checklist tracks your onboarding progress with green checkmarks.
+2. Click **Step 1: Connect AWS Credentials** to open the credentials panel.
+3. Choose your connection method:
+   - **Access Keys tab (recommended for personal accounts):** Paste your IAM **Access Key ID** and **Secret Access Key** into the two input fields. Click **Connect**. The application immediately validates them against AWS STS and issues a temporary 1-hour session token. Your raw keys are **never stored** — they exist only in browser memory.
+   - **Assume Role tab (recommended for cross-account auditing):** Paste the Role ARN (e.g., `arn:aws:iam::123456789012:role/CloudPilot-AuditRole`) and click **Connect**. The application calls `sts:AssumeRole` to obtain temporary credentials.
+4. After successful connection, the **IAM Pre-Flight Check** runs automatically. A checklist appears showing green ✅ or red ❌ icons for each capability (S3 read, IAM audit, CloudTrail access, Security Group modification, etc.). This tells you exactly what the agent can and cannot do with your permissions.
 5. A green checkmark appears on Step 1 of the Getting Started checklist.
 
-### Step 3: Choose Your Scan Mode
-Before querying the agent, select your preferred AI engine using the **Scan Mode toggle bar** at the bottom of the chat interface:
-- **⚡ Fast Scan (Claude Sonnet 5):** Best for quick, focused queries — security group checks, listing resources, single-service audits. Responds in ~2–5 seconds.
-- **🔍 Deep Audit (Claude Opus 5):** Best for comprehensive, multi-service analysis — full CIS Benchmark evaluations, IAM privilege escalation path discovery, CloudTrail event correlation. Responds in ~10–20 seconds with extended reasoning.
+### Step 4: Configure Notification Email (Optional)
+1. In the Getting Started checklist, click **Step 2: Set Notification Email**.
+2. Enter your email address — the agent will use AWS SNS to send you report summaries after each audit.
+3. You'll receive a one-time SNS subscription confirmation email. Click **Confirm subscription** in that email.
+4. Once confirmed, every audit the agent runs will automatically email you a summary.
 
-You can switch between modes at any time. The toggle is always visible below the chat input.
+### Step 5: Choose Your Scan Mode
+Before querying the agent, select your AI engine using the **Scan Mode toggle bar** at the bottom of the chat input:
+- **⚡ Fast Scan (Claude Sonnet 5):** Quick, focused queries — security group checks, listing resources, single-service audits. Responds in **~2–5 seconds**.
+- **🔍 Deep Audit (Claude Opus 5):** Comprehensive, multi-service analysis — full CIS Benchmark evaluations, IAM privilege escalation path discovery, CloudTrail event correlation. Responds in **~10–20 seconds** with extended reasoning.
 
-### Step 4: Use Quick Action Prompts
-Instead of typing from scratch, CloudPilot provides **prebuilt Quick Action prompts** organized by category. Click the **Quick Actions** button (grid icon) next to the chat input to browse:
+You can switch between modes at any time — the toggle is always visible directly below the chat input field.
+
+### Step 6: Use Quick Action Prompts (Prebuilt Commands)
+Instead of typing from scratch, click the **Quick Actions button** (grid icon, located to the left of the chat input field) to browse prebuilt prompts organized by category:
 - **Security Audits:** "Run a full security audit", "Check S3 public access", "Audit IAM policies"
 - **Cost Analysis:** "Show my cost breakdown", "Find idle resources", "Set a budget alert"
-- **Drift Detection:** "Capture a baseline", "Show overnight drift", "Compare against last snapshot"
+- **Drift Detection:** "Capture a baseline", "Show overnight drift"
 - **Incident Response:** "Run incident response playbook", "Isolate compromised instance"
 - **Attack Simulation:** "Simulate privilege escalation", "Map lateral movement paths"
-- **Event Automation:** "If anyone opens port 22, close it automatically", "Replay CloudTrail events"
+- **Event Automation:** "If anyone opens port 22, close it automatically"
 
-When you click a Quick Action, it populates the chat input so you can **review, customize, or add context** before sending. For example, you might append a specific region or resource name to narrow the scope.
+**Important:** Clicking a Quick Action does **not** send it immediately. It populates the chat input field so you can review, edit, or add context (e.g., a specific region or resource name) before pressing Enter.
 
-### Step 5: Query the AI Security Agent (Chat Interface)
-Type your security question or command into the main chat input and press Enter (or click Send). Here's what happens behind the scenes:
-1. **Intent Classification:** The agent classifies your query into one of 9 intent categories (security audit, cost analysis, drift detection, etc.).
-2. **Agent Skills Engine:** Based on the classified intent, a **domain-specific specialist persona** activates. You'll see a badge appear in the chat (e.g., `🔐 Security Audit Specialist` or `💰 FinOps Cost Analyst`) indicating which expert is handling your request.
-3. **Tool Filtering:** Only the relevant tools for your query are loaded, reducing noise and improving accuracy.
-4. **ReAct Loop Execution:** The agent executes a multi-iteration reasoning loop — dynamically selecting AWS SDK tools, invoking them against your live account, evaluating results, and iterating until it has a complete answer.
-5. **Safety Gate:** Every proposed AWS API call is pre-screened by an independent Safety Gate Judge. You'll see live `[Safety Gate] APPROVED` or `REJECTED` verdicts in the execution logs.
-6. **Streaming Response:** The agent streams its findings back in real-time as structured Markdown — including findings tables, severity ratings, remediation commands, and compliance mappings.
+### Step 7: Query the AI Security Agent
+Type your security question into the chat input and press **Enter** (or click the **Send** button on the right).
 
-Example queries to try:
-- *"Audit my S3 buckets for public access"* → Activates 🔐 Security Audit Specialist
-- *"Where am I wasting money?"* → Activates 💰 FinOps Cost Analyst
-- *"What changed since last night?"* → Activates 📊 Drift Detection Engineer
-- *"Simulate privilege escalation on my IAM roles"* → Activates 🎯 Red Team Simulation Expert
-- *"If anyone opens port 22, close it automatically"* → Activates 🔔 Event Automation Specialist
-- *"List my EC2 instances in us-east-1"* → Activates 🔍 Direct Query Agent
+**What you'll see:**
+1. A **skill badge** appears (e.g., `🔐 Security Audit Specialist` or `💰 FinOps Cost Analyst`) — this tells you which specialist persona the agent activated for your query.
+2. A **thinking indicator** shows the agent's live execution steps ("Classifying intent...", "Skill activated", "Calling AWS API...", "Safety Gate APPROVED").
+3. The agent's response **streams in real-time** as structured Markdown — including findings tables, severity ratings, remediation commands, and compliance mappings.
 
-### Step 6: Inspect Findings & Remediate
+**Example queries to try:**
+| What You Type | Skill That Activates |
+|--------------|---------------------|
+| "Audit my S3 buckets for public access" | 🔐 Security Audit Specialist |
+| "Where am I wasting money?" | 💰 FinOps Cost Analyst |
+| "What changed since last night?" | 📊 Drift Detection Engineer |
+| "Simulate privilege escalation on my IAM roles" | 🎯 Red Team Simulation Expert |
+| "If anyone opens port 22, close it" | 🔔 Event Automation Specialist |
+| "List my EC2 instances in us-east-1" | 🔍 Direct Query Agent |
+
+> **How it works behind the scenes:** Your query goes through a 5-stage pipeline: (1) Intent Classification categorizes your query into one of 9 domains, (2) the Agent Skills Engine loads a domain-specific specialist persona, (3) Tool Filtering narrows the active tool set, (4) the ReAct Loop executes multi-iteration reasoning with live AWS API calls, and (5) the Safety Gate Judge pre-screens every proposed API call before execution. You don't need to know any of this to use CloudPilot — it all happens automatically.
+
+### Step 8: Inspect Findings & Remediate
 After the agent completes its analysis:
-1. **Findings Panel (right sidebar):** Click on any finding to expand its details — severity level, affected resource ID, CIS Benchmark mapping, and the exact AWS CLI remediation command.
-2. **Account Health Score:** A real-time score (0–100) is calculated based on finding severity, displayed at the top of the dashboard. Scoring uses weighted deductions: Critical (-20), High (-8), Medium (-3), Low (-1), each with caps to prevent score collapse.
-3. **Copy Remediation Commands:** Each finding includes a context-aware AWS CLI command you can copy and execute directly in your terminal to fix the issue.
-4. **One-Click Fix Prompts:** Click the **Fix** button on any finding to auto-populate a remediation prompt in the chat, letting the agent execute the fix for you (requires write permissions).
+1. **Findings Panel:** The right sidebar automatically populates with all discovered findings. Each finding shows:
+   - **Severity badge** (Critical / High / Medium / Low) with color coding
+   - **Affected resource ID** (e.g., `sg-0a1b2c3d`, `arn:aws:s3:::my-bucket`)
+   - **CIS Benchmark mapping** (e.g., CIS 2.1.1)
+   - **Remediation command** — a copy-paste-ready AWS CLI command to fix the issue
+2. **Account Health Score:** Displayed at the top of the Report page — a real-time 0–100 score calculated from finding severity. Weighted deductions: Critical (-20 pts), High (-8 pts), Medium (-3 pts), Low (-1 pt).
+3. **One-Click Fix:** Click the **Fix** button (wrench icon) on any finding — it auto-populates a remediation prompt in the chat so the agent can execute the fix for you. Requires write-level IAM permissions.
 
-### Step 7: Archive Reports & Export Evidence
-1. **Add to S3:** Click the **Add to S3** button on any agent response to archive the full security report to your S3 bucket in WORM (Write-Once-Read-Many) compliance mode.
-2. **Download PDF:** Click **Download PDF** to generate a local PDF copy of the security report for offline review or compliance evidence.
-3. **Email Reports via SNS:** Configure a notification email in the settings panel. The agent automatically creates an SNS topic, subscribes your email, and sends report summaries after each audit.
+### Step 9: Archive Reports & Export Evidence
+On each agent response in the chat, you'll see action buttons in the **top-right corner of the response bubble**:
+1. **Add to S3** — Archives the full security report to your S3 bucket in WORM (Write-Once-Read-Many) compliance mode for immutable audit records.
+2. **Download PDF** — Generates a local PDF copy for offline review or compliance evidence submissions.
+3. **Email via SNS** — If you configured a notification email in Step 4, report summaries are sent automatically after each audit.
 
-### Step 8: Explore the Operations Control Plane
-Navigate to the **Operations** tab (`/operations`) for a centralized dashboard of all automated security operations:
-1. **Event Policies:** View and manage CloudTrail event response rules (e.g., auto-close port 22 if opened).
-2. **Cost Rules:** Set budget thresholds and anomaly alerts.
-3. **Drift Baselines:** View captured configuration baselines and track deviations.
-4. **Runbook History:** See all executed runbooks with step-by-step logs and outcomes.
+### Step 10: Explore the Operations Control Plane
+Click the **Operations** tab in the top navigation bar to access the centralized operations dashboard:
+1. **Event Policies:** View and manage CloudTrail event response rules (e.g., "auto-close port 22 if opened").
+2. **Cost Rules:** Set budget thresholds and spending anomaly alerts.
+3. **Drift Baselines:** View captured configuration baselines and track any deviations.
+4. **Runbook History:** See all executed runbooks with step-by-step logs, resource IDs, and outcomes.
 5. **Audit Timelines:** Browse a chronological log of every agent action taken on your account.
-6. Click **Start Tour** at the top of the page for a guided, auto-scrolling walkthrough that highlights each section.
 
-### Step 9: Explore the Compliance Control Plane
-Navigate to the **Compliance** tab (`/compliance`) for framework-specific compliance tracking:
-1. **Framework Selector:** Choose from SOC 2, ISO 27001, HIPAA, PCI-DSS v4.0, CIS AWS Foundations, NIST 800-53, and more.
+💡 **Tip:** Click **Start Tour** at the top of the Operations page for a guided, auto-scrolling walkthrough that highlights and explains each section.
+
+### Step 11: Explore the Compliance Control Plane
+Click the **Compliance** tab in the top navigation bar:
+1. **Framework Selector:** Choose from SOC 2, ISO 27001, HIPAA, PCI-DSS v4.0, CIS AWS Foundations, NIST 800-53, and 8 more frameworks.
 2. **Compliance Dials:** Visual gauges showing your compliance percentage per framework.
-3. **Interactive Checklists:** Drill into specific controls with pass/fail status and remediation guidance.
-4. Click **Start Tour** for a guided walkthrough of the compliance features.
+3. **Interactive Checklists:** Drill into specific controls to see pass/fail status and remediation guidance for each.
 
-### Step 10: Manage Your Team
-1. Navigate to the **Team** section in settings.
-2. **Invite members** by email — CloudPilot handles shadow accounts for users who haven't signed up yet.
-3. Team members can share conversations, audit histories, and compliance reports.
+💡 **Tip:** Click **Start Tour** for a guided walkthrough of the compliance features.
+
+### Step 12: Manage Your Team
+1. Click your **profile icon** in the top-right corner and select **Team Settings**.
+2. Click **Invite Member** and enter their email address — CloudPilot handles shadow accounts for users who haven't signed up yet, so they'll get full access the moment they create an account.
+3. Team members can share conversations, audit histories, and compliance reports across the organization.
 
 ---
 
