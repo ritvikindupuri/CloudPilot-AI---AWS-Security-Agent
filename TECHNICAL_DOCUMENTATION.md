@@ -8,9 +8,10 @@
 > [!IMPORTANT]
 > ## ARCHITECTURAL UPDATE: Self-Contained Local Mode (No Supabase or Cloud Database Required)
 > CloudPilot AI runs in a local, self-contained developer architecture:
-> 1. **Local Relational Database**: All tables (conversations, messages, runbooks, compliance baselines) are persisted in a real local SQLite database (`cloudpilot.db`) on your machine.
-> 2. **Local Deno Server Gateway**: A local Deno gateway (`local-server.ts`) runs on port `54321`. It mounts and executes all edge function logic locally with zero Docker or cloud database setup.
-> 3. **High-Fidelity AI Model**: Integrates with **Anthropic's Claude** (`claude-sonnet-4-6`) via `ANTHROPIC_API_KEY` for high-fidelity reasoning, safety auditing, and intent classification.
+> 1. **Docker Containerization**: Run the entire application with a single `docker compose up --build` command. Docker handles all dependencies (Node.js, Deno, SQLite) automatically.
+> 2. **Local Relational Database**: All tables (conversations, messages, runbooks, compliance baselines) are persisted in a real local SQLite database (`cloudpilot.db`) on your machine.
+> 3. **Local Deno Server Gateway**: A local Deno gateway (`local-server.ts`) runs on port `54321`. It mounts and executes all edge function logic locally with zero cloud database setup.
+> 4. **High-Fidelity AI Model**: Integrates with **Anthropic's Claude** (`claude-sonnet-4-6`) via `ANTHROPIC_API_KEY` for high-fidelity reasoning, safety auditing, and intent classification.
 
 
 ## Executive Summary

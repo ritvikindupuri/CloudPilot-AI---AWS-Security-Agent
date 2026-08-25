@@ -187,60 +187,114 @@ This approach is simpler than AWS EventBridge because it runs inside the databas
 - **Database / Auth:** Mocked locally using browser `localStorage` and client-side session handlers
 - **AI Model:** Anthropic Claude Sonnet 5 (via official API)
 - **Cloud Integration:** AWS SDK for JavaScript v3 (35+ services)
+- **Containerization:** Docker & Docker Compose (single-command setup)
 
 ---
 
 ## Detailed Setup Instructions
 
-Follow these steps to run the application locally.
+Choose your preferred method to run CloudPilot AI locally.
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v18+) & npm installed (or [Bun](https://bun.sh/) as an alternative package manager).
 - An [Anthropic API Key](https://console.anthropic.com/) to invoke Claude Sonnet 5.
-- No database setup or Docker installation is needed! Everything runs locally on your machine.
+- **Option A (Docker):** [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) installed.
+- **Option B (Native):** [Node.js](https://nodejs.org/) (v18+) & npm installed (or [Bun](https://bun.sh/)).
 
-### 1. Clone & Install Dependencies
+---
+
+### Option A: Docker (Recommended)
+
+The fastest way to get started. Docker handles all dependencies (Node.js, Deno, SQLite) automatically.
+
+#### 1. Clone the Repository
 
 ```sh
-# Clone the repository
+git clone <https://github.com/ritvikindupuri/aws-guardian-buddy.git>
+cd <aws-guardian-buddy>
+```
+
+#### 2. Configure Environment Variables
+
+```sh
+# Copy the example environment file
+cp .env.example .env
+
+# Edit .env and add your Anthropic API key
+# ANTHROPIC_API_KEY="your-anthropic-api-key-here"
+```
+
+#### 3. Build & Start
+
+```sh
+docker compose up --build
+```
+
+That's it. Open **http://localhost:8080** in your browser.
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Frontend (Vite) | `8080` | React web application |
+| Backend (Deno) | `54321` | API gateway + SQLite database |
+
+#### Useful Docker Commands
+
+```sh
+# Start in background (detached mode)
+docker compose up -d --build
+
+# View live logs
+docker compose logs -f
+
+# Stop the application
+docker compose down
+
+# Stop and remove all data (SQLite database)
+docker compose down -v
+
+# Rebuild after code changes
+docker compose up --build
+```
+
+---
+
+### Option B: Native (Without Docker)
+
+Run directly on your machine using Node.js and npm.
+
+#### 1. Clone & Install Dependencies
+
+```sh
 git clone <https://github.com/ritvikindupuri/aws-guardian-buddy.git>
 cd <aws-guardian-buddy>
 
-# Install the necessary dependencies
 npm install
 # or
 bun install
 ```
 
-### 2. Configure Environment Variables
+#### 2. Configure Environment Variables
 
-Create a `.env` file in the root directory (if not present) and configure your Anthropic API Key:
+Create a `.env` file in the root directory:
 
 ```env
-# The main Anthropic API Key
+# Required: Your Anthropic API Key
 ANTHROPIC_API_KEY="your-anthropic-api-key-here"
 
-# Optional: Customize the models used by the scan engines
-# Default for Fast Scan is claude-sonnet-4-6
-ANTHROPIC_MODEL="claude-sonnet-4-6"
-
-# Default for Deep Audit is claude-opus-5 (Claude Opus 5)
-ANTHROPIC_DEEP_MODEL="claude-opus-5"
+# Optional: Customize the AI models
+ANTHROPIC_MODEL="claude-sonnet-4-6"        # Fast Scan engine
+ANTHROPIC_DEEP_MODEL="claude-opus-5"       # Deep Audit engine
 ```
 
-### 3. Start the Development Server
-
-The development command launches both the React Vite frontend and the local Deno server gateway emulating the Supabase API endpoints internally on port 54321:
+#### 3. Start the Development Server
 
 ```sh
-# Start the dev environment (Vite frontend + Deno mock backend)
 npm run dev
 # or
 bun run dev
 ```
 
-Open your browser to the local URL provided (usually `http://localhost:8080`). All database states will be persisted in your local `cloudpilot.db` SQLite file.
+This launches both the React Vite frontend and the local Deno server gateway concurrently. Open **http://localhost:8080** in your browser. All database states are persisted in your local `cloudpilot.db` SQLite file.
 
 ---
 
