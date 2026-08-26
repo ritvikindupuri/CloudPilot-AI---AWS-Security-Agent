@@ -701,6 +701,21 @@ const ChatInterface = () => {
             )}
           </div>
 
+          {/* Quick Actions Dialog — rendered outside conditional blocks so the button always works */}
+          <Dialog open={isQuickActionsOpen} onOpenChange={setIsQuickActionsOpen}>
+            <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>CloudPilot Quick Actions Catalog</DialogTitle>
+                <DialogDescription>
+                  Select any pre-built security audit, compliance mapping, or attack simulation playbooks to run on your AWS account.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="mt-4">
+                <QuickActions onAction={handleQuickAction} disabled={isLoading} credentials={credentials} />
+              </div>
+            </DialogContent>
+          </Dialog>
+
           {/* Scan Mode Selector & Quick Actions Control Bar */}
           <div className="px-4 py-2 border-t border-border bg-card/70 flex items-center justify-between gap-2 max-w-3xl mx-auto text-xs">
             <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border/40 font-sans">
