@@ -905,22 +905,77 @@ const Compliance = () => {
             {filteredReports.length === 0 ? (
               <p className="text-sm text-muted-foreground">No reports matched the current compliance filter.</p>
             ) : (
-              filteredReports.slice(0, 8).map((report) => (
-                <Link
-                  key={report.id}
-                  to={`/report/${report.id}`}
-                  className="block rounded-xl border border-border bg-background/60 p-4 hover:border-primary/40 transition-colors"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{report.conversation_title}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{new Date(report.created_at).toLocaleString()}</p>
+              filteredReports.slice(0, 8).map((report) => {
+                // Generate a professional report title from content
+                const content = report.content || "";
+                const lc = content.toLowerCase();
+                const reportTitle = lc.includes("s3") && lc.includes("audit") ? "S3 Security Audit Report"
+                  : lc.includes("iam") && (lc.includes("escalation") || lc.includes("privilege")) ? "IAM Privilege Escalation Assessment"
+                  : lc.includes("security group") ? "Security Group Audit Report"
+                  : lc.includes("cost") || lc.includes("spend") ? "Cost Analysis Report"
+                  : lc.includes("drift") || lc.includes("baseline") ? "Configuration Drift Report"
+                  : lc.includes("cis") || lc.includes("benchmark") ? "CIS Benchmark Compliance Report"
+                  : lc.includes("guardduty") ? "GuardDuty Threat Analysis Report"
+                  : lc.includes("cloudtrail") ? "CloudTrail Activity Analysis Report"
+                  : lc.includes("unified") || lc.includes("full audit") || lc.includes("account audit") ? "Unified Security Audit Report"
+                  : lc.includes("ec2") ? "EC2 Security Assessment Report"
+                  : lc.includes("rds") || lc.includes("aurora") ? "RDS/Aurora Security Report"
+                  : lc.includes("lambda") ? "Lambda Security Report"
+                  : report.conversation_title !== "Untitled" ? report.conversation_title
+                  : "Security Assessment Report";
+
+                // Determine report type badge
+                const reportType = lc.includes("audit") || lc.includes("scan") ? "Audit"
+                  : lc.includes("cost") ? "FinOps"
+                  : lc.includes("drift") ? "Drift"
+                  : lc.includes("attack") || lc.includes("escalation") || lc.includes("lateral") ? "Red Team"
+                  : "Assessment";
+
+                const badgeColor = reportType === "Audit" ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                  : reportType === "FinOps" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                  : reportType === "Drift" ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                  : reportType === "Red Team" ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                  : "bg-purple-500/15 text-purple-400 border-purple-500/30";
+
+                // Skip reports with no real content
+                const isError = !content || content.includes("No response returned") || content.length < 50;
+
+                // Clean preview: strip markdown artifacts and show meaningful text
+                const cleanPreview = content
+                  .replace(/\*\*/g, "")
+                  .replace(/#{1,6}\s/g, "")
+                  .replace(/```[\s\S]*?```/g, "")
+                  .replace(/\|[\s\S]*?\|/g, "")
+                  .replace(/\n{2,}/g, " ")
+                  .trim();
+
+                return (
+                  <Link
+                    key={report.id}
+                    to={`/report/${report.id}`}
+                    className="block rounded-xl border border-border bg-background/60 p-4 hover:border-primary/40 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                          <FileText className="w-4 h-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{reportTitle}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${badgeColor}`}>{reportType}</span>
+                            <span className="text-xs text-muted-foreground">{new Date(report.created_at).toLocaleString()}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-xs text-primary font-medium flex-shrink-0">View report →</span>
                     </div>
-                    <span className="text-xs text-primary">Open report</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-3">{truncate(report.content)}</p>
-                </Link>
-              ))
+                    {!isError && (
+                      <p className="text-xs text-muted-foreground mt-3 line-clamp-2 leading-relaxed">{truncate(cleanPreview, 200)}</p>
+                    )}
+                  </Link>
+                );
+              })
             )}
           </div>
         </section>
