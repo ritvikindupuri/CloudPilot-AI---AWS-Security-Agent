@@ -102,9 +102,9 @@ graph TD
 
     subgraph "AI Layer (Anthropic)"
         E[Anthropic API Gateway]
-        F[Claude 3.5 Sonnet - Main Agent]
-        F2[Claude 3.5 Sonnet - Intent Classifier]
-        F3[Claude 3.5 Sonnet - Safety Gate Judge]
+        F[Claude Sonnet 5 - Main Agent]
+        F2[Claude Sonnet 5 - Intent Classifier]
+        F3[Claude Sonnet 5 - Safety Gate Judge]
     end
 
     subgraph "AWS Cloud Account"
@@ -153,7 +153,7 @@ graph TD
 **Figure 1.1 Explanation:**
 *   **Frontend Layer:** The React Single Page Application (SPA). Manages client states, hosts active browser session credentials (temporary STS keys), and handles local storage cache.
 *   **Backend Layer:** Seven edge functions collaborate to deliver the full feature set:
-  - **`aws-agent`** (1,337 lines) — The central orchestrator. Receives the user query, classifies intent using an LLM-based router (Claude 3.5 Sonnet), selects only the relevant tool subset for the classified intent, manages the agentic loop with the main AI model (Claude 3.5 Sonnet), dispatches tool calls to `aws-agent-tools` once approved by the Safety Gate Judge, and streams the final response back as SSE.
+  - **`aws-agent`** (1,337 lines) — The central orchestrator. Receives the user query, classifies intent using an LLM-based router (Claude Sonnet 5), selects only the relevant tool subset for the classified intent, manages the agentic loop with the main AI model (Claude Sonnet 5), dispatches tool calls to `aws-agent-tools` once approved by the Safety Gate Judge, and streams the final response back as SSE.
   - **`aws-agent-tools`** (75 lines) — A thin router that classifies incoming tool calls and dispatches them in parallel to either `aws-agent-scanner` or `aws-agent-ops`.
   - **`aws-agent-scanner`** (2,987 lines) — Handles `run_unified_audit`, `run_cost_anomaly_scan`, `manage_cost_rule`, `manage_drift_baseline`, `run_drift_detection`, and `execute_aws_api`. Contains the unified audit engine, cost anomaly detection, drift detection, and raw AWS API execution logic.
   - **`aws-agent-ops`** (4,572 lines) — Handles `manage_runbook_execution`, `manage_event_response_policy`, `replay_cloudtrail_events`, `run_org_query`, `manage_org_operation`, `manage_security_group_rule`, `manage_iam_access`, `run_attack_simulation`, and `run_evasion_test`. Contains the operational automation, org-wide queries, security group mutations, IAM automation, attack simulation, and evasion testing logic.
@@ -178,7 +178,7 @@ graph TD
 | `aws-exchange-credentials` | Deno Edge Function (255 lines) | STS credential exchange, IAM boundary checks |
 | Supabase Auth | Supabase Auth (email/password) | User registration, login, session management |
 | Supabase Database | PostgreSQL + RLS | Chat history, audit logs, cache, idempotency keys |
-| Anthropic API Gateway | Model API Gateway | Serves Claude 3.5 Sonnet (intent classifier, main agent, safety gate judge) |
+| Anthropic API Gateway | Model API Gateway | Serves Claude Sonnet 5 (intent classifier, main agent, safety gate judge) |
 | AWS Account | AWS SDK v3 (35+ services) | Real infrastructure data, configuration states, resource management |
 
 ---
@@ -197,7 +197,7 @@ sequenceDiagram
     participant Router as "aws-agent-tools"
     participant Scanner as "aws-agent-scanner"
     participant Executor as "aws-executor"
-    participant AI as "Claude 3.5 Sonnet via Anthropic API"
+    participant AI as "Claude Sonnet 5 via Anthropic API"
     participant AWS as "User AWS Account"
 
     Note over User,AWS: Example - Audit all S3 buckets for public access
@@ -779,7 +779,7 @@ This flowchart details the decision logic inside the agentic loop:
 
 1. **Entry:** The edge function receives validated session credentials (must include `sessionToken`).
 
-2. **Intent Classification:** The user's query is classified via Claude 3.5 Sonnet to filter the active tools set.
+2. **Intent Classification:** The user's query is classified via Claude Sonnet 5 to filter the active tools set.
 
 3. **Context Construction:** The system prompt is combined with sanitized conversation history and active credentials.
 
