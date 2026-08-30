@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   Sparkles,
   Shield,
+  ShieldCheck,
   Search,
   Plus,
   Copy,
@@ -28,7 +29,21 @@ import {
   Zap,
   Sliders,
   Eye,
-  Info
+  Info,
+  DollarSign,
+  GitCompare,
+  Building2,
+  Crosshair,
+  BellRing,
+  Bot,
+  Activity,
+  ArrowRight,
+  Lock,
+  Workflow,
+  Radio,
+  Server,
+  ArrowDown,
+  AlertTriangle
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -50,6 +65,13 @@ interface BuiltInSkill {
   allowedTools: string[];
   sampleQuery: string;
   systemSupplement: string;
+  icon: any;
+  iconTheme: {
+    text: string;
+    bg: string;
+    border: string;
+    glow: string;
+  };
 }
 
 interface CustomSkillRecord {
@@ -71,12 +93,19 @@ const BUILT_IN_SKILLS: BuiltInSkill[] = [
   {
     id: "security_audit",
     name: "Security Audit Specialist",
-    badge: "🔐 Security Audit Specialist",
+    badge: "Security Audit Specialist",
     intentKey: "security_audit",
     category: "Security",
     description: "Evaluates comprehensive cloud posture across IAM, S3, EC2, and VPC with CIS benchmark mappings and CLI remedies.",
     allowedTools: ["execute_aws_api", "run_security_scan", "query_cloudtrail", "manage_drift_baseline"],
     sampleQuery: "Audit my S3 buckets, security groups, and IAM roles against CIS Benchmark standards.",
+    icon: ShieldCheck,
+    iconTheme: {
+      text: "text-cyan-400",
+      bg: "bg-cyan-500/10",
+      border: "border-cyan-500/30",
+      glow: "shadow-[0_0_15px_rgba(6,182,212,0.15)]",
+    },
     systemSupplement: `ACTIVE SKILL: Security Audit Specialist
 You are now operating as an elite AWS security auditor. Your priorities in this query are:
 1. Enumerate all security misconfigurations across IAM, S3, EC2, and VPC with explicit resource IDs.
@@ -88,12 +117,19 @@ Do NOT skip resource IDs or use placeholder values. Real findings only.`,
   {
     id: "cost_analysis",
     name: "FinOps Cost Analyst",
-    badge: "💰 FinOps Cost Analyst",
+    badge: "FinOps Cost Analyst",
     intentKey: "cost_analysis",
     category: "FinOps",
     description: "Inspects AWS Cost Explorer daily spend, isolates statistical cost anomalies, and surfaces ROI-prioritized savings.",
     allowedTools: ["execute_aws_api", "run_cost_anomaly_scan", "manage_cost_rule"],
     sampleQuery: "Find cost anomalies and idle EC2 instances in my account over the past 14 days.",
+    icon: DollarSign,
+    iconTheme: {
+      text: "text-emerald-400",
+      bg: "bg-emerald-500/10",
+      border: "border-emerald-500/30",
+      glow: "shadow-[0_0_15px_rgba(16,185,129,0.15)]",
+    },
     systemSupplement: `ACTIVE SKILL: FinOps Cost Analyst
 You are now operating as a FinOps cost optimization expert. Your priorities:
 1. Break down spend by service, region, and resource with exact dollar amounts from the Cost Explorer API.
@@ -104,12 +140,19 @@ You are now operating as a FinOps cost optimization expert. Your priorities:
   {
     id: "drift_detection",
     name: "Drift Detection Engineer",
-    badge: "📊 Drift Detection Engineer",
+    badge: "Drift Detection Engineer",
     intentKey: "drift_detection",
     category: "Security",
     description: "Calculates cryptographic state fingerprints and diffs live resources against captured security baselines.",
     allowedTools: ["execute_aws_api", "run_drift_scan", "manage_drift_baseline"],
     sampleQuery: "Compare current security groups and S3 buckets against my baseline and show configuration drift.",
+    icon: GitCompare,
+    iconTheme: {
+      text: "text-amber-400",
+      bg: "bg-amber-500/10",
+      border: "border-amber-500/30",
+      glow: "shadow-[0_0_15px_rgba(245,158,11,0.15)]",
+    },
     systemSupplement: `ACTIVE SKILL: Drift Detection Engineer
 You are now operating as a configuration drift detection engineer. Your priorities:
 1. Compare current resource state against the captured baseline snapshot.
@@ -120,12 +163,19 @@ You are now operating as a configuration drift detection engineer. Your prioriti
   {
     id: "org_management",
     name: "AWS Organizations Expert",
-    badge: "🏢 AWS Organizations Expert",
+    badge: "AWS Organizations Expert",
     intentKey: "org_management",
     category: "Governance",
     description: "Navigates multi-account hierarchy, audits Service Control Policies (SCPs), and validates organization-wide guardrails.",
     allowedTools: ["execute_aws_api", "manage_service_control_policy", "manage_iam_permission_boundary"],
     sampleQuery: "Map my AWS Organization hierarchy and audit SCPs for missing root/OU guardrails.",
+    icon: Building2,
+    iconTheme: {
+      text: "text-purple-400",
+      bg: "bg-purple-500/10",
+      border: "border-purple-500/30",
+      glow: "shadow-[0_0_15px_rgba(168,85,247,0.15)]",
+    },
     systemSupplement: `ACTIVE SKILL: AWS Organizations Expert
 You are now operating as an AWS Organizations and multi-account governance specialist. Your priorities:
 1. Map the full organizational unit (OU) hierarchy with account IDs.
@@ -136,12 +186,19 @@ You are now operating as an AWS Organizations and multi-account governance speci
   {
     id: "ops_automation",
     name: "Incident Response Operator",
-    badge: "⚡ Incident Response Operator",
+    badge: "Incident Response Operator",
     intentKey: "ops_automation",
     category: "Automation",
     description: "Executes automated incident response runbooks with explicit confirmation gates before mutating infrastructure.",
     allowedTools: ["execute_aws_api", "execute_runbook", "query_cloudtrail", "manage_event_policy"],
     sampleQuery: "Run incident response playbook to isolate compromised EC2 instance i-0123456789abcdef0.",
+    icon: Zap,
+    iconTheme: {
+      text: "text-yellow-400",
+      bg: "bg-yellow-500/10",
+      border: "border-yellow-500/30",
+      glow: "shadow-[0_0_15px_rgba(234,179,8,0.15)]",
+    },
     systemSupplement: `ACTIVE SKILL: Incident Response Operator
 You are now operating as an incident response and runbook execution specialist. Your priorities:
 1. Execute the requested runbook steps in strict sequence with real API calls.
@@ -152,12 +209,19 @@ You are now operating as an incident response and runbook execution specialist. 
   {
     id: "attack_simulation",
     name: "Red Team Simulation Expert",
-    badge: "🎯 Red Team Simulation Expert",
+    badge: "Red Team Simulation Expert",
     intentKey: "attack_simulation",
     category: "Red Team",
     description: "Conducts authorized IAM privilege escalation simulation, lateral movement path mapping, and MITRE ATT&CK alignment.",
     allowedTools: ["execute_aws_api", "run_attack_simulation", "query_cloudtrail"],
     sampleQuery: "Simulate privilege escalation paths on IAM roles and map potential lateral movement.",
+    icon: Crosshair,
+    iconTheme: {
+      text: "text-rose-400",
+      bg: "bg-rose-500/10",
+      border: "border-rose-500/30",
+      glow: "shadow-[0_0_15px_rgba(244,63,94,0.15)]",
+    },
     systemSupplement: `ACTIVE SKILL: Red Team Simulation Expert
 You are now operating as an authorized red team penetration tester. Your priorities:
 1. Execute privilege escalation path discovery using real IAM API calls.
@@ -168,12 +232,19 @@ You are now operating as an authorized red team penetration tester. Your priorit
   {
     id: "event_automation",
     name: "Event Automation Specialist",
-    badge: "🔔 Event Automation Specialist",
+    badge: "Event Automation Specialist",
     intentKey: "event_automation",
     category: "Automation",
     description: "Parses CloudTrail event telemetry and generates real-time EventBridge auto-remediation policies.",
     allowedTools: ["execute_aws_api", "manage_event_policy", "query_cloudtrail"],
     sampleQuery: "If anyone modifies S3 public access block or opens port 22, create an automation rule to auto-remediate.",
+    icon: BellRing,
+    iconTheme: {
+      text: "text-blue-400",
+      bg: "bg-blue-500/10",
+      border: "border-blue-500/30",
+      glow: "shadow-[0_0_15px_rgba(59,130,246,0.15)]",
+    },
     systemSupplement: `ACTIVE SKILL: CloudTrail Event Automation Specialist
 You are now operating as a CloudTrail event automation and response policy engineer. Your priorities:
 1. Retrieve and analyze relevant CloudTrail events with exact timestamps and source IPs.
@@ -184,12 +255,19 @@ You are now operating as a CloudTrail event automation and response policy engin
   {
     id: "direct_query",
     name: "Direct Query Agent",
-    badge: "🔍 Direct Query Agent",
+    badge: "Direct Query Agent",
     intentKey: "direct_query",
     category: "General",
     description: "Single-pass execution model for targeted AWS resource inspection with raw structured tables and exact ARNs.",
     allowedTools: ["execute_aws_api"],
     sampleQuery: "List all EC2 instances in us-east-1 with their private IPs and instance states.",
+    icon: Terminal,
+    iconTheme: {
+      text: "text-indigo-400",
+      bg: "bg-indigo-500/10",
+      border: "border-indigo-500/30",
+      glow: "shadow-[0_0_15px_rgba(99,102,241,0.15)]",
+    },
     systemSupplement: `ACTIVE SKILL: Direct Query Agent
 You are now operating as a precise AWS resource query agent. Your priorities:
 1. Execute the exact API call requested with minimal tool calls (prefer single-pass).
@@ -200,12 +278,19 @@ You are now operating as a precise AWS resource query agent. Your priorities:
   {
     id: "general",
     name: "General Cloud Security Assistant",
-    badge: "☁️ General Cloud Security Assistant",
+    badge: "General Cloud Security Assistant",
     intentKey: "general",
     category: "General",
     description: "Full-capability generalist mode with access to all 15 security tools for multi-domain queries and exploratory conversations.",
     allowedTools: ["All 15 AWS Security Tools"],
     sampleQuery: "Explain my overall AWS cloud architecture and suggest immediate security hardening priorities.",
+    icon: Bot,
+    iconTheme: {
+      text: "text-teal-400",
+      bg: "bg-teal-500/10",
+      border: "border-teal-500/30",
+      glow: "shadow-[0_0_15px_rgba(20,184,166,0.15)]",
+    },
     systemSupplement: `ACTIVE SKILL: General Cloud Security Assistant
 You are operating in general mode. Use your full tool set and provide a comprehensive, well-structured response covering all relevant aspects of the user's query.`,
   },
@@ -214,7 +299,7 @@ You are operating in general mode. Use your full tool set and provide a comprehe
 const PRESET_TEMPLATES = [
   {
     name: "Kubernetes & EKS Cluster Hardener",
-    badge: "🛡️ EKS Security Hardener",
+    badge: "EKS Security Hardener",
     description: "Audits Amazon EKS clusters, OIDC IAM role bindings, worker node security groups, and public API endpoint exposure.",
     intent_key: "eks_security",
     trigger_keywords: ["eks", "k8s", "kubernetes", "cluster", "pod", "container"],
@@ -229,7 +314,7 @@ Your priorities:
   },
   {
     name: "HIPAA Cloud Health Data Guard",
-    badge: "🏥 HIPAA Compliance Guard",
+    badge: "HIPAA Compliance Guard",
     description: "Specialized auditor for HIPAA/HITECH healthcare workloads, checking S3 PHI encryption, KMS CMKs, and CloudTrail immutability.",
     intent_key: "hipaa_guard",
     trigger_keywords: ["hipaa", "healthcare", "phi", "patient", "hitech", "health data"],
@@ -244,7 +329,7 @@ Your priorities:
   },
   {
     name: "Serverless FinOps Scout",
-    badge: "⚡ Serverless FinOps Scout",
+    badge: "Serverless FinOps Scout",
     description: "Optimizes AWS Lambda concurrency, provisioned capacity, DynamoDB on-demand vs provisioned, and API Gateway caching.",
     intent_key: "serverless_finops",
     trigger_keywords: ["lambda", "serverless", "dynamodb", "api gateway", "step functions", "concurrency"],
@@ -284,6 +369,7 @@ export default function Skills() {
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [expandedSkillId, setExpandedSkillId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [activeDiagramStage, setActiveDiagramStage] = useState<number>(2);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -327,7 +413,7 @@ export default function Skills() {
             id: item.id,
             user_id: item.user_id || "",
             name: item.name || "Custom Skill",
-            badge: item.badge || `⚡ ${item.name}`,
+            badge: item.badge || item.name,
             description: item.description || "",
             intent_key: item.intent_key || item.name.toLowerCase().replace(/\s+/g, "_"),
             system_supplement: item.system_supplement || "",
@@ -374,7 +460,7 @@ export default function Skills() {
       setFormSystemSupplement(preset.system_supplement);
     } else {
       setFormName("");
-      setFormBadge("🛡️ Custom Security Auditor");
+      setFormBadge("Custom Security Auditor");
       setFormDescription("");
       setFormIntentKey("");
       setFormKeywords("");
@@ -421,7 +507,7 @@ Your priorities:
 
       const payload = {
         name: formName.trim(),
-        badge: formBadge.trim() || `⚡ ${formName.trim()}`,
+        badge: formBadge.trim() || formName.trim(),
         description: formDescription.trim(),
         intent_key: formIntentKey.trim() || formName.trim().toLowerCase().replace(/[^a-z0-9]/g, "_"),
         system_supplement: formSystemSupplement.trim(),
@@ -586,7 +672,7 @@ Your priorities:
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
         {/* Hero Section */}
-        <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-card/80 via-card/50 to-primary/5 p-6 sm:p-8 backdrop-blur-xl shadow-xl">
+        <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-card/90 via-card/50 to-primary/5 p-6 sm:p-8 backdrop-blur-xl shadow-xl">
           <div className="relative z-10 max-w-3xl space-y-3">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-mono font-medium bg-primary/10 text-primary border border-primary/25">
               <Wand2 className="w-3 h-3" />
@@ -683,18 +769,25 @@ Your priorities:
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredBuiltInSkills.map((skill) => {
                 const isExpanded = expandedSkillId === skill.id;
+                const IconComponent = skill.icon;
 
                 return (
                   <div
                     key={skill.id}
-                    className="flex flex-col rounded-2xl border border-border/70 bg-card/60 hover:border-primary/40 transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md"
+                    className="flex flex-col rounded-2xl border border-border/70 bg-card/60 hover:border-primary/40 transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md group"
                   >
-                    {/* Card Header */}
+                    {/* Card Header with Cyber Themed Icon Box */}
                     <div className="p-5 flex-1 space-y-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-base font-bold tracking-tight text-foreground flex items-center gap-2">
-                          {skill.badge}
-                        </span>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-transform duration-200 group-hover:scale-105 ${skill.iconTheme.bg} ${skill.iconTheme.border} ${skill.iconTheme.text} ${skill.iconTheme.glow}`}>
+                            <IconComponent className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold tracking-tight text-foreground">{skill.name}</h3>
+                            <span className="text-[10px] font-mono text-muted-foreground">{skill.intentKey}</span>
+                          </div>
+                        </div>
                         <Badge variant="outline" className="text-[10px] font-mono uppercase bg-background/60">
                           {skill.category}
                         </Badge>
@@ -750,7 +843,7 @@ Your priorities:
                         className="text-[11px] font-mono text-muted-foreground hover:text-foreground flex items-center gap-1"
                       >
                         {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                        {isExpanded ? "Hide Prompt" : "View Prompt"}
+                        {isExpanded ? "Hide Directives" : "View Directives"}
                       </button>
 
                       <Button
@@ -791,7 +884,7 @@ Your priorities:
                     className="p-3.5 rounded-xl border border-border/60 bg-background/50 hover:border-primary/50 transition-all flex flex-col justify-between gap-3"
                   >
                     <div>
-                      <span className="text-xs font-bold text-foreground block">{tmpl.badge}</span>
+                      <span className="text-xs font-bold text-foreground block">{tmpl.name}</span>
                       <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
                         {tmpl.description}
                       </p>
@@ -854,11 +947,16 @@ Your priorities:
                     >
                       <div className="space-y-3">
                         <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <span className="text-sm font-bold text-foreground block">{skill.badge}</span>
-                            <span className="text-[10px] font-mono text-muted-foreground">
-                              Intent: {skill.intent_key}
-                            </span>
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/25 text-primary flex items-center justify-center">
+                              <Wand2 className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <span className="text-sm font-bold text-foreground block">{skill.name}</span>
+                              <span className="text-[10px] font-mono text-muted-foreground">
+                                Intent: {skill.intent_key}
+                              </span>
+                            </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <Switch
@@ -947,64 +1045,182 @@ Your priorities:
             </div>
           </TabsContent>
 
-          {/* TAB 3: ENGINE ARCHITECTURE */}
+          {/* TAB 3: ENGINE ARCHITECTURE (INTERACTIVE FLOW DIAGRAM) */}
           <TabsContent value="architecture" className="space-y-6">
-            <div className="rounded-2xl border border-border bg-card/60 p-6 sm:p-8 space-y-6">
-              <div>
-                <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-                  <Cpu className="w-5 h-5 text-primary" /> 5-Stage Agent Orchestration Pipeline
-                </h3>
-                <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                  How query intent, persona supplements, tool filtering, and safety screening interact in every request:
-                </p>
+            <div className="rounded-2xl border border-border bg-card/60 p-6 sm:p-8 space-y-8">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border/60">
+                <div>
+                  <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                    <Workflow className="w-5 h-5 text-primary" /> Orchestration Architecture Diagram
+                  </h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                    Interactive 5-stage pipeline showing how natural language queries travel through intent routing, persona injection, tool filtering, and safety screening:
+                  </p>
+                </div>
+                <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/25 self-start">
+                  ⚡ End-to-End Latency: ~2-4s
+                </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                {[
-                  {
-                    step: "1",
-                    title: "Intent Classifier",
-                    badge: "Claude Sonnet 5",
-                    desc: "Categorizes user query into 1 of 9 domain intents or matches custom skill trigger keywords.",
-                  },
-                  {
-                    step: "2",
-                    title: "Skills Engine",
-                    badge: "Dynamic Persona",
-                    desc: "Injects domain-specific system directives, CIS/MITRE priorities, and output schemas into the prompt.",
-                  },
-                  {
-                    step: "3",
-                    title: "Tool Filtering",
-                    badge: "Noise Reduction",
-                    desc: "Narrows active AWS SDK tools from 15 down to 3-4 specialized tools, cutting token overhead by ~80%.",
-                  },
-                  {
-                    step: "4",
-                    title: "ReAct Loop",
-                    badge: "Sonnet 5 / Opus 5",
-                    desc: "Executes multi-pass reasoning and live AWS SDK API invocations with real infrastructure data.",
-                  },
-                  {
-                    step: "5",
-                    title: "Safety Gate Judge",
-                    badge: "Double-Audited",
-                    desc: "Independent secondary AI pass audits every proposed AWS SDK call before execution.",
-                  },
-                ].map((item) => (
-                  <div key={item.step} className="p-4 rounded-xl border border-border/70 bg-background/50 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="w-6 h-6 rounded-full bg-primary/15 text-primary font-mono text-xs font-bold flex items-center justify-center">
-                        {item.step}
-                      </span>
-                      <span className="text-[10px] font-mono text-muted-foreground px-1.5 py-0.5 rounded bg-muted/60">
-                        {item.badge}
-                      </span>
-                    </div>
-                    <h4 className="text-xs font-bold text-foreground">{item.title}</h4>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed">{item.desc}</p>
+              {/* Visual Pipeline Flow Chart */}
+              <div className="relative">
+                {/* Horizontal flow line for larger screens */}
+                <div className="hidden lg:block absolute top-1/2 left-4 right-4 h-0.5 bg-gradient-to-r from-primary/20 via-primary/50 to-primary/20 -translate-y-1/2 z-0" />
+
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 relative z-10">
+                  {[
+                    {
+                      step: 1,
+                      name: "Intent Classifier",
+                      model: "Claude Sonnet 5",
+                      icon: Search,
+                      color: "text-blue-400 bg-blue-500/10 border-blue-500/30",
+                      badge: "Stage 1",
+                      description: "Parses prompt & last 3 conversation turns. Classifies into 1 of 9 intents or matches custom keyword regex.",
+                      output: "intent_category / custom_key",
+                    },
+                    {
+                      step: 2,
+                      name: "Skills Engine",
+                      model: "Persona Injection",
+                      icon: Wand2,
+                      color: "text-primary bg-primary/10 border-primary/30",
+                      badge: "Stage 2",
+                      description: "Loads domain-specific priorities, CIS/MITRE schemas, and output format rules into system prompt.",
+                      output: "systemSupplement + SSE Badge",
+                    },
+                    {
+                      step: 3,
+                      name: "Tool Mask Filter",
+                      model: "Noise Reduction",
+                      icon: Sliders,
+                      color: "text-purple-400 bg-purple-500/10 border-purple-500/30",
+                      badge: "Stage 3",
+                      description: "Narrows active AWS tool definitions from 15 down to 3-4 specialized tools, cutting token overhead by ~80%.",
+                      output: "Scoped Tool Definition Array",
+                    },
+                    {
+                      step: 4,
+                      name: "ReAct Agentic Loop",
+                      model: "Sonnet 5 / Opus 5",
+                      icon: Cpu,
+                      color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
+                      badge: "Stage 4",
+                      description: "Executes multi-pass reasoning loop, invoking live AWS SDK API endpoints with real cloud telemetry.",
+                      output: "Proposed API Call Payloads",
+                    },
+                    {
+                      step: 5,
+                      name: "Safety Gate Judge",
+                      model: "Double-Audited Pass",
+                      icon: ShieldCheck,
+                      color: "text-rose-400 bg-rose-500/10 border-rose-500/30",
+                      badge: "Stage 5",
+                      description: "Independent secondary AI pass pre-screens every proposed mutation against destructive blocklists.",
+                      output: "APPROVED / BLOCKED Verdict",
+                    },
+                  ].map((node) => {
+                    const isSelected = activeDiagramStage === node.step;
+                    const NodeIcon = node.icon;
+
+                    return (
+                      <div
+                        key={node.step}
+                        onClick={() => setActiveDiagramStage(node.step)}
+                        className={`p-4 rounded-2xl border transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 bg-card/80 backdrop-blur-md shadow-sm hover:shadow-md ${
+                          isSelected
+                            ? "border-primary ring-2 ring-primary/20 scale-[1.02] bg-card"
+                            : "border-border/70 hover:border-border"
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${node.color}`}>
+                              <NodeIcon className="w-4 h-4" />
+                            </div>
+                            <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-muted/60 text-muted-foreground border border-border/40">
+                              {node.badge}
+                            </span>
+                          </div>
+
+                          <div>
+                            <h4 className="text-xs font-bold text-foreground">{node.name}</h4>
+                            <span className="text-[10px] font-mono text-primary/80">{node.model}</span>
+                          </div>
+
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
+                            {node.description}
+                          </p>
+                        </div>
+
+                        <div className="pt-2 border-t border-border/40">
+                          <span className="text-[9px] font-mono text-muted-foreground/80 block uppercase tracking-wider">Output:</span>
+                          <code className="text-[10px] font-mono text-foreground/90 truncate block mt-0.5">
+                            {node.output}
+                          </code>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Stage Deep Dive Inspector */}
+              <div className="p-5 rounded-2xl border border-primary/20 bg-background/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold font-mono text-primary flex items-center gap-2">
+                    <Activity className="w-4 h-4" /> Stage {activeDiagramStage} Technical Inspection
+                  </span>
+                  <span className="text-[10px] font-mono text-muted-foreground">
+                    Click any node in the diagram above to inspect
+                  </span>
+                </div>
+
+                {activeDiagramStage === 1 && (
+                  <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
+                    <p className="text-foreground font-semibold">Stage 1: Intent Classification & Trigger Matching</p>
+                    <p>
+                      Before calling the main agentic loop, CloudPilot passes the user's latest query along with conversation context into a single-shot classifier running on <strong>Claude Sonnet 5</strong> (~100ms latency). If the query matches custom keyword regex from your custom skills, Tier 1 resolution executes immediately. Otherwise, it routes to one of the 9 built-in domains.
+                    </p>
                   </div>
-                ))}
+                )}
+
+                {activeDiagramStage === 2 && (
+                  <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
+                    <p className="text-foreground font-semibold">Stage 2: Agent Skills Engine & Dynamic Persona Injection</p>
+                    <p>
+                      The classified intent or custom skill key triggers persona loading. The skill's <code>systemSupplement</code> is dynamically appended to Claude's system prompt with a <code>---</code> delimiter. An active skill badge (e.g. <code>Security Audit Specialist</code>) is simultaneously pushed to the UI via Server-Sent Events (SSE).
+                    </p>
+                  </div>
+                )}
+
+                {activeDiagramStage === 3 && (
+                  <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
+                    <p className="text-foreground font-semibold">Stage 3: Tool Definition Filtering</p>
+                    <p>
+                      Rather than exposing all 15 AWS tools (which consumes thousands of schema tokens per turn), the router maps the intent category to a pre-defined tool subset (<code>INTENT_TOOL_MAP</code>). For example, a cost query only receives 3 tools instead of 15, cutting token costs by ~80% and eliminating hallucinated tool choices.
+                    </p>
+                  </div>
+                )}
+
+                {activeDiagramStage === 4 && (
+                  <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
+                    <p className="text-foreground font-semibold">Stage 4: ReAct Agentic Loop & Live AWS Execution</p>
+                    <p>
+                      Claude executes a <strong>Reasoning and Acting (ReAct)</strong> loop (up to 15 iterations) with tool choice set to <code>required</code> on turn 1. It dynamically calls AWS STS, IAM, S3, EC2, CloudWatch, and Cost Explorer through the ephemeral Deno execution runtime.
+                    </p>
+                  </div>
+                )}
+
+                {activeDiagramStage === 5 && (
+                  <div className="space-y-2 text-xs text-muted-foreground leading-relaxed">
+                    <p className="text-foreground font-semibold">Stage 5: Dual-Model Safety Gate Interceptor</p>
+                    <p>
+                      Every proposed AWS SDK mutation is intercepted by an independent Safety Gate Judge pass before execution. The judge screens parameters against the hardcoded destructive operation blocklist (e.g. <code>deleteBucket</code>, <code>terminateInstances</code>, <code>closeAccount</code>) and validates privilege escalation patterns.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Best Practices Info Box */}
@@ -1049,9 +1265,9 @@ Your priorities:
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground">Display Badge (Emoji + Name) *</label>
+                <label className="text-xs font-medium text-foreground">Display Badge *</label>
                 <Input
-                  placeholder="e.g. 🛡️ EKS Security Specialist"
+                  placeholder="e.g. EKS Security Specialist"
                   value={formBadge}
                   onChange={(e) => setFormBadge(e.target.value)}
                   className="text-xs h-9"
