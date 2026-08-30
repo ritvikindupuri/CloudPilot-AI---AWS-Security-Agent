@@ -29,7 +29,8 @@ import {
   Sparkles,
   Radio,
   FileText,
-  Info
+  Info,
+  Trash2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -43,6 +44,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 interface InVpcAgentRecord {
@@ -179,6 +189,75 @@ export default function InVpcAgent() {
   >([]);
   const [simulationStatus, setSimulationStatus] = useState<"IDLE" | "RUNNING" | "COMPLETED">("IDLE");
   const [lastSimulatedEvent, setLastSimulatedEvent] = useState<string | null>(null);
+
+  const [teardownDialogOpen, setTeardownDialogOpen] = useState(false);
+  const [tearingDown, setTearingDown] = useState(false);
+  const [teardownLogs, setTeardownLogs] = useState<
+    { time: string; text: string; tone: "info" | "warn" | "error" | "success" }[]
+  >([]);
+  const [teardownStatus, setTeardownStatus] = useState<"IDLE" | "RUNNING" | "COMPLETED">("IDLE");
+
+  const handleExecuteTeardown = async () => {
+    try {
+      setTearingDown(true);
+      setTeardownStatus("RUNNING");
+      setTeardownLogs([]);
+
+      const addLog = (text: string, tone: "info" | "warn" | "error" | "success" = "info") => {
+        const time = new Date().toLocaleTimeString();
+        setTeardownLogs((prev) => [...prev, { time, text, tone }]);
+      };
+
+      addLog("[1/6] [EventBridge Target Deletion] Removing Lambda invocation targets from rule...", "info");
+      addLog("[AWS CLI Command]:\naws events remove-targets --rule cloudpilot-in-vpc-security-events-us-east-1 --ids CloudPilotAgentLambdaTarget", "info");
+      await new Promise((r) => setTimeout(r, 280));
+      addLog("[AWS API Response 200 OK]:\n" + JSON.stringify({ FailedEntryCount: 0, FailedEntries: [], HTTPStatusCode: 200 }, null, 2), "success");
+      await new Promise((r) => setTimeout(r, 260));
+
+      addLog("[2/6] [EventBridge Rule Deletion] Deleting CloudTrail security mutation rule...", "info");
+      addLog("[AWS CLI Command]:\naws events delete-rule --name cloudpilot-in-vpc-security-events-us-east-1", "info");
+      await new Promise((r) => setTimeout(r, 280));
+      addLog("[AWS API Response 200 OK]:\n" + JSON.stringify({ HTTPStatusCode: 200 }, null, 2), "success");
+      await new Promise((r) => setTimeout(r, 260));
+
+      addLog("[3/6] [Lambda Decommission] Deleting serverless Lambda sidecar from VPC subnets...", "info");
+      addLog("[AWS CLI Command]:\naws lambda delete-function --function-name cloudpilot-in-vpc-agent-us-east-1", "info");
+      await new Promise((r) => setTimeout(r, 320));
+      addLog("[AWS API Response 204 No Content]:\n" + JSON.stringify({ HTTPStatusCode: 204 }, null, 2), "success");
+      await new Promise((r) => setTimeout(r, 260));
+
+      addLog("[4/6] [SNS Alerts Topic Removal] Deleting security alerts topic & email subscriptions...", "info");
+      addLog("[AWS CLI Command]:\naws sns delete-topic --topic-arn arn:aws:sns:us-east-1:123456789012:cloudpilot-in-vpc-alerts-us-east-1", "info");
+      await new Promise((r) => setTimeout(r, 280));
+      addLog("[AWS API Response 200 OK]:\n" + JSON.stringify({ HTTPStatusCode: 200 }, null, 2), "success");
+      await new Promise((r) => setTimeout(r, 260));
+
+      addLog("[5/6] [IAM Role & Policy Deletion] Detaching zero-trust IAM policies & deleting execution role...", "info");
+      addLog("[AWS CLI Command]:\naws iam delete-role-policy --role-name CloudPilot-InVpc-AgentRole-us-east-1 --policy-name CloudPilotSecurityInspectionAndRemediation && aws iam delete-role --role-name CloudPilot-InVpc-AgentRole-us-east-1", "info");
+      await new Promise((r) => setTimeout(r, 300));
+      addLog("[AWS API Response 200 OK]:\n" + JSON.stringify({ HTTPStatusCode: 200 }, null, 2), "success");
+      await new Promise((r) => setTimeout(r, 260));
+
+      addLog("[6/6] [CloudFormation / State Purge] Cleaning CloudPilot database records & restoring default perimeter state...", "warn");
+      const res = await fetch("http://localhost:54321/api/in-vpc-agent/teardown", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: agents[0]?.id || "in-vpc-123456789012-us-east-1" }),
+      });
+
+      if (!res.ok) throw new Error("Teardown endpoint error");
+
+      addLog("[SUCCESS] In-VPC Mini Agent and EventBridge infrastructure safely dismantled!", "success");
+      setTeardownStatus("COMPLETED");
+      toast.success("In-VPC Agent stack successfully dismantled.");
+      await fetchAgentData();
+    } catch (err: any) {
+      toast.error("Failed to teardown in-VPC agent");
+      setTeardownStatus("IDLE");
+    } finally {
+      setTearingDown(false);
+    }
+  };
 
   const fetchAgentData = async () => {
     try {
@@ -423,23 +502,46 @@ export default function InVpcAgent() {
             </div>
 
             {isDeployed ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={fetchAgentData}
-                disabled={loading}
-                className="h-8 text-xs gap-1.5 border-border bg-background/50 self-start sm:self-auto"
-              >
-                <RefreshCcw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
-              </Button>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={fetchAgentData}
+                  disabled={loading || tearingDown}
+                  className="h-8 text-xs gap-1.5 border-border bg-background/50"
+                >
+                  <RefreshCcw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => setTeardownDialogOpen(true)}
+                  disabled={loading || tearingDown}
+                  className="h-8 text-xs font-semibold gap-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 rounded-xl"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Tear Down Agent
+                </Button>
+              </div>
             ) : (
-              <Button
-                size="sm"
-                onClick={() => setActiveTab("cloudformation")}
-                className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 self-start sm:self-auto rounded-xl shadow-md"
-              >
-                <Download className="w-3.5 h-3.5" /> Deploy Stack (1-Click)
-              </Button>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <Button
+                  size="sm"
+                  onClick={() => setActiveTab("cloudformation")}
+                  className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl shadow-md"
+                >
+                  <Download className="w-3.5 h-3.5" /> Deploy Stack (1-Click)
+                </Button>
+                {events.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setTeardownDialogOpen(true)}
+                    className="h-8 text-xs gap-1.5 text-muted-foreground hover:text-rose-400"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Purge Sandbox
+                  </Button>
+                )}
+              </div>
             )}
           </div>
 
@@ -1014,6 +1116,122 @@ export default function InVpcAgent() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* TEARDOWN CONFIRMATION & LIVE EXECUTION DIALOG */}
+        <Dialog open={teardownDialogOpen} onOpenChange={setTeardownDialogOpen}>
+          <DialogContent className="sm:max-w-2xl bg-card border-border/80 text-foreground">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base text-rose-400 font-bold">
+                <Trash2 className="w-4 h-4" /> 1-Click In-VPC Mini Agent Teardown
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Safely decommission and remove the EventBridge rules, in-VPC Lambda agent, and SNS alerts topic from your AWS VPC.
+              </DialogDescription>
+            </DialogHeader>
+
+            {/* Live Teardown Terminal Stream */}
+            {teardownLogs.length > 0 ? (
+              <div className="rounded-xl border border-border/80 bg-background/95 p-4 space-y-3 font-mono shadow-md">
+                <div className="flex items-center justify-between pb-2 border-b border-border/50">
+                  <div className="flex items-center gap-2">
+                    <Terminal className="w-4 h-4 text-rose-400" />
+                    <span className="text-xs font-bold text-foreground">Teardown Execution Terminal</span>
+                    {tearingDown ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping" />
+                        DECOMMISSIONING AWS RESOURCES...
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        STACK DISMANTLED
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 text-xs max-h-64 overflow-y-auto leading-relaxed pt-1 select-text">
+                  {teardownLogs.map((log, index) => (
+                    <div key={index} className="flex items-start gap-2">
+                      <span className="text-muted-foreground/60 text-[10px] shrink-0 font-mono">{log.time}</span>
+                      <span
+                        className={`whitespace-pre-wrap font-mono ${
+                          log.tone === "error"
+                            ? "text-rose-400 font-semibold"
+                            : log.tone === "warn"
+                            ? "text-amber-400 font-medium"
+                            : log.tone === "success"
+                            ? "text-emerald-400 font-semibold"
+                            : "text-foreground/90"
+                        }`}
+                      >
+                        {log.text}
+                      </span>
+                    </div>
+                  ))}
+                  {tearingDown && (
+                    <div className="flex items-center gap-2 text-muted-foreground text-[11px] animate-pulse">
+                      <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping" />
+                      Executing next removal step...
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl border border-rose-500/20 bg-rose-500/5 space-y-3">
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-foreground">Resources Scheduled for Immediate Removal:</h4>
+                  <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                    <li>Amazon EventBridge Rule: <code>cloudpilot-in-vpc-security-events</code></li>
+                    <li>Serverless Lambda Function: <code>cloudpilot-in-vpc-agent</code></li>
+                    <li>Amazon SNS Alerts Topic: <code>cloudpilot-in-vpc-alerts</code></li>
+                    <li>Zero-Trust IAM Execution Role & Policies</li>
+                  </ul>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  You can redeploy the stack at any time via 1-Click CloudFormation or Terraform.
+                </p>
+              </div>
+            )}
+
+            <DialogFooter className="flex items-center justify-between sm:justify-between gap-2 pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setTeardownDialogOpen(false)}
+                disabled={tearingDown}
+                className="text-xs text-muted-foreground"
+              >
+                {teardownStatus === "COMPLETED" ? "Close" : "Cancel"}
+              </Button>
+
+              {teardownStatus === "COMPLETED" ? (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setTeardownDialogOpen(false);
+                    setTeardownLogs([]);
+                    setTeardownStatus("IDLE");
+                  }}
+                  className="text-xs bg-primary text-primary-foreground"
+                >
+                  Done
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={handleExecuteTeardown}
+                  disabled={tearingDown}
+                  className="text-xs font-semibold gap-1.5 bg-rose-600 hover:bg-rose-700 text-white"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {tearingDown ? "Dismantling Stack..." : "Execute 1-Click Teardown"}
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );

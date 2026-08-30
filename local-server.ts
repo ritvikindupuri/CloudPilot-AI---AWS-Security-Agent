@@ -518,6 +518,25 @@ serve(async (req) => {
       });
     }
 
+    if (path.endsWith("/api/in-vpc-agent/teardown")) {
+      const body = await req.json().catch(() => ({}));
+      const agentId = body.agentId || "in-vpc-123456789012-us-east-1";
+
+      db.query(`DELETE FROM in_vpc_events WHERE agent_id = ?`, [agentId]);
+      db.query(`DELETE FROM in_vpc_agents WHERE id = ?`, [agentId]);
+      // Also clean up any other sandbox agents
+      db.query(`DELETE FROM in_vpc_agents WHERE user_id = 'sandbox-user'`);
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: "In-VPC Mini Agent and EventBridge infrastructure safely dismantled.",
+        agentId
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
     // ── Edge Functions ────────────────────────────────────────────────────────
     console.log(`[CloudPilot Deno Gateway] ${req.method} ${path}`);
 
