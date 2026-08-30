@@ -462,6 +462,15 @@ Click the **Compliance** tab in the top navigation bar:
 2. **Invite members** by email — CloudPilot handles shadow accounts for users who haven't signed up yet, so they'll get full access the moment they create an account.
 3. Team members can share conversations, audit histories, and compliance reports across the organization.
 
+### Step 14: Deploy the In-VPC Mini Agent (`/in-vpc-agent`)
+For enterprises requiring automated 24/7 in-VPC monitoring and instant drift auto-remediation:
+1. Click the **In-VPC Agent** tab in the top navigation bar.
+2. Choose your preferred deployment method:
+   - **1-Click CloudFormation:** Click **Copy YAML** (or upload `deploy/cloudformation/cloudpilot-in-vpc.yaml` in AWS CloudFormation) to launch the serverless watchdog in under 60 seconds with **$0 idle cost**.
+   - **Terraform Module:** Copy the drop-in `main.tf` snippet from `deploy/terraform/` and run `terraform init && terraform apply`.
+3. **Live Event Stream:** Once deployed, the agent automatically intercepts CloudTrail mutation events (security groups, public S3, IAM escalations), executes auto-remediation in `< 2 seconds`, and streams audit telemetry live into your dashboard.
+4. **Interactive Simulator:** Click **Simulate Port 22 Drift** or **Simulate Public S3 Exposure** on the In-VPC Agent page to test the real-time detection and auto-remediation loop directly in local development!
+
 ---
 
 ## AWS Setup Instructions

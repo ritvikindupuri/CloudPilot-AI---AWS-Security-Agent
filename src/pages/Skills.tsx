@@ -755,25 +755,70 @@ Your priorities:
             </p>
           </div>
 
-          {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-border/50">
-            <div className="bg-background/40 rounded-xl p-3 border border-border/40">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Built-in Skills</span>
-              <p className="text-xl font-bold font-mono text-foreground mt-0.5">9 Personas</p>
+          {/* Quick Metrics Bar with Hover Tooltips */}
+          <TooltipProvider delayDuration={100}>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-border/50">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="bg-background/40 hover:bg-background/60 transition-colors rounded-xl p-3 border border-border/40 cursor-help">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Built-in Skills</span>
+                    <p className="text-xl font-bold font-mono text-foreground mt-0.5">9 Personas</p>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs p-3 space-y-1 bg-card/95 border-border shadow-xl backdrop-blur-md">
+                  <span className="font-mono text-xs font-bold text-primary">9 Specialist Personas</span>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Domain-specific experts spanning Security Audits, FinOps Cost Analysis, Drift Detection, Runbook Incident Response, and Red Team analysis.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="bg-background/40 hover:bg-background/60 transition-colors rounded-xl p-3 border border-border/40 cursor-help">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Custom Skills</span>
+                    <p className="text-xl font-bold font-mono text-primary mt-0.5">{customSkills.length} Created</p>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs p-3 space-y-1 bg-card/95 border-border shadow-xl backdrop-blur-md">
+                  <span className="font-mono text-xs font-bold text-primary">Custom Persona Studio</span>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Author your own specialist personas with custom compliance directives, scoped AWS tools, and keyword triggers.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="bg-background/40 hover:bg-background/60 transition-colors rounded-xl p-3 border border-border/40 cursor-help">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Tool Reduction</span>
+                    <p className="text-xl font-bold font-mono text-emerald-400 mt-0.5">~80% Noise Cut</p>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs p-3 space-y-1 bg-card/95 border-border shadow-xl backdrop-blur-md">
+                  <span className="font-mono text-xs font-bold text-emerald-400">Tool Mask Token Optimization (~80%)</span>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Instead of loading all 15 tool definitions (~12,000 prompt tokens) on every query, the Intent Router scopes the active tool set to 3-4 specialized tools (~2,400 tokens), cutting token overhead by ~80% and preventing tool hallucination.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="bg-background/40 hover:bg-background/60 transition-colors rounded-xl p-3 border border-border/40 cursor-help">
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Safety Layer</span>
+                    <p className="text-xl font-bold font-mono text-cyan-400 mt-0.5">Pre-Screened</p>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs p-3 space-y-1 bg-card/95 border-border shadow-xl backdrop-blur-md">
+                  <span className="font-mono text-xs font-bold text-cyan-400">Dual-Model Safety Gate</span>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Every proposed AWS SDK mutation is pre-screened by an independent Safety Gate Judge before execution. Destructive actions (dropping databases, un-scoped 0.0.0.0/0 rules) are audited and rejected in real time.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
             </div>
-            <div className="bg-background/40 rounded-xl p-3 border border-border/40">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Custom Skills</span>
-              <p className="text-xl font-bold font-mono text-primary mt-0.5">{customSkills.length} Created</p>
-            </div>
-            <div className="bg-background/40 rounded-xl p-3 border border-border/40">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Tool Reduction</span>
-              <p className="text-xl font-bold font-mono text-emerald-400 mt-0.5">~80% Noise Cut</p>
-            </div>
-            <div className="bg-background/40 rounded-xl p-3 border border-border/40">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Safety Layer</span>
-              <p className="text-xl font-bold font-mono text-cyan-400 mt-0.5">Pre-Screened</p>
-            </div>
-          </div>
+          </TooltipProvider>
         </div>
 
         {/* Search, Filter & Action Bar */}
