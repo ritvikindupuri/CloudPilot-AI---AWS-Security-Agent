@@ -52,6 +52,18 @@ const ChatInterface = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [subscriptionTier, setSubscriptionTier] = useState<string>("free");
 
+  // Read prefilled prompt from Skills Catalog if user clicked 'Run in Chat'
+  useEffect(() => {
+    const prefill = sessionStorage.getItem("cloudpilot-prefill-prompt");
+    if (prefill) {
+      sessionStorage.removeItem("cloudpilot-prefill-prompt");
+      setInput(prefill);
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }
+  }, []);
+
   const { user, signOut } = useAuth();
 
   useEffect(() => {
@@ -340,6 +352,16 @@ const ChatInterface = () => {
           >
             <Settings2 className="w-3.5 h-3.5" />
             Operations
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/skills")}
+            className="hidden sm:flex items-center gap-1.5 text-muted-foreground hover:text-foreground h-8 px-2.5 text-xs"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-primary/80" />
+            Skills
           </Button>
 
           <Button
@@ -686,13 +708,19 @@ const ChatInterface = () => {
                 )}
                 {activeSkill && isLoading && (
                   <div className="flex justify-center my-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20 shadow-sm backdrop-blur-sm">
+                    <button
+                      type="button"
+                      onClick={() => navigate("/skills")}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20 shadow-sm backdrop-blur-sm hover:bg-primary/20 transition-all cursor-pointer group"
+                      title="Click to inspect this specialist persona in the Skills Catalog"
+                    >
                       <span className="relative flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
                       </span>
-                      {activeSkill.badge}
-                    </div>
+                      <span>{activeSkill.badge}</span>
+                      <Sparkles className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
+                    </button>
                   </div>
                 )}
                 {showThinking && <ThinkingIndicator logs={executionLogs} />}

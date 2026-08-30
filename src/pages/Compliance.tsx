@@ -439,6 +439,12 @@ const Compliance = () => {
               </Link>
             </Button>
             <Button variant="outline" size="sm" asChild>
+              <Link to="/skills">
+                <Sparkles className="w-4 h-4 mr-2 text-primary" />
+                Skills
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
               <Link to="/reports">
                 <FileText className="w-4 h-4 mr-2" />
                 Reports

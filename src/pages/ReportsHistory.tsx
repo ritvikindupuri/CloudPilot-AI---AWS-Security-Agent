@@ -12,6 +12,7 @@ import {
   Download,
   Loader2,
   Filter,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -186,6 +187,21 @@ const ReportsHistory = () => {
               {filtered.length} reports
             </Badge>
           </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground hover:text-foreground">
+            <Link to="/operations">Operations</Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground hover:text-foreground">
+            <Link to="/skills" className="flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-primary" />
+              Skills
+            </Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground hover:text-foreground">
+            <Link to="/compliance">Compliance</Link>
+          </Button>
         </div>
       </header>
 

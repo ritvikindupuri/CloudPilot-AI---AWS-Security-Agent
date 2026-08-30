@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Users, UserPlus, Shield, Crown, Eye, Trash2, ChevronDown, Mail } from "lucide-react";
+import { ArrowLeft, Users, UserPlus, Shield, Crown, Eye, Trash2, ChevronDown, Mail, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -230,6 +230,12 @@ const Team = () => {
                 Invite Member
               </Button>
             )}
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/skills">
+                <Sparkles className="w-4 h-4 mr-2 text-primary" />
+                Skills
+              </Link>
+            </Button>
             <Button variant="outline" size="sm" asChild>
               <Link to="/app">
                 <ArrowLeft className="w-4 h-4 mr-2" />

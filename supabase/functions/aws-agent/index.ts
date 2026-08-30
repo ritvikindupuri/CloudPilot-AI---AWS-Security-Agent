@@ -6329,7 +6329,7 @@ export const handler = async (req: Request): Promise<Response> => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { messages, credentials, notificationEmail, conversationId, geminiApiKey: clientGeminiKey, assistantId, scanMode } = body;
+    const { messages, credentials, notificationEmail, conversationId, geminiApiKey: clientGeminiKey, assistantId, scanMode, customSkills, activeSkillId } = body;
     const resolvedGeminiKey = clientGeminiKey || RUNTIME_CONFIG.geminiApiKey;
 
     const supabaseAdmin = createClient(RUNTIME_CONFIG.supabaseUrl, RUNTIME_CONFIG.supabaseServiceRoleKey);
@@ -6460,29 +6460,82 @@ export const handler = async (req: Request): Promise<Response> => {
         let latestUnifiedAuditSummary: Record<string, any> | null = null;
 
         try {
-          // ── Intent-based routing ─────────────────────────────────────────────────
-          liveExecutionLogs.push({ step: "Router", status: "info", message: "Classifying query intent..." });
+          // ── Intent-based routing & Skills Engine ─────────────────────────────────
+          liveExecutionLogs.push({ step: "Router", status: "info", message: "Evaluating query intent & skills engine..." });
           sendMeta({ executionLogs: [...liveExecutionLogs] });
 
-          const classifiedIntent = await classifyIntent(sanitizedMessages, resolvedGeminiKey);
-          console.log(`[CloudPilot Router] Classified intent: ${classifiedIntent}`);
+          let activeSkillData: { name: string; badge: string; systemSupplement: string; allowedTools?: string[]; intentLabel?: string } | null = null;
 
-          const allowedToolNames = INTENT_TOOL_MAP[classifiedIntent];
-          const filteredTools = allowedToolNames.size === tools.length
-            ? tools
-            : tools.filter((t: any) => allowedToolNames.has(t.function.name));
+          // 1. Check if a custom skill matches trigger keywords or was explicitly requested
+          if (Array.isArray(customSkills) && customSkills.length > 0) {
+            const latestLower = latestUserMessage.toLowerCase();
+            for (const cs of customSkills) {
+              const isActive = cs.is_active === true || cs.is_active === "true" || cs.is_active === undefined;
+              if (!isActive) continue;
 
-          // ── Load matching Agent Skill ──────────────────────────────────────────
-          const activeSkill = AGENT_SKILLS[classifiedIntent];
-          liveExecutionLogs.push({ step: "Skills Engine", status: "success", message: `Skill activated: ${activeSkill.badge}` });
-          sendMeta({ executionLogs: [...liveExecutionLogs], activeSkill: { name: activeSkill.name, badge: activeSkill.badge } });
+              const isExplicitId = activeSkillId && cs.id === activeSkillId;
+              let matchesKeyword = false;
+              try {
+                const keywords = Array.isArray(cs.trigger_keywords)
+                  ? cs.trigger_keywords
+                  : (typeof cs.trigger_keywords === "string" ? JSON.parse(cs.trigger_keywords || "[]") : []);
+                matchesKeyword = keywords.some((k: string) => k && typeof k === "string" && latestLower.includes(k.toLowerCase().trim()));
+              } catch { /* ignore parse error */ }
+
+              if (isExplicitId || matchesKeyword) {
+                let allowed: string[] = [];
+                try {
+                  allowed = Array.isArray(cs.allowed_tools)
+                    ? cs.allowed_tools
+                    : (typeof cs.allowed_tools === "string" ? JSON.parse(cs.allowed_tools || "[]") : []);
+                } catch { /* ignore */ }
+
+                activeSkillData = {
+                  name: cs.name,
+                  badge: cs.badge || `⚡ ${cs.name}`,
+                  systemSupplement: cs.system_supplement || `ACTIVE SKILL: ${cs.name}\n${cs.description || ""}`,
+                  allowedTools: allowed.length > 0 ? allowed : undefined,
+                  intentLabel: `custom:${cs.intent_key || cs.name}`,
+                };
+                console.log(`[CloudPilot Skills Engine] Activated custom skill: ${activeSkillData.badge}`);
+                break;
+              }
+            }
+          }
+
+          // 2. If no custom skill matched, run standard intent classifier
+          let filteredTools = tools;
+          if (!activeSkillData) {
+            const classifiedIntent = await classifyIntent(sanitizedMessages, resolvedGeminiKey);
+            console.log(`[CloudPilot Router] Classified intent: ${classifiedIntent}`);
+
+            const allowedToolNames = INTENT_TOOL_MAP[classifiedIntent];
+            filteredTools = allowedToolNames.size === tools.length
+              ? tools
+              : tools.filter((t: any) => allowedToolNames.has(t.function.name));
+
+            const builtInSkill = AGENT_SKILLS[classifiedIntent];
+            activeSkillData = {
+              name: builtInSkill.name,
+              badge: builtInSkill.badge,
+              systemSupplement: builtInSkill.systemSupplement,
+              intentLabel: classifiedIntent,
+            };
+          } else if (activeSkillData.allowedTools && activeSkillData.allowedTools.length > 0) {
+            const allowedSet = new Set(activeSkillData.allowedTools);
+            filteredTools = tools.filter((t: any) => allowedSet.has(t.function.name));
+            if (filteredTools.length === 0) filteredTools = tools; // Fallback to all tools if none matched
+          }
+
+          liveExecutionLogs.push({ step: "Skills Engine", status: "success", message: `Skill activated: ${activeSkillData.badge}` });
+          sendMeta({ executionLogs: [...liveExecutionLogs], activeSkill: { name: activeSkillData.name, badge: activeSkillData.badge } });
 
           // Inject skill-specific system supplement into the agent context
           if (apiMessages.length > 0 && apiMessages[0].role === "system") {
-            apiMessages[0].content = `${apiMessages[0].content}\n\n---\n${activeSkill.systemSupplement}`;
+            apiMessages[0].content = `${apiMessages[0].content}\n\n---\n${activeSkillData.systemSupplement}`;
           }
 
-          liveExecutionLogs.push({ step: "Router", status: "success", message: `Activated ${filteredTools.length} security tools for intent: ${classifiedIntent}` });
+          liveExecutionLogs.push({ step: "Router", status: "success", message: `Activated ${filteredTools.length} security tools for skill: ${activeSkillData.name}` });
           sendMeta({ executionLogs: [...liveExecutionLogs] });
 
           const MAX_ITERATIONS = 15;

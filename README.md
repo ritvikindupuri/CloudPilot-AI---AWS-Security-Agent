@@ -130,6 +130,14 @@ The active skill badge is displayed in real-time in the chat UI (e.g., `🔐 Sec
 
 **Why this matters:** Instead of a generic agent answering every query the same way, the Skills Engine transforms the agent into a domain expert for each task — producing more structured, actionable, and contextually relevant output.
 
+#### Skills Catalog & Custom Persona Studio (`/skills`)
+
+Navigate to the **Skills** tab in the top navigation to:
+- **Inspect System Directives**: View and copy the exact raw system supplements and prompt directives driving all 9 built-in specialist personas.
+- **Author Custom Specialist Skills**: Create your own personas (e.g., `🛡️ Kubernetes & EKS Hardener`, `🏥 HIPAA Compliance Guard`) with custom prompt directives, trigger keywords, and scoped AWS tool access.
+- **Quick-Start Templates**: One-click install preset skills for Kubernetes security, HIPAA health data governance, and serverless FinOps.
+- **Dynamic Activation**: Custom skills persist in your local database and automatically trigger during chat whenever user queries match your custom trigger keywords.
+
 ### Why Claude Sonnet 5 & Claude Opus 5?
 
 - **Top-Tier Tool Calling**: Native function-calling and tool-use support with near-zero hallucination rates, ensuring correct AWS SDK payloads.
@@ -389,7 +397,14 @@ On each agent response in the chat, you'll see action buttons in the **top-right
 2. **Download PDF** — Generates a local PDF copy for offline review or compliance evidence submissions.
 3. **Email via SNS** — If you configured a notification email in Step 4, report summaries are sent automatically after each audit.
 
-### Step 10: Explore the Operations Control Plane
+### Step 10: Explore the Skills Catalog & Author Custom Personas
+Click the **Skills** tab in the top navigation bar to enter the **Skills Catalog & Persona Studio**:
+1. **Built-in Personas:** Browse all 9 default specialist skills. Click **View Prompt** on any skill to inspect the exact system supplement and priorities injected into Claude's context.
+2. **Run in Chat:** Click **Run in Chat** on any skill card to auto-populate a targeted query in the chat console that activates that specific specialist persona.
+3. **Custom Skill Studio:** Click **Create Custom Skill** or pick a preset template (e.g., *Kubernetes & EKS Hardener*, *HIPAA Compliance Guard*, *Serverless FinOps Scout*).
+4. **Define Directives & Tool Access:** Set custom trigger keywords, select allowed AWS SDK tools, and write custom system directives. Custom skills persist locally in SQLite and automatically trigger during chat when your keywords match.
+
+### Step 11: Explore the Operations Control Plane
 Click the **Operations** tab in the top navigation bar to access the centralized operations dashboard:
 1. **Event Policies:** View and manage CloudTrail event response rules (e.g., "auto-close port 22 if opened").
 2. **Cost Rules:** Set budget thresholds and spending anomaly alerts.
@@ -399,7 +414,7 @@ Click the **Operations** tab in the top navigation bar to access the centralized
 
 💡 **Tip:** Click **Start Tour** at the top of the Operations page for a guided, auto-scrolling walkthrough that highlights and explains each section.
 
-### Step 11: Explore the Compliance Control Plane
+### Step 12: Explore the Compliance Control Plane
 Click the **Compliance** tab in the top navigation bar:
 1. **Framework Selector:** Choose from SOC 2, ISO 27001, HIPAA, PCI-DSS v4.0, CIS AWS Foundations, NIST 800-53, and 8 more frameworks.
 2. **Compliance Dials:** Visual gauges showing your compliance percentage per framework.
@@ -407,9 +422,9 @@ Click the **Compliance** tab in the top navigation bar:
 
 💡 **Tip:** Click **Start Tour** for a guided walkthrough of the compliance features.
 
-### Step 12: Manage Your Team
-1. Click your **profile icon** in the top-right corner and select **Team Settings**.
-2. Click **Invite Member** and enter their email address — CloudPilot handles shadow accounts for users who haven't signed up yet, so they'll get full access the moment they create an account.
+### Step 13: Manage Your Team
+1. Click your **profile icon** in the top-right corner and select **Team Settings** (or click the **Team** tab).
+2. **Invite members** by email — CloudPilot handles shadow accounts for users who haven't signed up yet, so they'll get full access the moment they create an account.
 3. Team members can share conversations, audit histories, and compliance reports across the organization.
 
 ---

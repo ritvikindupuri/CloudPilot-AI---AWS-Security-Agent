@@ -690,13 +690,50 @@ const AGENT_SKILLS: Record<AgentIntent, {
 | Direct Query Agent | Precise resource query agent | Single-pass execution, raw structured output, ARNs/regions/timestamps in all responses |
 | General Cloud Security Assistant | Full-capability generalist | Comprehensive multi-domain coverage with full tool set |
 
-#### Why Domain-Specific Personas Improve Output Quality
+#### Custom Specialist Skills Architecture & Schema
 
-Without the Skills Engine, the agent receives the same generic system prompt for every query — whether the user asks to list S3 buckets or simulate a privilege escalation attack. The Skills Engine solves this by:
+In addition to the 9 built-in skills, CloudPilot AI supports **user-defined custom specialist skills** persisted in the `custom_skills` relational table:
 
-- **Prioritizing output structure:** Each skill defines the expected output format (tables, diffs, JSON, attack path reports), eliminating generic prose responses.
-- **Enforcing domain constraints:** For example, the Security Audit Specialist is explicitly instructed to never skip resource IDs or use placeholder values.
-- **Reducing reasoning ambiguity:** By narrowing the agent's objectives to 4 specific priorities per skill, the model spends fewer tokens deliberating and more tokens executing.
+```sql
+CREATE TABLE custom_skills (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  badge TEXT NOT NULL,
+  description TEXT,
+  intent_key TEXT NOT NULL,
+  system_supplement TEXT NOT NULL,
+  allowed_tools TEXT DEFAULT '[]',      -- JSON Array of permitted AWS tool names
+  trigger_keywords TEXT DEFAULT '[]',   -- JSON Array of trigger keywords/regex
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+```
+
+#### Dynamic Skill Resolution & Prioritization
+
+When a user query arrives at `aws-agent`, the engine resolves the active persona in a 2-tier hierarchy:
+
+1. **Custom Skill Evaluation (Tier 1):**
+   - The query text is compared against active custom skills' `trigger_keywords` (case-insensitive substring match).
+   - If an explicit `activeSkillId` was provided via the UI or a trigger matches, the custom skill is activated immediately.
+   - Tools are scoped strictly to the custom skill's `allowed_tools` set.
+
+2. **Built-in Intent Classification Fallback (Tier 2):**
+   - If no custom skill triggers, Claude Sonnet 5 classifies the query into one of the 9 built-in intent categories (`security_audit`, `cost_analysis`, `drift_detection`, etc.).
+   - The corresponding built-in persona and tool subset from `INTENT_TOOL_MAP` are loaded.
+
+3. **Prompt Augmentation:**
+   - The resolved skill's `systemSupplement` is appended to the system message with a `\n\n---\n` delimiter.
+   - The active skill badge (e.g. `🛡️ Kubernetes Security Specialist`) is streamed to the frontend via SSE metadata `sendMeta({ activeSkill: { name, badge } })`.
+
+#### Skills Catalog & Management Studio (`/skills`)
+
+The dedicated `/skills` view provides an interactive control center with three tabs:
+- **Built-in Personas**: Interactive cards detailing each skill's persona directives, allowed AWS SDK tools, CIS/MITRE focus, and a direct "Run in Chat" button.
+- **Custom Skills Studio**: Full CRUD interface for creating custom specialist personas, selecting tool permissions, and utilizing quick-start templates (*EKS Cluster Hardener*, *HIPAA Compliance Guard*, *Serverless FinOps Scout*).
+- **Engine Architecture**: Visual pipeline inspection showing the 5-stage orchestration flow and prompt engineering guidelines.
 
 ### System Prompt Engineering
 

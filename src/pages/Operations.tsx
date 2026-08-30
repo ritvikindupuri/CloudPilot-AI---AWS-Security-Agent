@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, CheckSquare, Clock, Download, FileText, Globe, HelpCircle, Layers3, Lock, PlayCircle, RefreshCcw, Shield, ShieldCheck, SlidersHorizontal, TrendingUp } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckSquare, Clock, Download, FileText, Globe, HelpCircle, Layers3, Lock, PlayCircle, RefreshCcw, Shield, ShieldCheck, SlidersHorizontal, Sparkles, TrendingUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -595,6 +595,18 @@ const Operations = () => {
             <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
               <RefreshCcw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
               Refresh
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/skills">
+                <Sparkles className="w-4 h-4 mr-2 text-primary" />
+                Skills
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/compliance">
+                <ShieldCheck className="w-4 h-4 mr-2" />
+                Compliance
+              </Link>
             </Button>
             <Button variant="outline" size="sm" asChild>
               <Link to="/reports">

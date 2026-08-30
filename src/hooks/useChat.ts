@@ -382,6 +382,17 @@ export const useChat = (
 
         const customGeminiKey = localStorage.getItem("cloudpilot-gemini-api-key");
 
+        // Fetch active custom skills for the current user to support custom specialist personas
+        let customSkillsList: any[] = [];
+        try {
+          const { data: cSkills } = await (supabase
+            .from("custom_skills" as any)
+            .select("*") as any);
+          if (Array.isArray(cSkills)) {
+            customSkillsList = cSkills;
+          }
+        } catch { /* ignore fallback */ }
+
         const resp = await fetch(
           `${supabaseUrl}/functions/v1/aws-agent`,
           {
@@ -399,6 +410,7 @@ export const useChat = (
               geminiApiKey: customGeminiKey || null,
               assistantId: assistantId,
               scanMode: scanMode || "fast",
+              customSkills: customSkillsList,
             }),
           }
         );

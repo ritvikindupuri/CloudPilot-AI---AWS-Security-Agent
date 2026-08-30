@@ -43,8 +43,22 @@ function ensureTableAndColumns(tableName: string, sampleObject?: any, url?: URL)
   }
 }
 
-// Pre-create auth table
+// Pre-create auth table & custom skills table
 ensureTableAndColumns("registered_users", { email: "", password: "" });
+ensureTableAndColumns("custom_skills", {
+  id: "",
+  user_id: "",
+  name: "",
+  badge: "",
+  description: "",
+  intent_key: "",
+  system_supplement: "",
+  allowed_tools: "[]",
+  trigger_keywords: "[]",
+  is_active: "true",
+  created_at: "",
+  updated_at: "",
+});
 
 console.log("[CloudPilot SQLite] SQLite engine active.");
 

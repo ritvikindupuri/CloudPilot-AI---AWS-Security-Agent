@@ -12,6 +12,7 @@ import Security from "./pages/Security.tsx";
 import Report from "./pages/Report.tsx";
 import ReportsHistory from "./pages/ReportsHistory.tsx";
 import Operations from "./pages/Operations.tsx";
+import Skills from "./pages/Skills.tsx";
 import Compliance from "./pages/Compliance.tsx";
 import Team from "./pages/Team.tsx";
 import Billing from "./pages/Billing.tsx";
@@ -80,6 +81,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <Operations />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/skills"
+        element={
+          <ProtectedRoute>
+            <Skills />
           </ProtectedRoute>
         }
       />
