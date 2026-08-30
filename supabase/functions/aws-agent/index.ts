@@ -6484,7 +6484,7 @@ export const handler = async (req: Request): Promise<Response> => {
           liveExecutionLogs.push({ step: "Router", status: "info", message: "Evaluating query intent & skills engine..." });
           sendMeta({ executionLogs: [...liveExecutionLogs] });
 
-          let activeSkillData: { name: string; badge: string; systemSupplement: string; allowedTools?: string[]; intentLabel?: string } | null = null;
+          let activeSkillData: { name: string; badge: string; description?: string; systemSupplement: string; allowedTools?: string[]; intentLabel?: string; isCustom?: boolean } | null = null;
 
           // 1. Check if a custom skill matches trigger keywords or was explicitly requested
           if (Array.isArray(customSkills) && customSkills.length > 0) {
@@ -6513,9 +6513,11 @@ export const handler = async (req: Request): Promise<Response> => {
                 activeSkillData = {
                   name: cs.name,
                   badge: cs.badge || `⚡ ${cs.name}`,
+                  description: cs.description || "",
                   systemSupplement: cs.system_supplement || `ACTIVE SKILL: ${cs.name}\n${cs.description || ""}`,
                   allowedTools: allowed.length > 0 ? allowed : undefined,
                   intentLabel: `custom:${cs.intent_key || cs.name}`,
+                  isCustom: true,
                 };
                 console.log(`[CloudPilot Skills Engine] Activated custom skill: ${activeSkillData.badge}`);
                 break;
@@ -6541,6 +6543,7 @@ export const handler = async (req: Request): Promise<Response> => {
               description: builtInSkill.description,
               systemSupplement: builtInSkill.systemSupplement,
               intentLabel: classifiedIntent,
+              isCustom: false,
             };
           } else if (activeSkillData.allowedTools && activeSkillData.allowedTools.length > 0) {
             const allowedSet = new Set(activeSkillData.allowedTools);
@@ -6548,16 +6551,21 @@ export const handler = async (req: Request): Promise<Response> => {
             if (filteredTools.length === 0) filteredTools = tools; // Fallback to all tools if none matched
           }
 
-          const skillDesc = (activeSkillData as any).description ? ` — ${(activeSkillData as any).description}` : "";
-          liveExecutionLogs.push({ step: "Skills Engine", status: "success", message: `Specialist Persona Activated: ${activeSkillData.badge}${skillDesc}` });
-          sendMeta({ executionLogs: [...liveExecutionLogs], activeSkill: { name: activeSkillData.name, badge: activeSkillData.badge, description: (activeSkillData as any).description } });
+          const skillPrefix = activeSkillData.isCustom ? "Custom User Skill Activated" : "Specialist Persona Activated";
+          const skillDesc = activeSkillData.description ? ` — ${activeSkillData.description}` : "";
+          liveExecutionLogs.push({ step: "Skills Engine", status: "success", message: `${skillPrefix}: ${activeSkillData.badge}${skillDesc}` });
+          sendMeta({ executionLogs: [...liveExecutionLogs], activeSkill: { name: activeSkillData.name, badge: activeSkillData.badge, description: activeSkillData.description, isCustom: activeSkillData.isCustom } });
 
           // Inject skill-specific system supplement into the agent context
           if (apiMessages.length > 0 && apiMessages[0].role === "system") {
             apiMessages[0].content = `${apiMessages[0].content}\n\n---\n${activeSkillData.systemSupplement}`;
           }
 
-          liveExecutionLogs.push({ step: "Skills Engine", status: "info", message: `Injected specialized domain directives & prompt rules for ${activeSkillData.name}` });
+          const injectionMsg = activeSkillData.isCustom
+            ? `Injected user-defined custom prompt & directives for "${activeSkillData.name}" into Claude context`
+            : `Injected specialized domain directives & prompt rules for ${activeSkillData.name}`;
+
+          liveExecutionLogs.push({ step: "Skills Engine", status: "info", message: injectionMsg });
           liveExecutionLogs.push({ step: "Router", status: "success", message: `Scoped toolset to ${filteredTools.length} security tool(s) for ${activeSkillData.name}` });
           sendMeta({ executionLogs: [...liveExecutionLogs] });
 
