@@ -536,7 +536,14 @@ export const useChat = (
           console.warn("[useChat] Failed to query recovery message:", dbErr);
         }
 
-        const errorContent = `**Error:** ${err.message || "Something went wrong"}`;
+        let errorContent = `**Error:** ${err.message || "Something went wrong"}`;
+        const rawMsg = (err.message || "").toLowerCase();
+
+        if (rawMsg.includes("credit") || rawMsg.includes("balance") || rawMsg.includes("billing") || rawMsg.includes("insufficient_quota")) {
+          errorContent = `### ⚠️ Claude API Credit Balance Exhausted\n\nYour Anthropic API account has run out of credits or has an insufficient balance.\n\n**To resolve:**\n1. Visit [Anthropic Console Billing](https://console.anthropic.com/settings/billing) to add credits.\n2. Ensure your \`ANTHROPIC_API_KEY\` in your \`.env\` file has active billing.\n3. Resend your query to resume autonomous security auditing.`;
+        } else if (rawMsg.includes("rate limit") || rawMsg.includes("429") || rawMsg.includes("too many requests")) {
+          errorContent = `### ⏳ API Rate Limit Reached\n\nThe Anthropic API concurrency or request rate limit has been reached. Please wait a moment and try sending your query again.`;
+        }
         setMessages((prev) => {
           const last = prev[prev.length - 1];
           if (last?.id === assistantId) {

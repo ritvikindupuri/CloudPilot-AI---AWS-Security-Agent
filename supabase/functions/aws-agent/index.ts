@@ -1518,6 +1518,17 @@ async function getLLMResponse(
     const errText = response ? await response.text() : "Network error";
     const status = response ? response.status : 0;
     console.error("[CloudPilot Anthropic] API Error after retries:", status, errText);
+
+    if (errText.includes("credit_balance_too_low") || errText.includes("credit balance is too low") || errText.includes("insufficient_quota") || errText.includes("plans & billing")) {
+      throw new Error("Anthropic API Credit Exhausted: Your Claude API credit balance is too low. Please check your billing settings at console.anthropic.com/settings/billing to add credits.");
+    }
+    if (errText.includes("rate_limit_error") || status === 429) {
+      throw new Error("Anthropic API Rate Limit: Too many concurrent requests. Please wait a moment before sending another query.");
+    }
+    if (errText.includes("authentication_error") || errText.includes("invalid_x_api_key") || status === 401) {
+      throw new Error("Anthropic Authentication Error: Invalid API key. Please check your ANTHROPIC_API_KEY configuration.");
+    }
+
     throw new Error(`Anthropic API error (${status}): ${errText}`);
   }
 
