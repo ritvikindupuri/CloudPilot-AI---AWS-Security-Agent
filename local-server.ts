@@ -58,6 +58,8 @@ ensureTableAndColumns("custom_skills", {
   is_active: "true",
   created_at: "",
   updated_at: "",
+});
+
 ensureTableAndColumns("in_vpc_agents", {
   id: "",
   user_id: "",
@@ -85,6 +87,10 @@ ensureTableAndColumns("in_vpc_events", {
   severity: "CRITICAL",
   description: "",
   resource_id: "",
+  raw_event: "{}",
+  timestamp: "",
+});
+
 try {
   db.query("DELETE FROM in_vpc_agents WHERE user_id = 'system'");
   db.query("DELETE FROM in_vpc_events WHERE agent_id = 'in-vpc-123456789012-us-east-1'");
@@ -416,6 +422,8 @@ serve(async (req) => {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
+    }
+
     // ── IN-VPC AGENT SIMULATION ENDPOINT ─────────────────────────────────────
     if (path === "/api/in-vpc-agent/simulate-event") {
       const body = await req.json().catch(() => ({}));
