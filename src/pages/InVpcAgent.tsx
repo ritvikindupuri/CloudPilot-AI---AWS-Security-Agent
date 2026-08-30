@@ -83,11 +83,24 @@ Parameters:
     Type: AWS::EC2::VPC::Id
   SubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
+  NotificationEmail:
+    Type: String
+    Description: 'Email address for real-time SNS security alerts'
+    Default: 'security-team@mycompany.com'
   AutoRemediationEnabled:
     Type: String
     Default: 'true'
 
 Resources:
+  AlertsSnsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'cloudpilot-in-vpc-alerts-\${AWS::Region}'
+      DisplayName: 'CloudPilot In-VPC Security Alerts'
+      Subscription:
+        - Endpoint: !Ref NotificationEmail
+          Protocol: email
+
   AgentLambda:
     Type: AWS::Lambda::Function
     Properties:
@@ -104,6 +117,7 @@ Resources:
         Variables:
           CLOUDPILOT_ENDPOINT: !Ref CloudPilotEndpoint
           CLOUDPILOT_API_KEY: !Ref CloudPilotApiKey
+          ALERT_SNS_TOPIC_ARN: !Ref AlertsSnsTopic
           AUTO_REMEDIATION_ENABLED: !Ref AutoRemediationEnabled
           AWS_ACCOUNT_ID: !Ref 'AWS::AccountId'
           AGENT_REGION: !Ref 'AWS::Region'
@@ -135,6 +149,8 @@ const TERRAFORM_SNIPPET = `module "cloudpilot_in_vpc_agent" {
   cloudpilot_endpoint      = "https://api.cloudpilot.ai"
   cloudpilot_api_key       = var.cloudpilot_api_key
   auto_remediation_enabled = true
+  
+  # Configure user email for instant real-time SNS security alerts:
   notification_email       = "security-team@mycompany.com"
 }`;
 
@@ -210,37 +226,37 @@ export default function InVpcAgent() {
       };
 
       if (eventType === "AuthorizeSecurityGroupIngress") {
-        addLog("⚡ [EventBridge] Ingested CloudTrail event: ec2.amazonaws.com AuthorizeSecurityGroupIngress", "info");
+        addLog("[EventBridge] Ingested CloudTrail event: ec2.amazonaws.com AuthorizeSecurityGroupIngress", "info");
         await new Promise((r) => setTimeout(r, 220));
-        addLog("🔍 [In-VPC Lambda] Spawned in private subnet-0a1b2c3d (< 180ms cold start)", "info");
+        addLog("[In-VPC Lambda] Spawned in private subnet-0a1b2c3d (< 180ms cold start)", "info");
         await new Promise((r) => setTimeout(r, 260));
-        addLog("🛡️ [Policy Engine] Evaluating ingress rule against CIS AWS Benchmark 5.2...", "warn");
+        addLog("[Policy Engine] Evaluating ingress rule against CIS AWS Benchmark 5.2...", "warn");
         await new Promise((r) => setTimeout(r, 240));
-        addLog("🚨 [DRIFT DETECTED] Unauthorized CIDR 0.0.0.0/0 on port 22 (SSH) on security group sg-0a9b8c7d6e5f", "error");
+        addLog("[DRIFT DETECTED] Unauthorized CIDR 0.0.0.0/0 on port 22 (SSH) on security group sg-0a9b8c7d6e5f", "error");
         await new Promise((r) => setTimeout(r, 280));
-        addLog("💻 [Exact AWS CLI Command]:\naws ec2 revoke-security-group-ingress --group-id sg-0a9b8c7d6e5f --protocol tcp --port 22 --cidr 0.0.0.0/0", "info");
+        addLog("[AWS CLI Command]:\naws ec2 revoke-security-group-ingress --group-id sg-0a9b8c7d6e5f --protocol tcp --port 22 --cidr 0.0.0.0/0", "info");
         await new Promise((r) => setTimeout(r, 260));
-        addLog("⚡ [Auto-Remediation] Executing ec2:RevokeSecurityGroupIngress via AWS SDK on sg-0a9b8c7d6e5f...", "warn");
+        addLog("[Auto-Remediation] Executing ec2:RevokeSecurityGroupIngress via AWS SDK on sg-0a9b8c7d6e5f...", "warn");
         await new Promise((r) => setTimeout(r, 320));
       } else if (eventType === "PutBucketPolicy") {
-        addLog("⚡ [EventBridge] Ingested CloudTrail event: s3.amazonaws.com PutBucketPolicy", "info");
+        addLog("[EventBridge] Ingested CloudTrail event: s3.amazonaws.com PutBucketPolicy", "info");
         await new Promise((r) => setTimeout(r, 220));
-        addLog("🔍 [In-VPC Lambda] Analyzing bucket policy on s3://prod-customer-assets", "info");
+        addLog("[In-VPC Lambda] Analyzing bucket policy on s3://prod-customer-assets", "info");
         await new Promise((r) => setTimeout(r, 260));
-        addLog("🚨 [CRITICAL EXPOSURE] Wildcard Principal '*' with s3:GetObject policy detected", "error");
+        addLog("[CRITICAL EXPOSURE] Wildcard Principal '*' with s3:GetObject policy detected", "error");
         await new Promise((r) => setTimeout(r, 280));
-        addLog("💻 [Exact AWS CLI Command]:\naws s3api put-public-access-block --bucket prod-customer-assets --public-access-block-configuration \"BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true\"", "info");
+        addLog("[AWS CLI Command]:\naws s3api put-public-access-block --bucket prod-customer-assets --public-access-block-configuration \"BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true\"", "info");
         await new Promise((r) => setTimeout(r, 260));
-        addLog("⚡ [Auto-Remediation] Calling s3:PutBucketPublicAccessBlock (4 layers locked)...", "warn");
+        addLog("[Auto-Remediation] Calling s3:PutBucketPublicAccessBlock (4 layers locked)...", "warn");
         await new Promise((r) => setTimeout(r, 320));
       } else {
-        addLog("⚡ [EventBridge] Ingested CloudTrail event: iam.amazonaws.com AttachUserPolicy", "info");
+        addLog("[EventBridge] Ingested CloudTrail event: iam.amazonaws.com AttachUserPolicy", "info");
         await new Promise((r) => setTimeout(r, 220));
-        addLog("🔍 [In-VPC Lambda] Analyzing IAM mutation on user 'deploy-bot'", "info");
+        addLog("[In-VPC Lambda] Analyzing IAM mutation on user 'deploy-bot'", "info");
         await new Promise((r) => setTimeout(r, 260));
-        addLog("💻 [Exact AWS CLI Audit Command]:\naws iam list-attached-user-policies --user-name deploy-bot", "info");
+        addLog("[AWS CLI Audit Command]:\naws iam list-attached-user-policies --user-name deploy-bot", "info");
         await new Promise((r) => setTimeout(r, 240));
-        addLog("⚠️ [SCP Boundary Audit] Direct AdministratorAccess policy flagged against active SCPs", "warn");
+        addLog("[SCP Boundary Audit] Direct AdministratorAccess policy flagged against active SCPs", "warn");
         await new Promise((r) => setTimeout(r, 280));
       }
 
@@ -258,17 +274,17 @@ export default function InVpcAgent() {
 
       if (result.event.action_taken === "REMEDIATED") {
         if (eventType === "AuthorizeSecurityGroupIngress") {
-          addLog("✅ [AWS API Response Output 200 OK]:\n" + JSON.stringify({ Return: true, RequestId: "9c3f1b4a-7e2d-4819-a8d0-1a2b3c4d5e6f", HTTPStatusCode: 200 }, null, 2), "success");
+          addLog("[AWS API Response Output 200 OK]:\n" + JSON.stringify({ Return: true, RequestId: "9c3f1b4a-7e2d-4819-a8d0-1a2b3c4d5e6f", HTTPStatusCode: 200 }, null, 2), "success");
         } else if (eventType === "PutBucketPolicy") {
-          addLog("✅ [AWS API Response Output 200 OK]:\n" + JSON.stringify({ HTTPStatusCode: 200, RequestId: "K1J2H3G4F5E6D7C8", HostId: "a1b2c3d4e5f6g7h8=" }, null, 2), "success");
+          addLog("[AWS API Response Output 200 OK]:\n" + JSON.stringify({ HTTPStatusCode: 200, RequestId: "K1J2H3G4F5E6D7C8", HostId: "a1b2c3d4e5f6g7h8=" }, null, 2), "success");
         }
-        addLog("✅ [SUCCESS] Ingress rule successfully revoked from security group! (Execution: 1.38s)", "success");
+        addLog("[SUCCESS] Ingress rule successfully revoked from security group! (Execution: 1.38s)", "success");
       } else {
-        addLog("⚠️ [AWS IAM Audit Output]:\n" + JSON.stringify({ AttachedPolicies: [{ PolicyName: "AdministratorAccess", PolicyArn: "arn:aws:iam::aws:policy/AdministratorAccess" }], SCPViolation: "Root-Admin-Boundary-Rule", Status: "FLAGGED_FOR_REVIEW" }, null, 2), "warn");
-        addLog("⚠️ [FLAGGED] Event recorded in CloudPilot audit trail & flagged for administrator review.", "warn");
+        addLog("[AWS IAM Audit Output]:\n" + JSON.stringify({ AttachedPolicies: [{ PolicyName: "AdministratorAccess", PolicyArn: "arn:aws:iam::aws:policy/AdministratorAccess" }], SCPViolation: "Root-Admin-Boundary-Rule", Status: "FLAGGED_FOR_REVIEW" }, null, 2), "warn");
+        addLog("[FLAGGED] Event recorded in CloudPilot audit trail & flagged for administrator review.", "warn");
       }
 
-      addLog(`📡 [Telemetry Sync] Telemetry posted to CloudPilot Command Center over TLS 1.3 (Event ID: ${result.eventId})`, "success");
+      addLog(`[Telemetry Sync] Telemetry posted to CloudPilot Command Center over TLS 1.3 (Event ID: ${result.eventId})`, "success");
       setSimulationStatus("COMPLETED");
 
       toast.success(
