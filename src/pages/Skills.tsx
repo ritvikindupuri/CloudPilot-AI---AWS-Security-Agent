@@ -443,9 +443,103 @@ export default function Skills() {
   const [formDescription, setFormDescription] = useState("");
   const [formIntentKey, setFormIntentKey] = useState("");
   const [formKeywords, setFormKeywords] = useState("");
-  const [formAllowedTools, setFormAllowedTools] = useState<string[]>([]);
+  const [formAllowedTools, setFormAllowedTools] = useState<string[]>(["execute_aws_api"]);
   const [formSystemSupplement, setFormSystemSupplement] = useState("");
+  const [hasUserManuallyEdited, setHasUserManuallyEdited] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Check if all 6 required fields are configured
+  const isAllPrerequisitesComplete = Boolean(
+    formName.trim() &&
+    formBadge.trim() &&
+    formDescription.trim() &&
+    formIntentKey.trim() &&
+    formKeywords.trim() &&
+    formAllowedTools.length > 0
+  );
+
+  // Auto-generate persona system supplement directives
+  const generatePersonaDirectives = (
+    name: string,
+    badge: string,
+    desc: string,
+    intent: string,
+    keywords: string,
+    tools: string[]
+  ) => {
+    const cleanName = name.trim() || badge.trim() || "Custom Security Specialist";
+    const cleanBadge = badge.trim() || cleanName;
+    const cleanDesc = desc.trim() || "Specialized cloud security analysis, automated posture auditing, and guided remediation.";
+    const kwList = keywords.split(",").map((k) => k.trim()).filter(Boolean).join(", ");
+    const toolList = tools.length > 0 ? tools.join(", ") : "execute_aws_api";
+
+    const toolDirectives: string[] = [];
+    if (tools.includes("execute_aws_api")) {
+      toolDirectives.push("Query live AWS service APIs directly and inspect raw resource configurations with Zero Simulation Tolerance.");
+    }
+    if (tools.includes("manage_security_group_rule")) {
+      toolDirectives.push("Evaluate inbound/outbound firewall rules, detect 0.0.0.0/0 exposure, and stage least-privilege security group rules.");
+    }
+    if (tools.includes("manage_iam_access")) {
+      toolDirectives.push("Audit IAM policies against least-privilege principles and flag wildcard permissions or admin trust boundaries.");
+    }
+    if (tools.includes("run_cost_anomaly_scan") || tools.includes("manage_cost_rule")) {
+      toolDirectives.push("Inspect Cost Explorer metrics, pinpoint idle infrastructure, and calculate exact monthly savings.");
+    }
+    if (tools.includes("run_drift_scan") || tools.includes("manage_drift_baseline")) {
+      toolDirectives.push("Diff live infrastructure against cryptographic baselines and flag unapproved configuration drift.");
+    }
+    if (tools.includes("run_org_query") || tools.includes("manage_org_operation")) {
+      toolDirectives.push("Audit AWS Organizations hierarchy, check multi-account SCP boundaries, and prevent cross-account blast radius.");
+    }
+    if (tools.includes("run_attack_simulation") || tools.includes("run_evasion_test")) {
+      toolDirectives.push("Discover IAM privilege escalation pathways and map adversary lateral movement vectors to MITRE ATT&CK techniques.");
+    }
+    if (tools.includes("manage_event_response_policy") || tools.includes("replay_cloudtrail_events")) {
+      toolDirectives.push("Analyze CloudTrail event streams in real-time and synthesize auto-remediation policies for risky events.");
+    }
+    if (tools.includes("manage_runbook_execution")) {
+      toolDirectives.push("Execute multi-step incident runbooks sequentially with human confirmation gates on destructive actions.");
+    }
+
+    const priorityItems = toolDirectives.length > 0 ? toolDirectives : [
+      "Identify all security exposures with explicit resource IDs and ARNs.",
+      "Structure findings in a severity-ranked Markdown table (CRITICAL / HIGH / MEDIUM / LOW).",
+      "Provide exact AWS CLI commands to remediate each discovered vulnerability."
+    ];
+
+    const prioritiesFormatted = priorityItems.map((item, idx) => `${idx + 1}. ${item}`).join("\n");
+
+    return `ACTIVE SKILL: ${cleanBadge}
+You are now operating as an elite ${cleanName} specialist with deep AWS cloud security expertise.
+Scope & Focus: ${cleanDesc}
+Trigger Keywords: ${kwList || "None specified"}
+Authorized AWS Security Tools: ${toolList}
+
+Your core directives and priorities in this execution are:
+${prioritiesFormatted}
+${priorityItems.length + 1}. Output Requirements: Present findings in structured tables with explicit ARNs, VPC IDs, and Security Group IDs before narrative prose.
+${priorityItems.length + 2}. Remediation Guidance: Provide copy-paste ready AWS CLI commands with verification commands for each issue.`;
+  };
+
+  // Auto-generate directives ONLY after all 6 prerequisites are completed
+  useEffect(() => {
+    if (isModalOpen && !editingSkillId && !hasUserManuallyEdited) {
+      if (isAllPrerequisitesComplete) {
+        const generated = generatePersonaDirectives(
+          formName,
+          formBadge,
+          formDescription,
+          formIntentKey,
+          formKeywords,
+          formAllowedTools
+        );
+        setFormSystemSupplement(generated);
+      } else if (!formSystemSupplement || formSystemSupplement.startsWith("ACTIVE SKILL:")) {
+        setFormSystemSupplement("");
+      }
+    }
+  }, [formName, formBadge, formDescription, formIntentKey, formKeywords, formAllowedTools, isModalOpen, editingSkillId, hasUserManuallyEdited, isAllPrerequisitesComplete]);
 
   // Load custom skills from DB
   const loadCustomSkills = async () => {
@@ -522,19 +616,16 @@ export default function Skills() {
       setFormKeywords(preset.trigger_keywords.join(", "));
       setFormAllowedTools(preset.allowed_tools);
       setFormSystemSupplement(preset.system_supplement);
+      setHasUserManuallyEdited(false);
     } else {
       setFormName("");
-      setFormBadge("Custom Security Auditor");
+      setFormBadge("");
       setFormDescription("");
       setFormIntentKey("");
       setFormKeywords("");
-      setFormAllowedTools(["execute_aws_api", "run_security_scan"]);
-      setFormSystemSupplement(`ACTIVE SKILL: Custom Security Auditor
-You are an expert cloud security specialist with specialized directives.
-Your priorities:
-1. Identify all security exposures with explicit resource IDs.
-2. Structure recommendations by priority and impact.
-3. Provide exact AWS CLI commands to remediate each issue.`);
+      setFormAllowedTools(["execute_aws_api"]);
+      setFormSystemSupplement("");
+      setHasUserManuallyEdited(false);
     }
     setEditingSkillId(null);
     setIsModalOpen(true);
@@ -549,6 +640,7 @@ Your priorities:
     setFormKeywords(skill.trigger_keywords.join(", "));
     setFormAllowedTools(skill.allowed_tools);
     setFormSystemSupplement(skill.system_supplement);
+    setHasUserManuallyEdited(true);
     setIsModalOpen(true);
   };
 
@@ -557,8 +649,21 @@ Your priorities:
       toast.error("Skill name is required");
       return;
     }
-    if (!formSystemSupplement.trim()) {
-      toast.error("Skill system supplement prompt is required");
+
+    let finalSupplement = formSystemSupplement.trim();
+    if (!finalSupplement && isAllPrerequisitesComplete) {
+      finalSupplement = generatePersonaDirectives(
+        formName,
+        formBadge,
+        formDescription,
+        formIntentKey,
+        formKeywords,
+        formAllowedTools
+      );
+    }
+
+    if (!finalSupplement) {
+      toast.error("Please configure all 6 skill fields to auto-generate directives, or enter them manually.");
       return;
     }
 
@@ -1509,21 +1614,96 @@ Your priorities:
             </div>
 
             {/* System Supplement Prompt */}
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-foreground">
+                <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                  <Wand2 className="w-3.5 h-3.5 text-primary" />
                   Persona System Supplement Directives *
                 </label>
-                <span className="text-[10px] font-mono text-muted-foreground">
-                  Injected into Claude system context
-                </span>
+                <div className="flex items-center gap-2">
+                  {isAllPrerequisitesComplete && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const gen = generatePersonaDirectives(formName, formBadge, formDescription, formIntentKey, formKeywords, formAllowedTools);
+                        setFormSystemSupplement(gen);
+                        setHasUserManuallyEdited(false);
+                        toast.success("Persona directives auto-generated from skill fields!");
+                      }}
+                      className="h-6 text-[11px] px-2 text-primary hover:text-primary-foreground hover:bg-primary/20"
+                    >
+                      <Sparkles className="w-3 h-3 mr-1 text-primary" /> Auto-Generate
+                    </Button>
+                  )}
+                  <span className="text-[10px] font-mono text-muted-foreground">
+                    Injected into Claude system context
+                  </span>
+                </div>
               </div>
+
+              {/* Prerequisites Checklist & Live Status */}
+              <div className={`p-2.5 rounded-xl border transition-all text-xs ${
+                isAllPrerequisitesComplete 
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                  : "bg-muted/30 border-border/60 text-muted-foreground"
+              }`}>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="text-[11px] font-medium flex items-center gap-1.5 text-foreground">
+                    {isAllPrerequisitesComplete ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>All 6 fields configured — Persona directives auto-generated below</span>
+                      </>
+                    ) : (
+                      <>
+                        <Info className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Directives auto-generate once all 6 fields above are configured:</span>
+                      </>
+                    )}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 text-[10px] font-mono">
+                  <span className={`flex items-center gap-1 ${formName.trim() ? "text-emerald-400 font-semibold" : "text-muted-foreground/60"}`}>
+                    {formName.trim() ? "✓" : "○"} Skill Name
+                  </span>
+                  <span className={`flex items-center gap-1 ${formBadge.trim() ? "text-emerald-400 font-semibold" : "text-muted-foreground/60"}`}>
+                    {formBadge.trim() ? "✓" : "○"} Display Badge
+                  </span>
+                  <span className={`flex items-center gap-1 ${formDescription.trim() ? "text-emerald-400 font-semibold" : "text-muted-foreground/60"}`}>
+                    {formDescription.trim() ? "✓" : "○"} Description
+                  </span>
+                  <span className={`flex items-center gap-1 ${formIntentKey.trim() ? "text-emerald-400 font-semibold" : "text-muted-foreground/60"}`}>
+                    {formIntentKey.trim() ? "✓" : "○"} Intent Key
+                  </span>
+                  <span className={`flex items-center gap-1 ${formKeywords.trim() ? "text-emerald-400 font-semibold" : "text-muted-foreground/60"}`}>
+                    {formKeywords.trim() ? "✓" : "○"} Trigger Keywords
+                  </span>
+                  <span className={`flex items-center gap-1 ${formAllowedTools.length > 0 ? "text-emerald-400 font-semibold" : "text-muted-foreground/60"}`}>
+                    {formAllowedTools.length > 0 ? `✓ Allowed Tools (${formAllowedTools.length})` : "○ Allowed Tools"}
+                  </span>
+                </div>
+              </div>
+
               <textarea
                 rows={6}
                 value={formSystemSupplement}
-                onChange={(e) => setFormSystemSupplement(e.target.value)}
-                placeholder="ACTIVE SKILL: Your Skill Name&#10;You are operating as a specialized auditor...&#10;1. Priority one...&#10;2. Priority two..."
-                className="w-full text-xs font-mono p-3 rounded-xl border border-border bg-background/80 focus:ring-1 focus:ring-primary focus:outline-none leading-relaxed"
+                onChange={(e) => {
+                  setFormSystemSupplement(e.target.value);
+                  setHasUserManuallyEdited(true);
+                }}
+                placeholder={
+                  isAllPrerequisitesComplete
+                    ? "ACTIVE SKILL: Your Custom Skill..."
+                    : "⚠️ Persona System Supplement Directives will automatically generate here once you configure the Skill Name, Display Badge, Description, Intent Key, Trigger Keywords, and Allowed AWS Tools above."
+                }
+                className={`w-full text-xs font-mono p-3 rounded-xl border focus:ring-1 focus:ring-primary focus:outline-none leading-relaxed transition-all ${
+                  formSystemSupplement 
+                    ? "border-primary/40 bg-background/90 text-foreground" 
+                    : "border-dashed border-border/80 bg-muted/10 text-muted-foreground italic"
+                }`}
               />
             </div>
           </div>
