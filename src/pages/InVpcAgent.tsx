@@ -214,10 +214,12 @@ export default function InVpcAgent() {
         await new Promise((r) => setTimeout(r, 220));
         addLog("🔍 [In-VPC Lambda] Spawned in private subnet-0a1b2c3d (< 180ms cold start)", "info");
         await new Promise((r) => setTimeout(r, 260));
-        addLog("🛡️ [Policy Engine] Evaluating ingress rules against CIS AWS Foundations Benchmark 5.2...", "warn");
+        addLog("🛡️ [Policy Engine] Evaluating ingress rule against CIS AWS Benchmark 5.2...", "warn");
         await new Promise((r) => setTimeout(r, 240));
-        addLog("🚨 [DRIFT DETECTED] Unauthorized CIDR 0.0.0.0/0 ingress on port 22 (SSH) on sg-0a9b8c7d6e5f", "error");
-        await new Promise((r) => setTimeout(r, 300));
+        addLog("🚨 [DRIFT DETECTED] Unauthorized CIDR 0.0.0.0/0 on port 22 (SSH) on security group sg-0a9b8c7d6e5f", "error");
+        await new Promise((r) => setTimeout(r, 280));
+        addLog("💻 [Exact AWS CLI Command]:\naws ec2 revoke-security-group-ingress --group-id sg-0a9b8c7d6e5f --protocol tcp --port 22 --cidr 0.0.0.0/0", "info");
+        await new Promise((r) => setTimeout(r, 260));
         addLog("⚡ [Auto-Remediation] Executing ec2:RevokeSecurityGroupIngress via AWS SDK on sg-0a9b8c7d6e5f...", "warn");
         await new Promise((r) => setTimeout(r, 320));
       } else if (eventType === "PutBucketPolicy") {
@@ -227,6 +229,8 @@ export default function InVpcAgent() {
         await new Promise((r) => setTimeout(r, 260));
         addLog("🚨 [CRITICAL EXPOSURE] Wildcard Principal '*' with s3:GetObject policy detected", "error");
         await new Promise((r) => setTimeout(r, 280));
+        addLog("💻 [Exact AWS CLI Command]:\naws s3api put-public-access-block --bucket prod-customer-assets --public-access-block-configuration \"BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true\"", "info");
+        await new Promise((r) => setTimeout(r, 260));
         addLog("⚡ [Auto-Remediation] Calling s3:PutBucketPublicAccessBlock (4 layers locked)...", "warn");
         await new Promise((r) => setTimeout(r, 320));
       } else {
@@ -234,6 +238,8 @@ export default function InVpcAgent() {
         await new Promise((r) => setTimeout(r, 220));
         addLog("🔍 [In-VPC Lambda] Analyzing IAM mutation on user 'deploy-bot'", "info");
         await new Promise((r) => setTimeout(r, 260));
+        addLog("💻 [Exact AWS CLI Audit Command]:\naws iam list-attached-user-policies --user-name deploy-bot", "info");
+        await new Promise((r) => setTimeout(r, 240));
         addLog("⚠️ [SCP Boundary Audit] Direct AdministratorAccess policy flagged against active SCPs", "warn");
         await new Promise((r) => setTimeout(r, 280));
       }
@@ -251,8 +257,14 @@ export default function InVpcAgent() {
       const result = await res.json();
 
       if (result.event.action_taken === "REMEDIATED") {
+        if (eventType === "AuthorizeSecurityGroupIngress") {
+          addLog("✅ [AWS API Response Output 200 OK]:\n" + JSON.stringify({ Return: true, RequestId: "9c3f1b4a-7e2d-4819-a8d0-1a2b3c4d5e6f", HTTPStatusCode: 200 }, null, 2), "success");
+        } else if (eventType === "PutBucketPolicy") {
+          addLog("✅ [AWS API Response Output 200 OK]:\n" + JSON.stringify({ HTTPStatusCode: 200, RequestId: "K1J2H3G4F5E6D7C8", HostId: "a1b2c3d4e5f6g7h8=" }, null, 2), "success");
+        }
         addLog("✅ [SUCCESS] Ingress rule successfully revoked from security group! (Execution: 1.38s)", "success");
       } else {
+        addLog("⚠️ [AWS IAM Audit Output]:\n" + JSON.stringify({ AttachedPolicies: [{ PolicyName: "AdministratorAccess", PolicyArn: "arn:aws:iam::aws:policy/AdministratorAccess" }], SCPViolation: "Root-Admin-Boundary-Rule", Status: "FLAGGED_FOR_REVIEW" }, null, 2), "warn");
         addLog("⚠️ [FLAGGED] Event recorded in CloudPilot audit trail & flagged for administrator review.", "warn");
       }
 
@@ -658,7 +670,7 @@ export default function InVpcAgent() {
                       <div key={index} className="flex items-start gap-2">
                         <span className="text-muted-foreground/60 text-[10px] shrink-0 font-mono">{log.time}</span>
                         <span
-                          className={`${
+                          className={`whitespace-pre-wrap font-mono ${
                             log.tone === "error"
                               ? "text-rose-400 font-semibold"
                               : log.tone === "warn"
