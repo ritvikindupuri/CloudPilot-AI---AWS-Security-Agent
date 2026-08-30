@@ -22,6 +22,7 @@ import {
   Layers,
   Lock,
   ArrowRight,
+  ArrowDown,
   ShieldCheck,
   Building2,
   Workflow,
@@ -148,6 +149,7 @@ export default function InVpcAgent() {
   const [autoRemediation, setAutoRemediation] = useState(true);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [copiedType, setCopiedType] = useState<string | null>(null);
+  const [activeArchStep, setActiveArchStep] = useState<number>(1);
 
   const fetchAgentData = async () => {
     try {
@@ -573,58 +575,159 @@ export default function InVpcAgent() {
             </div>
           </TabsContent>
 
-          {/* TAB 4: ARCHITECTURE & THREAT MODEL */}
+          {/* TAB 4: ARCHITECTURE & THREAT MODEL (VISUAL FLOW DIAGRAM) */}
           <TabsContent value="architecture" className="space-y-6">
-            <div className="rounded-2xl border border-border bg-card/60 p-6 sm:p-8 space-y-6">
+            <div className="rounded-2xl border border-border bg-card/60 p-6 sm:p-8 space-y-8">
+              {/* Header */}
               <div className="pb-4 border-b border-border/60">
                 <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-                  <Workflow className="w-5 h-5 text-primary" /> In-VPC Event-Driven Architecture
+                  <Workflow className="w-5 h-5 text-primary" /> In-VPC Event-Driven Pipeline
                 </h3>
-                <p className="text-xs text-muted-foreground mt-1">
-                  How the In-VPC Mini Agent operates with zero-trust safety and zero cloud storage overhead:
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                  Interactive flow showing how real-time CloudTrail mutations travel through in-VPC EventBridge rules, zero-trust Lambda audits, instant auto-remediation, and encrypted dashboard telemetry:
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="p-4 rounded-xl bg-background/50 border border-border/60 space-y-2">
-                  <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-                    1
+              {/* Visual Flow Diagram with Connecting Arrows */}
+              <div className="relative">
+                {/* Horizontal flow line for large screens */}
+                <div className="hidden lg:block absolute top-1/2 left-6 right-6 h-0.5 bg-gradient-to-r from-amber-500/30 via-blue-500/40 via-emerald-500/40 to-purple-500/40 -translate-y-1/2 z-0" />
+
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 relative z-10">
+                  {[
+                    {
+                      step: 1,
+                      name: "EventBridge Trigger",
+                      tag: "< 100ms Ingest",
+                      badge: "CloudTrail Rule",
+                      icon: Radio,
+                      color: "text-amber-400",
+                      bg: "bg-amber-500/10",
+                      border: "border-amber-500/30",
+                      glow: "shadow-[0_0_20px_rgba(245,158,11,0.15)]",
+                      items: ["EC2 0.0.0.0/0", "Public S3 Policy", "IAM Role Mutate"],
+                      summary: "Catches real-time AWS API mutations from CloudTrail matching zero-trust security filters.",
+                    },
+                    {
+                      step: 2,
+                      name: "In-VPC Lambda Agent",
+                      tag: "< 200ms Boot",
+                      badge: "Node.js 20.x",
+                      icon: Cpu,
+                      color: "text-blue-400",
+                      bg: "bg-blue-500/10",
+                      border: "border-blue-500/30",
+                      glow: "shadow-[0_0_20px_rgba(59,130,246,0.15)]",
+                      items: ["CIS Benchmarks", "Zero-Trust Check", "Private Subnet"],
+                      summary: "Boots securely inside your private VPC subnets to evaluate drift against security benchmarks.",
+                    },
+                    {
+                      step: 3,
+                      name: "Safe Auto-Remediation",
+                      tag: "< 2s Execution",
+                      badge: "AWS SDK Mutate",
+                      icon: ShieldCheck,
+                      color: "text-emerald-400",
+                      bg: "bg-emerald-500/10",
+                      border: "border-emerald-500/30",
+                      glow: "shadow-[0_0_20px_rgba(16,185,129,0.15)]",
+                      items: ["Revoke Port 22/3389", "Block S3 Access", "SNS Alert"],
+                      summary: "Neutralizes high-risk exposures instantly via least-privilege AWS SDK calls.",
+                    },
+                    {
+                      step: 4,
+                      name: "Telemetry Dashboard Sync",
+                      tag: "TLS 1.3 Sync",
+                      badge: "Zero-Storage",
+                      icon: Server,
+                      color: "text-purple-400",
+                      bg: "bg-purple-500/10",
+                      border: "border-purple-500/30",
+                      glow: "shadow-[0_0_20px_rgba(168,85,247,0.15)]",
+                      items: ["Live Event Stream", "Audit Logging", "SOC 2 Evidence"],
+                      summary: "Streams encrypted execution logs and audit records directly to your CloudPilot dashboard.",
+                    },
+                  ].map((node, idx) => {
+                    const NodeIcon = node.icon;
+                    const isSelected = activeArchStep === node.step;
+
+                    return (
+                      <div key={node.step} className="flex flex-col items-center">
+                        <div
+                          onClick={() => setActiveArchStep(node.step)}
+                          className={`w-full rounded-2xl border p-4 flex flex-col justify-between gap-3 cursor-pointer transition-all duration-200 backdrop-blur-md ${
+                            isSelected
+                              ? `${node.border} ${node.bg} ${node.glow} ring-2 ring-primary/40 scale-[1.02]`
+                              : "border-border/60 bg-card/70 hover:border-primary/40 hover:bg-card/90"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center border ${node.bg} ${node.border} ${node.color}`}>
+                              <NodeIcon className="w-4 h-4" />
+                            </div>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-background/80 text-muted-foreground border border-border/40">
+                              STAGE {node.step}
+                            </span>
+                          </div>
+
+                          <div>
+                            <span className="text-xs font-bold text-foreground block">{node.name}</span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className={`text-[10px] font-mono font-medium ${node.color}`}>{node.badge}</span>
+                              <span className="text-muted-foreground text-[10px]">•</span>
+                              <span className="text-[10px] font-mono text-muted-foreground">{node.tag}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-1 pt-1 border-t border-border/30">
+                            {node.items.map((it) => (
+                              <span key={it} className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-background/60 text-muted-foreground border border-border/30">
+                                {it}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Mobile connector arrow */}
+                        {idx < 3 && (
+                          <div className="lg:hidden flex items-center justify-center py-2 text-primary">
+                            <ArrowDown className="w-4 h-4" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Stage Deep Dive Inspector */}
+              <div className="p-5 rounded-xl border border-primary/20 bg-primary/5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    <h4 className="text-xs font-bold text-foreground font-mono">
+                      Stage {activeArchStep} Deep Dive:{" "}
+                      {activeArchStep === 1 && "EventBridge Ingestion & Security Filter"}
+                      {activeArchStep === 2 && "Serverless Zero-Trust Inspection Engine"}
+                      {activeArchStep === 3 && "Automated Safe Remediation & SNS Alerting"}
+                      {activeArchStep === 4 && "Zero-Storage Dashboard Synchronization"}
+                    </h4>
                   </div>
-                  <h4 className="text-xs font-bold text-foreground">EventBridge Trigger</h4>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    AWS CloudTrail delivers management events (EC2 ingress modifications, S3 bucket policy alterations, IAM role attachments) to EventBridge in real-time.
-                  </p>
+                  <span className="text-[10px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/25">
+                    Click any stage above to inspect
+                  </span>
                 </div>
 
-                <div className="p-4 rounded-xl bg-background/50 border border-border/60 space-y-2">
-                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold text-xs">
-                    2
-                  </div>
-                  <h4 className="text-xs font-bold text-foreground">Serverless Audit Lambda</h4>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    The in-VPC Lambda boots in &lt; 200ms within your private subnet, evaluating the mutation against CIS Benchmark rules and your custom security policies.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl bg-background/50 border border-border/60 space-y-2">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold text-xs">
-                    3
-                  </div>
-                  <h4 className="text-xs font-bold text-foreground">Safe Auto-Remediation</h4>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    If a high-risk drift is detected (e.g. 0.0.0.0/0 on SSH or public bucket access), the agent issues an authorized revoke call via AWS SDK to neutralize the threat.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl bg-background/50 border border-border/60 space-y-2">
-                  <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center font-bold text-xs">
-                    4
-                  </div>
-                  <h4 className="text-xs font-bold text-foreground">Dashboard Telemetry Sync</h4>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    A summary audit record is posted over TLS to your CloudPilot dashboard, maintaining full compliance traceability without exposing raw AWS credentials.
-                  </p>
-                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {activeArchStep === 1 &&
+                    "CloudTrail delivers all AWS management events directly to Amazon EventBridge. A dedicated rule pattern filters for high-risk actions (security group ingress, S3 bucket policies, IAM role attachments), eliminating 99% of cloud noise before invoking Lambda."}
+                  {activeArchStep === 2 &&
+                    "The in-VPC Lambda initializes in < 200ms within your private subnet. It connects to the AWS EC2, S3, and IAM APIs to evaluate the event against CIS AWS Foundations Benchmark controls and your custom zero-trust rules."}
+                  {activeArchStep === 3 &&
+                    "When high-risk misconfigurations (e.g. 0.0.0.0/0 on port 22/3389 or public bucket policies) are confirmed, the agent calls ec2:RevokeSecurityGroupIngress or s3:PutBucketPublicAccessBlock to neutralize the threat in under 2 seconds, while dispatching an SNS notification."}
+                  {activeArchStep === 4 &&
+                    "The agent constructs an immutable telemetry record containing event ID, resource ID, action taken, and before/after diffs, posting it over TLS 1.3 to your CloudPilot dashboard. No raw AWS credentials or customer data ever leaves your VPC."}
+                </p>
               </div>
             </div>
           </TabsContent>
