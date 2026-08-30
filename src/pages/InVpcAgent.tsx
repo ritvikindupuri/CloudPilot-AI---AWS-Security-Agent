@@ -243,13 +243,7 @@ export default function InVpcAgent() {
             <Server className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm font-bold text-foreground tracking-tight">CloudPilot In-VPC Mini Agent</h1>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Live In-VPC Sidecar
-              </span>
-            </div>
+            <h1 className="text-sm font-bold text-foreground tracking-tight">CloudPilot In-VPC Mini Agent</h1>
             <p className="text-[11px] text-muted-foreground">Self-Hosted Serverless Guarddog inside your AWS Perimeter</p>
           </div>
         </div>
@@ -311,70 +305,57 @@ export default function InVpcAgent() {
       {/* Main Content Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
         {/* Hero Banner: In-VPC Status Card */}
-        <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-card via-card/90 to-primary/5 p-6 sm:p-8 shadow-lg">
-          <div className="absolute -right-16 -bottom-16 w-64 h-64 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
-
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-            <div className="space-y-3 max-w-2xl">
-              <div className="flex flex-wrap items-center gap-2">
+        <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-card via-card/90 to-primary/5 p-5 sm:p-6 shadow-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
                 <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-xs font-mono px-2.5 py-0.5 gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                   {activeAgent.status}
                 </Badge>
                 <span className="text-xs font-mono text-muted-foreground">
-                  Agent ID: <strong className="text-foreground">{activeAgent.id}</strong>
+                  VPC: <strong className="text-foreground">{activeAgent.vpc_id}</strong>
                 </span>
                 <span className="text-xs font-mono text-muted-foreground">
-                  Version: <strong className="text-foreground">{activeAgent.version}</strong>
+                  Region: <strong className="text-foreground">{activeAgent.region}</strong>
                 </span>
               </div>
 
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-                In-VPC Serverless Security Engine
+              <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
+                In-VPC Security Engine
               </h2>
-              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                Deployed serverlessly via AWS Lambda & EventBridge in your AWS VPC (<strong>{activeAgent.vpc_id}</strong>, region <strong>{activeAgent.region}</strong>). It captures CloudTrail mutation events in real-time, validates them against your zero-trust policies, and auto-remediates high-risk drift in &lt; 2 seconds.
+              <p className="text-xs text-muted-foreground">
+                Serverless Lambda & EventBridge watchdog enforcing zero-trust policies and auto-remediation in &lt; 2s.
               </p>
             </div>
 
-            {/* Quick Actions Panel */}
-            <div className="flex flex-col sm:flex-row lg:flex-col gap-2.5 min-w-[240px]">
-              <Button
-                onClick={() => handleSimulateEvent("AuthorizeSecurityGroupIngress")}
-                disabled={simulating}
-                className="h-9 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl shadow-md"
-              >
-                <Radio className="w-3.5 h-3.5" />
-                {simulating ? "Simulating Trigger..." : "Simulate Port 22 Drift"}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => handleSimulateEvent("PutBucketPolicy")}
-                disabled={simulating}
-                className="h-9 text-xs font-medium gap-1.5 border-border hover:bg-muted rounded-xl"
-              >
-                <PlayCircle className="w-3.5 h-3.5 text-blue-400" />
-                Simulate Public S3 Exposure
-              </Button>
-            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={fetchAgentData}
+              disabled={loading}
+              className="h-8 text-xs gap-1.5 border-border bg-background/50 self-start sm:self-auto"
+            >
+              <RefreshCcw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
+            </Button>
           </div>
 
           {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-6 mt-6 border-t border-border/50">
-            <div className="p-3 rounded-xl bg-background/50 border border-border/40">
-              <span className="text-[11px] font-mono text-muted-foreground uppercase block">Monitored VPC</span>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 mt-4 border-t border-border/50">
+            <div className="p-2.5 rounded-xl bg-background/50 border border-border/40">
+              <span className="text-[10px] font-mono text-muted-foreground uppercase block">Monitored VPC</span>
               <span className="text-xs font-bold text-foreground font-mono mt-0.5 block truncate">{activeAgent.vpc_id}</span>
             </div>
-            <div className="p-3 rounded-xl bg-background/50 border border-border/40">
-              <span className="text-[11px] font-mono text-muted-foreground uppercase block">Auto-Remediations</span>
+            <div className="p-2.5 rounded-xl bg-background/50 border border-border/40">
+              <span className="text-[10px] font-mono text-muted-foreground uppercase block">Auto-Remediations</span>
               <span className="text-xs font-bold text-emerald-400 font-mono mt-0.5 block">{remediatedCount} Reverted Safely</span>
             </div>
-            <div className="p-3 rounded-xl bg-background/50 border border-border/40">
-              <span className="text-[11px] font-mono text-muted-foreground uppercase block">Critical Interceptions</span>
+            <div className="p-2.5 rounded-xl bg-background/50 border border-border/40">
+              <span className="text-[10px] font-mono text-muted-foreground uppercase block">Critical Interceptions</span>
               <span className="text-xs font-bold text-rose-400 font-mono mt-0.5 block">{criticalCount} High-Risk Events</span>
             </div>
-            <div className="p-3 rounded-xl bg-background/50 border border-border/40">
-              <span className="text-[11px] font-mono text-muted-foreground uppercase block">Avg Trigger Latency</span>
+            <div className="p-2.5 rounded-xl bg-background/50 border border-border/40">
+              <span className="text-[10px] font-mono text-muted-foreground uppercase block">Avg Latency</span>
               <span className="text-xs font-bold text-primary font-mono mt-0.5 block">&lt; 1.8 seconds</span>
             </div>
           </div>
@@ -385,6 +366,9 @@ export default function InVpcAgent() {
           <TabsList className="bg-card/70 border border-border/50 p-1 rounded-xl">
             <TabsTrigger value="events" className="text-xs font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg">
               Live In-VPC Telemetry ({events.length})
+            </TabsTrigger>
+            <TabsTrigger value="testing" className="text-xs font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg">
+              Drift Test Simulator
             </TabsTrigger>
             <TabsTrigger value="cloudformation" className="text-xs font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg">
               1-Click CloudFormation Stack
@@ -478,6 +462,84 @@ export default function InVpcAgent() {
                   )}
                 </div>
               ))}
+            </div>
+          </TabsContent>
+
+          {/* TAB: DRIFT TEST SIMULATOR SANDBOX */}
+          <TabsContent value="testing" className="space-y-4">
+            <div className="rounded-2xl border border-border bg-card/60 p-6 space-y-6">
+              <div className="pb-4 border-b border-border/60">
+                <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                  <PlayCircle className="w-5 h-5 text-primary" /> Post-Deployment Testing & Drift Simulator
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Safely test your in-VPC agent's real-time interception, zero-trust policy checks, and automated remediation without mutating live production resources:
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 rounded-xl bg-background/60 border border-border/60 space-y-3 flex flex-col justify-between">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-rose-400" />
+                      <h4 className="text-xs font-bold text-foreground">Port 22 SSH Ingress Drift</h4>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Simulates an unauthorized <code>0.0.0.0/0</code> SSH rule mutation on an EC2 security group and tests instant auto-revocation.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => handleSimulateEvent("AuthorizeSecurityGroupIngress")}
+                    disabled={simulating}
+                    className="w-full h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg shadow-sm"
+                  >
+                    <Radio className="w-3.5 h-3.5" />
+                    {simulating ? "Simulating..." : "Test Port 22 Auto-Fix"}
+                  </Button>
+                </div>
+
+                <div className="p-4 rounded-xl bg-background/60 border border-border/60 space-y-3 flex flex-col justify-between">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-orange-400" />
+                      <h4 className="text-xs font-bold text-foreground">Public S3 Bucket Exposure</h4>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Simulates a wildcard <code>Principal: *</code> S3 bucket policy and tests immediate enforcement of S3 Public Access Block.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleSimulateEvent("PutBucketPolicy")}
+                    disabled={simulating}
+                    className="w-full h-8 text-xs font-medium gap-1.5 border-border hover:bg-muted rounded-lg"
+                  >
+                    <PlayCircle className="w-3.5 h-3.5 text-blue-400" />
+                    Test Public S3 Auto-Lock
+                  </Button>
+                </div>
+
+                <div className="p-4 rounded-xl bg-background/60 border border-border/60 space-y-3 flex flex-col justify-between">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-400" />
+                      <h4 className="text-xs font-bold text-foreground">IAM Privilege Escalation</h4>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Simulates direct <code>AdministratorAccess</code> policy attachment on an IAM user and verifies zero-trust SCP boundary flagging.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleSimulateEvent("AttachUserPolicy")}
+                    disabled={simulating}
+                    className="w-full h-8 text-xs font-medium gap-1.5 border-border hover:bg-muted rounded-lg"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-amber-400" />
+                    Test IAM SCP Flagging
+                  </Button>
+                </div>
+              </div>
             </div>
           </TabsContent>
 
