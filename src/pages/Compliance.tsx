@@ -1000,14 +1000,14 @@ const Compliance = () => {
                   Compliance Step {tourStep} of 8
                 </span>
                 <h4 className="font-extrabold text-lg text-foreground mt-3 tracking-tight">
-                  {tourStep === 1 && "📊 Compliance Metrics"}
-                  {tourStep === 2 && "🛡️ Control Posture Dashboard"}
-                  {tourStep === 3 && "📈 Pass / Fail Signal Trend"}
-                  {tourStep === 4 && "🛑 Deviation Exceptions Queue"}
-                  {tourStep === 5 && "📅 Attestation Calendar"}
-                  {tourStep === 6 && "📁 Auditor Evidence Exports"}
-                  {tourStep === 7 && "🔍 Recent Validation Trail"}
-                  {tourStep === 8 && "📚 Mapped Report Library"}
+                  {tourStep === 1 && "Compliance Metrics"}
+                  {tourStep === 2 && "Control Posture Dashboard"}
+                  {tourStep === 3 && "Pass / Fail Signal Trend"}
+                  {tourStep === 4 && "Deviation Exceptions Queue"}
+                  {tourStep === 5 && "Attestation Calendar"}
+                  {tourStep === 6 && "Auditor Evidence Exports"}
+                  {tourStep === 7 && "Recent Validation Trail"}
+                  {tourStep === 8 && "Mapped Report Library"}
                 </h4>
               </div>
               <button 

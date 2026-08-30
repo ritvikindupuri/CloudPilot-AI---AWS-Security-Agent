@@ -317,7 +317,6 @@ const ChatInterface = () => {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-bold text-foreground tracking-tight">CloudPilot AI</h1>
-              <span className="text-[9px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border tracking-wider">v1.0</span>
             </div>
             <p className="text-[10px] text-muted-foreground">AWS Cloud Security Intelligence</p>
           </div>

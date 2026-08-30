@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, CheckSquare, Clock, Download, FileText, Globe, HelpCircle, Layers3, Lock, PlayCircle, RefreshCcw, Shield, ShieldCheck, SlidersHorizontal, Sparkles, TrendingUp } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckSquare, Clock, Download, FileText, GitCompare, Globe, HelpCircle, Layers3, Lock, PlayCircle, RefreshCcw, Shield, ShieldCheck, SlidersHorizontal, Sparkles, TrendingUp, Workflow } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -636,7 +636,9 @@ const Operations = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
               <div className="bg-background/40 p-2.5 rounded border border-border/80 flex flex-col justify-between">
                 <div>
-                  <span className="font-semibold text-[11px] block mb-1 text-primary">⚡ Runbooks</span>
+                  <span className="font-semibold text-[11px] flex items-center gap-1.5 mb-1 text-primary">
+                    <Workflow className="w-3.5 h-3.5" /> Runbooks
+                  </span>
                   <p className="text-[10px] text-muted-foreground mb-2">Triggers when executing playbooks.</p>
                 </div>
                 <code className="text-[9px] bg-muted px-1.5 py-1 rounded text-foreground font-mono block select-all cursor-pointer hover:bg-muted/80 transition-colors">
@@ -645,7 +647,9 @@ const Operations = () => {
               </div>
               <div className="bg-background/40 p-2.5 rounded border border-border/80 flex flex-col justify-between">
                 <div>
-                  <span className="font-semibold text-[11px] block mb-1 text-emerald-400">⚡ Configuration Drift</span>
+                  <span className="font-semibold text-[11px] flex items-center gap-1.5 mb-1 text-emerald-400">
+                    <GitCompare className="w-3.5 h-3.5" /> Configuration Drift
+                  </span>
                   <p className="text-[10px] text-muted-foreground mb-2">Compares live states against baselines.</p>
                 </div>
                 <code className="text-[9px] bg-muted px-1.5 py-1 rounded text-foreground font-mono block select-all cursor-pointer hover:bg-muted/80 transition-colors">
@@ -654,7 +658,9 @@ const Operations = () => {
               </div>
               <div className="bg-background/40 p-2.5 rounded border border-border/80 flex flex-col justify-between">
                 <div>
-                  <span className="font-semibold text-[11px] block mb-1 text-blue-400">⚡ Cost & Event Rules</span>
+                  <span className="font-semibold text-[11px] flex items-center gap-1.5 mb-1 text-blue-400">
+                    <SlidersHorizontal className="w-3.5 h-3.5" /> Cost & Event Rules
+                  </span>
                   <p className="text-[10px] text-muted-foreground mb-2">Registers thresholds & event filters.</p>
                 </div>
                 <code className="text-[9px] bg-muted px-1.5 py-1 rounded text-foreground font-mono block select-all cursor-pointer hover:bg-muted/80 transition-colors">
@@ -663,7 +669,9 @@ const Operations = () => {
               </div>
               <div className="bg-background/40 p-2.5 rounded border border-border/80 flex flex-col justify-between">
                 <div>
-                  <span className="font-semibold text-[11px] block mb-1 text-orange-400">⚡ High-Risk Approvals</span>
+                  <span className="font-semibold text-[11px] flex items-center gap-1.5 mb-1 text-orange-400">
+                    <AlertTriangle className="w-3.5 h-3.5" /> High-Risk Approvals
+                  </span>
                   <p className="text-[10px] text-muted-foreground mb-2">Queues during write mutations.</p>
                 </div>
                 <code className="text-[9px] bg-muted px-1.5 py-1 rounded text-foreground font-mono block select-all cursor-pointer hover:bg-muted/80 transition-colors">
@@ -1214,18 +1222,18 @@ const Operations = () => {
                   Interactive Step {tourStep} of 12
                 </span>
                 <h4 className="font-extrabold text-lg text-foreground mt-3 tracking-tight">
-                  {tourStep === 1 && "📊 Operational Metrics Grid"}
-                  {tourStep === 2 && "🛡️ Zero-Storage AWS Session"}
-                  {tourStep === 3 && "🔍 Drift Findings & Security Issues"}
-                  {tourStep === 4 && "💻 Agent Execution Audit Log"}
-                  {tourStep === 5 && "⚖️ High-Risk Mutation Approvals"}
-                  {tourStep === 6 && "📑 Compliance Evidence Exports"}
-                  {tourStep === 7 && "📜 Immutable Audit Timeline"}
-                  {tourStep === 8 && "🛡️ Event Response Policies"}
-                  {tourStep === 9 && "💰 Cost Automation Saved Rules"}
-                  {tourStep === 10 && "📸 Snapshot & Drift Health"}
-                  {tourStep === 11 && "🏃 Runbook Execution History"}
-                  {tourStep === 12 && "🏢 Organization Rollouts"}
+                  {tourStep === 1 && "Operational Metrics Grid"}
+                  {tourStep === 2 && "Zero-Storage AWS Session"}
+                  {tourStep === 3 && "Drift Findings & Security Issues"}
+                  {tourStep === 4 && "Agent Execution Audit Log"}
+                  {tourStep === 5 && "High-Risk Mutation Approvals"}
+                  {tourStep === 6 && "Compliance Evidence Exports"}
+                  {tourStep === 7 && "Immutable Audit Timeline"}
+                  {tourStep === 8 && "Event Response Policies"}
+                  {tourStep === 9 && "Cost Automation Saved Rules"}
+                  {tourStep === 10 && "Snapshot & Drift Health"}
+                  {tourStep === 11 && "Runbook Execution History"}
+                  {tourStep === 12 && "Organization Rollouts"}
                 </h4>
               </div>
               <button 

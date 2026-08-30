@@ -68,7 +68,7 @@ export function QuickActionPermissionsDialog({
             )}
             <div>
               <span className="font-bold block text-xs mb-0.5">
-                {recommendedMode === "deep" ? "🔍 Deep Audit Recommended" : "⚡ Fast Scan Optimal"}
+                {recommendedMode === "deep" ? "Deep Audit Recommended" : "Fast Scan Optimal"}
               </span>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
                 {recommendationReason || (recommendedMode === "deep"

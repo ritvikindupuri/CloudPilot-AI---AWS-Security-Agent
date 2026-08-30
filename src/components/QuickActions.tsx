@@ -630,12 +630,12 @@ const QuickActions = ({ onAction, disabled, credentials }: QuickActionsProps) =>
                             {mode === "deep" ? (
                               <>
                                 <DeepAuditIcon className="w-3.5 h-3.5 text-blue-400" />
-                                <span className="text-blue-400">🔍 Deep Audit Recommended</span>
+                                <span className="text-blue-400">Deep Audit Recommended</span>
                               </>
                             ) : (
                               <>
                                 <FastScanIcon className="w-3.5 h-3.5 text-emerald-400" />
-                                <span className="text-emerald-400">⚡ Fast Scan Optimal</span>
+                                <span className="text-emerald-400">Fast Scan Optimal</span>
                               </>
                             )}
                           </div>

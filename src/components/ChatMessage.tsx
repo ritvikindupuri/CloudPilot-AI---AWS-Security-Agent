@@ -254,7 +254,7 @@ const ChatMessage = ({ message, onAddToS3, onTeardownVpc }: ChatMessageProps) =>
               addMetaRow("Date Generated:", dateStr);
               addMetaRow("Classification:", "CONFIDENTIAL — AUTHORIZED USE ONLY");
               addMetaRow("Distribution:", "Internal Security Teams — Need-to-Know Basis");
-              addMetaRow("Assessment Engine:", "CloudPilot AI Agent v1.0");
+              addMetaRow("Assessment Engine:", "CloudPilot AI Agent");
               
               metaBox.appendChild(metaGrid);
               
