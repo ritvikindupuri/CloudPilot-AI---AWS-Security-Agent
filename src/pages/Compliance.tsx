@@ -12,6 +12,7 @@ import {
   FileText,
   GanttChartSquare,
   HelpCircle,
+  Server,
   ShieldCheck,
   ShieldAlert,
   Sparkles,
@@ -442,6 +443,12 @@ const Compliance = () => {
               <Link to="/skills">
                 <Sparkles className="w-4 h-4 mr-2 text-primary" />
                 Skills
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/in-vpc-agent">
+                <Server className="w-4 h-4 mr-2 text-emerald-400" />
+                In-VPC Agent
               </Link>
             </Button>
             <Button variant="outline" size="sm" asChild>

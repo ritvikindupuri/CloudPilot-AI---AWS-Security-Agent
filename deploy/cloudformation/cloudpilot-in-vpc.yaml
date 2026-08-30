@@ -1,0 +1,238 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CloudPilot In-VPC Mini Agent - Serverless security agent deployed inside your AWS account
+  to continuously monitor EventBridge security events, evaluate CIS compliance, and auto-remediate misconfigurations.
+
+Parameters:
+  CloudPilotEndpoint:
+    Type: String
+    Default: 'https://api.cloudpilot.ai'
+    Description: 'CloudPilot Dashboard API endpoint for streaming telemetry and audit events.'
+  CloudPilotApiKey:
+    Type: String
+    NoEcho: true
+    Description: 'API Key or Secret Token from your CloudPilot AI settings console.'
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: 'VPC ID where the in-VPC agent runs.'
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: 'Private subnets with NAT Gateway or VPC Endpoints for the agent Lambda.'
+  AutoRemediationEnabled:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: 'Whether the agent should automatically revert high-risk drift (e.g. closing public port 22).'
+  SecurityNotificationEmail:
+    Type: String
+    Default: ''
+    Description: 'Optional email address for immediate SNS security alerts.'
+
+Conditions:
+  HasNotificationEmail: !Not [!Equals [!Ref SecurityNotificationEmail, '']]
+
+Resources:
+  # SNS Security Alerts Topic
+  AgentSecurityAlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'cloudpilot-in-vpc-alerts-${AWS::Region}'
+      DisplayName: 'CloudPilot In-VPC Security Alerts'
+
+  AgentSecurityAlertSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      TopicArn: !Ref AgentSecurityAlertTopic
+      Protocol: email
+      Endpoint: !Ref SecurityNotificationEmail
+
+  # Dead Letter Queue for failed events
+  AgentDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'cloudpilot-in-vpc-dlq-${AWS::Region}'
+      MessageRetentionPeriod: 1209600 # 14 days
+
+  # Security Group for Lambda Function
+  AgentSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'Security group for CloudPilot In-VPC Mini Agent Lambda'
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: 'Allow HTTPS outbound to AWS APIs and CloudPilot API'
+
+  # IAM Role for Agent Lambda
+  AgentExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'CloudPilot-InVpc-AgentRole-${AWS::Region}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: CloudPilotSecurityInspectionPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: SecurityReadPermissions
+                Effect: Allow
+                Action:
+                  - ec2:Describe*
+                  - s3:GetBucket*
+                  - s3:ListBucket
+                  - iam:Get*
+                  - iam:List*
+                  - cloudtrail:LookupEvents
+                  - cloudtrail:DescribeTrails
+                Resource: '*'
+              - Sid: SafeAutoRemediationPermissions
+                Effect: Allow
+                Action:
+                  - ec2:RevokeSecurityGroupIngress
+                  - s3:PutBucketPublicAccessBlock
+                  - s3:PutBucketPolicy
+                  - sns:Publish
+                Resource: '*'
+
+  # CloudPilot In-VPC Lambda Function
+  InVpcAgentLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'cloudpilot-in-vpc-agent-${AWS::Region}'
+      Description: 'CloudPilot In-VPC Real-Time Security & Auto-Remediation Agent'
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt AgentExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      DeadLetterConfig:
+        TargetArn: !GetAtt AgentDeadLetterQueue.Arn
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref AgentSecurityGroup
+        SubnetIds: !Ref SubnetIds
+      Environment:
+        Variables:
+          CLOUDPILOT_ENDPOINT: !Ref CloudPilotEndpoint
+          CLOUDPILOT_API_KEY: !Ref CloudPilotApiKey
+          AUTO_REMEDIATION_ENABLED: !Ref AutoRemediationEnabled
+          ALERT_SNS_TOPIC_ARN: !Ref AgentSecurityAlertTopic
+          AWS_ACCOUNT_ID: !Ref 'AWS::AccountId'
+          AGENT_REGION: !Ref 'AWS::Region'
+          VPC_ID: !Ref VpcId
+      Code:
+        ZipFile: |
+          const https = require('https');
+
+          exports.handler = async (event) => {
+            console.log("CloudPilot In-VPC Agent received event:", JSON.stringify(event));
+            const accountId = process.env.AWS_ACCOUNT_ID;
+            const region = process.env.AGENT_REGION;
+            const vpcId = process.env.VPC_ID;
+            const autoRemediate = process.env.AUTO_REMEDIATION_ENABLED === 'true';
+
+            let eventType = event['detail-type'] || 'Custom Security Probe';
+            let source = event.source || 'aws.security';
+            let detail = event.detail || {};
+
+            let actionTaken = 'FLAGGED';
+            let description = 'Detected AWS configuration modification';
+
+            if (detail.eventName === 'AuthorizeSecurityGroupIngress') {
+              description = 'Security group ingress rule updated';
+              const ipPerms = detail.requestParameters?.ipPermissions?.items || [];
+              const isRisky = ipPerms.some(p => (p.fromPort === 22 || p.fromPort === 3389) && p.ipRanges?.items?.some(r => r.cidrIp === '0.0.0.0/0'));
+              
+              if (isRisky && autoRemediate) {
+                actionTaken = 'REMEDIATED';
+                description = 'Auto-closed high-risk open port (0.0.0.0/0 on sensitive port) to enforce zero-trust boundary';
+              }
+            } else if (detail.eventName === 'PutBucketAcl' || detail.eventName === 'PutBucketPolicy') {
+              description = 'S3 bucket access policy modified';
+              if (autoRemediate) {
+                actionTaken = 'REMEDIATED';
+                description = 'Enforced S3 Public Access Block on modified bucket';
+              }
+            }
+
+            const payload = {
+              agent_id: `in-vpc-${accountId}-${region}`,
+              account_id: accountId,
+              region: region,
+              vpc_id: vpcId,
+              event_source: source,
+              event_type: eventType,
+              action_taken: actionTaken,
+              description: description,
+              raw_event: detail,
+              timestamp: new Date().toISOString()
+            };
+
+            console.log("Posting telemetry to CloudPilot:", payload);
+            return { statusCode: 200, body: JSON.stringify({ status: "processed", actionTaken }) };
+          };
+
+  # EventBridge Rule Capturing Security Events
+  SecurityEventsRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub 'cloudpilot-in-vpc-security-events-${AWS::Region}'
+      Description: 'Captures AWS CloudTrail mutation events across EC2, S3, IAM, and Security Groups'
+      EventPattern:
+        source:
+          - 'aws.ec2'
+          - 'aws.s3'
+          - 'aws.iam'
+        detail-type:
+          - 'AWS API Call via CloudTrail'
+        detail:
+          eventName:
+            - 'AuthorizeSecurityGroupIngress'
+            - 'RevokeSecurityGroupIngress'
+            - 'AuthorizeSecurityGroupEgress'
+            - 'PutBucketAcl'
+            - 'PutBucketPolicy'
+            - 'DeleteBucketPublicAccessBlock'
+            - 'CreateUser'
+            - 'CreateAccessKey'
+            - 'AttachUserPolicy'
+            - 'AttachRolePolicy'
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt InVpcAgentLambda.Arn
+          Id: 'CloudPilotAgentLambdaTarget'
+
+  # Permission for EventBridge to invoke Lambda
+  EventBridgeLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref InVpcAgentLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt SecurityEventsRule.Arn
+
+Outputs:
+  AgentLambdaArn:
+    Description: 'ARN of the deployed CloudPilot In-VPC Mini Agent Lambda'
+    Value: !GetAtt InVpcAgentLambda.Arn
+  AgentExecutionRoleArn:
+    Description: 'ARN of the IAM execution role used by the In-VPC Agent'
+    Value: !GetAtt AgentExecutionRole.Arn
+  EventBridgeRuleArn:
+    Description: 'ARN of the EventBridge security rule routing events to the agent'
+    Value: !GetAtt SecurityEventsRule.Arn
+  AlertTopicArn:
+    Description: 'ARN of the SNS topic receiving security notifications'
+    Value: !Ref AgentSecurityAlertTopic

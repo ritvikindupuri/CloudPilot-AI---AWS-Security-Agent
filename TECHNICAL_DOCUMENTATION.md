@@ -2950,3 +2950,59 @@ The following operational gaps were explicitly resolved to make the application 
 | **Automated test coverage** | Vitest testing suites run against core hooks (e.g., Auth) to act as a CI/CD safety net. |
 | **Team invite handles non-existing users** | Allows admins to seamlessly invite users who haven't yet signed up (auto-creating shadow accounts). |
 | **Error monitoring (Sentry) integrated** | Provides complete observability into client-side failures and edge function exceptions. |
+
+---
+
+## 46. CloudPilot In-VPC Mini Agent — EventBridge & Lambda Sidecar
+
+For enterprise organizations operating under strict zero-trust or compliance mandates that prohibit sensitive telemetry from leaving their internal AWS boundary, CloudPilot AI provides the **In-VPC Mini Agent** (`/in-vpc-agent`).
+
+### 46.1 Architecture & Event Flow
+
+The In-VPC Mini Agent runs serverlessly inside customer AWS VPCs and subnets, consuming **$0 at idle**:
+
+```
+┌────────────────────────────────────────────────────────┐
+│                   CUSTOMER AWS VPC                     │
+│                                                        │
+│   AWS CloudTrail (Management Event Stream)             │
+│        │                                               │
+│        ▼                                               │
+│   Amazon EventBridge Rule                              │
+│   (Filter: EC2, S3, IAM, Security Groups)              │
+│        │                                               │
+│        ▼                                               │
+│   CloudPilot In-VPC Agent Lambda (Node.js 20.x)        │
+│   ├── Evaluates CIS AWS Foundations Benchmark Rules    │
+│   ├── Inspects Zero-Trust Network & IAM Boundaries     │
+│   └── Executes Safe Auto-Remediation (< 2s latency)    │
+│        │                                               │
+│        ▼                                               │
+│   Amazon SQS Dead Letter Queue (DLQ, 14-day retention) │
+└───────────────────────────┬────────────────────────────┘
+                            │ (Authenticated TLS Telemetry Sync)
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│             CLOUDPILOT AI COMMAND CENTER               │
+│                                                        │
+│  In-VPC Agent Console (/in-vpc-agent):                 │
+│  • 🟢 Live Heartbeat: Active in us-east-1              │
+│  • Real-Time EventBridge Interceptions Stream          │
+│  • 1-Click AWS CloudFormation Launch & Terraform       │
+└────────────────────────────────────────────────────────┘
+```
+
+### 46.2 Auto-Remediation Matrix
+
+| Event Source | Event Trigger | In-VPC Agent Evaluation | Automated Remediation Action |
+| --- | --- | --- | --- |
+| `aws.ec2` | `AuthorizeSecurityGroupIngress` | Detects `0.0.0.0/0` ingress on ports 22 (SSH), 3389 (RDP), or database ports | Calls `ec2:RevokeSecurityGroupIngress` to auto-close the exposure within 2 seconds |
+| `aws.s3` | `PutBucketAcl` / `PutBucketPolicy` | Detects public wildcard Principal `*` or public ACL grant | Calls `s3:PutBucketPublicAccessBlock` to enforce four-layer public access block |
+| `aws.iam` | `AttachUserPolicy` / `CreateAccessKey` | Detects administrator-level mutations on non-breakglass users | Validates against active SCP boundaries and flags event in CloudPilot audit trail |
+
+### 46.3 Deployment Methods
+
+1. **1-Click AWS CloudFormation (`deploy/cloudformation/cloudpilot-in-vpc.yaml`)**:
+   - Single-file YAML defining Lambda, IAM Execution Role, Security Group, SQS DLQ, and EventBridge Rule.
+2. **Terraform Module (`deploy/terraform/`)**:
+   - Modular HCL code exportable directly into enterprise Infrastructure-as-Code repositories.

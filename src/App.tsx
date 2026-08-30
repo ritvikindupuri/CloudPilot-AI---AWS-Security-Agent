@@ -14,6 +14,7 @@ import ReportsHistory from "./pages/ReportsHistory.tsx";
 import Operations from "./pages/Operations.tsx";
 import Skills from "./pages/Skills.tsx";
 import Compliance from "./pages/Compliance.tsx";
+import InVpcAgent from "./pages/InVpcAgent.tsx";
 import Team from "./pages/Team.tsx";
 import Billing from "./pages/Billing.tsx";
 import NotFound from "./pages/NotFound.tsx";
@@ -97,6 +98,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <Compliance />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/in-vpc-agent"
+        element={
+          <ProtectedRoute>
+            <InVpcAgent />
           </ProtectedRoute>
         }
       />

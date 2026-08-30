@@ -58,7 +58,122 @@ ensureTableAndColumns("custom_skills", {
   is_active: "true",
   created_at: "",
   updated_at: "",
+ensureTableAndColumns("in_vpc_agents", {
+  id: "",
+  user_id: "",
+  name: "",
+  account_id: "",
+  region: "",
+  vpc_id: "",
+  status: "ONLINE",
+  version: "v1.2.0",
+  auto_remediation_enabled: "true",
+  last_heartbeat_at: "",
+  created_at: "",
+  updated_at: "",
 });
+
+ensureTableAndColumns("in_vpc_events", {
+  id: "",
+  agent_id: "",
+  account_id: "",
+  region: "",
+  vpc_id: "",
+  event_source: "",
+  event_type: "",
+  action_taken: "REMEDIATED",
+  severity: "CRITICAL",
+  description: "",
+  resource_id: "",
+  raw_event: "{}",
+  timestamp: "",
+});
+
+// Seed default in-VPC agent if none exists
+try {
+  const existingAgents = [...db.queryEntries("SELECT * FROM in_vpc_agents")];
+  if (existingAgents.length === 0) {
+    const defaultAgentId = "in-vpc-123456789012-us-east-1";
+    const now = new Date().toISOString();
+    db.query(`
+      INSERT INTO in_vpc_agents (id, user_id, name, account_id, region, vpc_id, status, version, auto_remediation_enabled, last_heartbeat_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      defaultAgentId,
+      "system",
+      "Production VPC Guard",
+      "123456789012",
+      "us-east-1",
+      "vpc-0a1b2c3d4e5f67890",
+      "ONLINE",
+      "v1.2.0",
+      "true",
+      now,
+      now,
+      now
+    ]);
+
+    // Seed sample initial telemetry events
+    db.query(`
+      INSERT INTO in_vpc_events (id, agent_id, account_id, region, vpc_id, event_source, event_type, action_taken, severity, description, resource_id, raw_event, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      "evt-init-01",
+      defaultAgentId,
+      "123456789012",
+      "us-east-1",
+      "vpc-0a1b2c3d4e5f67890",
+      "aws.ec2",
+      "AuthorizeSecurityGroupIngress",
+      "REMEDIATED",
+      "CRITICAL",
+      "Auto-closed unauthorized 0.0.0.0/0 ingress on port 22 (SSH) on security group sg-0a9b8c7d6e5f",
+      "sg-0a9b8c7d6e5f",
+      JSON.stringify({ port: 22, cidr: "0.0.0.0/0", rule: "SSH" }),
+      new Date(Date.now() - 1000 * 60 * 12).toISOString()
+    ]);
+
+    db.query(`
+      INSERT INTO in_vpc_events (id, agent_id, account_id, region, vpc_id, event_source, event_type, action_taken, severity, description, resource_id, raw_event, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      "evt-init-02",
+      defaultAgentId,
+      "123456789012",
+      "us-east-1",
+      "vpc-0a1b2c3d4e5f67890",
+      "aws.s3",
+      "PutBucketPolicy",
+      "REMEDIATED",
+      "HIGH",
+      "Public wildcard Principal '*' policy detected on s3://prod-customer-assets; applied S3 Public Access Block",
+      "arn:aws:s3:::prod-customer-assets",
+      JSON.stringify({ bucket: "prod-customer-assets", permission: "s3:GetObject" }),
+      new Date(Date.now() - 1000 * 60 * 35).toISOString()
+    ]);
+
+    db.query(`
+      INSERT INTO in_vpc_events (id, agent_id, account_id, region, vpc_id, event_source, event_type, action_taken, severity, description, resource_id, raw_event, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      "evt-init-03",
+      defaultAgentId,
+      "123456789012",
+      "us-east-1",
+      "vpc-0a1b2c3d4e5f67890",
+      "aws.iam",
+      "AttachUserPolicy",
+      "FLAGGED",
+      "MEDIUM",
+      "Direct AdministratorAccess policy attached to IAM user 'deploy-bot'; flagged against SCP boundaries",
+      "arn:aws:iam::123456789012:user/deploy-bot",
+      JSON.stringify({ user: "deploy-bot", policy: "AdministratorAccess" }),
+      new Date(Date.now() - 1000 * 60 * 90).toISOString()
+    ]);
+  }
+} catch (err) {
+  console.warn("[CloudPilot SQLite] Error seeding in_vpc_agents:", err);
+}
 
 console.log("[CloudPilot SQLite] SQLite engine active.");
 
@@ -386,6 +501,84 @@ serve(async (req) => {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
+    // ── IN-VPC AGENT SIMULATION ENDPOINT ─────────────────────────────────────
+    if (path === "/api/in-vpc-agent/simulate-event") {
+      const body = await req.json().catch(() => ({}));
+      const agentId = body.agentId || "in-vpc-123456789012-us-east-1";
+      const eventType = body.eventType || "AuthorizeSecurityGroupIngress";
+      const sampleEvents: Record<string, any> = {
+        AuthorizeSecurityGroupIngress: {
+          action_taken: "REMEDIATED",
+          severity: "CRITICAL",
+          description: "Auto-closed unauthorized 0.0.0.0/0 ingress on port 22 (SSH) on security group sg-0a9b8c7d6e5f",
+          resource_id: "sg-0a9b8c7d6e5f",
+          source: "aws.ec2",
+        },
+        PutBucketPolicy: {
+          action_taken: "REMEDIATED",
+          severity: "HIGH",
+          description: "Public wildcard Principal '*' policy detected on s3://prod-customer-assets; applied S3 Public Access Block",
+          resource_id: "arn:aws:s3:::prod-customer-assets",
+          source: "aws.s3",
+        },
+        AttachUserPolicy: {
+          action_taken: "FLAGGED",
+          severity: "MEDIUM",
+          description: "Direct AdministratorAccess policy attached to IAM user 'deploy-bot'; flagged against SCP boundaries",
+          resource_id: "arn:aws:iam::123456789012:user/deploy-bot",
+          source: "aws.iam",
+        },
+        RevokeSecurityGroupIngress: {
+          action_taken: "FLAGGED",
+          severity: "LOW",
+          description: "Audited standard security group rule revocation by DevOps automation pipeline",
+          resource_id: "sg-0123456789abcdef0",
+          source: "aws.ec2",
+        }
+      };
+
+      const selected = sampleEvents[eventType] || sampleEvents["AuthorizeSecurityGroupIngress"];
+      const newEventId = `evt-${Date.now().toString(36)}`;
+      const now = new Date().toISOString();
+
+      db.query(`
+        INSERT INTO in_vpc_events (id, agent_id, account_id, region, vpc_id, event_source, event_type, action_taken, severity, description, resource_id, raw_event, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        newEventId,
+        agentId,
+        "123456789012",
+        "us-east-1",
+        "vpc-0a1b2c3d4e5f67890",
+        selected.source,
+        eventType,
+        selected.action_taken,
+        selected.severity,
+        selected.description,
+        selected.resource_id,
+        JSON.stringify({ simulated: true, timestamp: now }),
+        now
+      ]);
+
+      db.query(`UPDATE in_vpc_agents SET last_heartbeat_at = ?, updated_at = ? WHERE id = ?`, [now, now, agentId]);
+
+      return new Response(JSON.stringify({
+        success: true,
+        eventId: newEventId,
+        event: {
+          id: newEventId,
+          agent_id: agentId,
+          event_type: eventType,
+          action_taken: selected.action_taken,
+          severity: selected.severity,
+          description: selected.description,
+          resource_id: selected.resource_id,
+          timestamp: now
+        }
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
     }
 
     // ── Edge Functions ────────────────────────────────────────────────────────

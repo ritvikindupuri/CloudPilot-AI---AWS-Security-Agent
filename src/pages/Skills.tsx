@@ -720,6 +720,11 @@ Your priorities:
             Compliance
           </Button>
 
+          <Button variant="ghost" size="sm" onClick={() => navigate("/in-vpc-agent")} className="hidden sm:flex items-center gap-1.5 text-muted-foreground hover:text-foreground h-8 px-2.5 text-xs">
+            <Server className="w-3.5 h-3.5 text-emerald-400" />
+            In-VPC Agent
+          </Button>
+
           <Button variant="ghost" size="sm" onClick={() => navigate("/team")} className="hidden sm:flex items-center gap-1.5 text-muted-foreground hover:text-foreground h-8 px-2.5 text-xs">
             <Users className="w-3.5 h-3.5" />
             Team

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Plus, PanelRightOpen, PanelRightClose, LogOut, History, FileText, Gauge, Settings2, Users, CreditCard, ClipboardCheck, MessageSquare, Check, Key, ChevronRight, Sparkles, HelpCircle } from "lucide-react";
+import { Send, Plus, PanelRightOpen, PanelRightClose, LogOut, History, FileText, Gauge, Settings2, Users, CreditCard, ClipboardCheck, MessageSquare, Check, Key, ChevronRight, Sparkles, HelpCircle, Server } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import ChatMessage from "@/components/ChatMessage";
@@ -371,6 +371,16 @@ const ChatInterface = () => {
           >
             <ClipboardCheck className="w-3.5 h-3.5" />
             Compliance
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/in-vpc-agent")}
+            className="hidden sm:flex items-center gap-1.5 text-muted-foreground hover:text-foreground h-8 px-2.5 text-xs"
+          >
+            <Server className="w-3.5 h-3.5 text-emerald-400" />
+            In-VPC Agent
           </Button>
 
           <Button

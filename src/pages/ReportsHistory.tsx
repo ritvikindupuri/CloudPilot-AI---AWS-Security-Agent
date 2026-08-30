@@ -12,6 +12,7 @@ import {
   Download,
   Loader2,
   Filter,
+  Server,
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -201,6 +202,12 @@ const ReportsHistory = () => {
           </Button>
           <Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground hover:text-foreground">
             <Link to="/compliance">Compliance</Link>
+          </Button>
+          <Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground hover:text-foreground">
+            <Link to="/in-vpc-agent" className="flex items-center gap-1">
+              <Server className="w-3 h-3 text-emerald-400" />
+              In-VPC Agent
+            </Link>
           </Button>
         </div>
       </header>

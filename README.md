@@ -144,6 +144,41 @@ Navigate to the **Skills** tab in the top navigation to:
 - **Advanced Cloud Reasoning**: Excellent understanding of cloud security benchmarks, IAM structures, cost vectors, and drift patterns.
 - **Safety Gate Integration**: High-precision evaluation of API payloads against user safety rules, preventing accidental data loss or security breaches.
 
+### CloudPilot In-VPC Mini Agent — Self-Hosted In-VPC Sidecar (`/in-vpc-agent`)
+
+For security-conscious enterprise teams requiring all security telemetry and automated remediation to execute **100% inside their own AWS VPC boundary**, CloudPilot provides the **In-VPC Mini Agent**:
+
+```
+┌────────────────────────────────────────────────────────┐
+│                   YOUR AWS VPC                         │
+│                                                        │
+│   [AWS Event: High-risk security group or S3 drift]    │
+│                           │                            │
+│                           ▼                            │
+│   [In-VPC Lambda Agent catches event in real time]     │
+│   [Evaluates Zero-Trust rule & Auto-Remediates]        │
+│                           │                            │
+└───────────────────────────┼────────────────────────────┘
+                            │ (TLS audit sync)
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│              CLOUDPILOT WEB DASHBOARD                  │
+│                                                        │
+│  🟢 Status: Agent Active in us-east-1 (VPC vpc-0a1b)   │
+│  • [Live Stream] Auto-closed port 22 on sg-0a9b8c7d    │
+│  • [Live Stream] Enforced S3 Public Access Block       │
+└────────────────────────────────────────────────────────┘
+```
+
+#### Deployment Formats:
+1. **1-Click AWS CloudFormation (`deploy/cloudformation/cloudpilot-in-vpc.yaml`)**:
+   - Deploys serverless AWS Lambda + EventBridge security rule + IAM Execution Role in under 60 seconds with **$0 idle cost**.
+   - Listens to CloudTrail mutation events (`AuthorizeSecurityGroupIngress`, `PutBucketPolicy`, `AttachUserPolicy`).
+   - Auto-closes high-risk ports (0.0.0.0/0 on port 22/3389) and enforces S3 Public Access Blocks in `< 2 seconds`.
+2. **Drop-in Terraform Module (`deploy/terraform/`)**:
+   - Ready-to-use Terraform module with inputs for `vpc_id`, `subnet_ids`, `cloudpilot_api_key`, and `auto_remediation_enabled`.
+   - Includes dead-letter queue (DLQ) and CloudWatch Logs retention.
+
 ---
 
 ## Automated Scheduling — pg_cron

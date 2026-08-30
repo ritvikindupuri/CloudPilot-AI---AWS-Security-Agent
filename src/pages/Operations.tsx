@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, CheckSquare, Clock, Download, FileText, GitCompare, Globe, HelpCircle, Layers3, Lock, PlayCircle, RefreshCcw, Shield, ShieldCheck, SlidersHorizontal, Sparkles, TrendingUp, Workflow } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckSquare, Clock, Download, FileText, GitCompare, Globe, HelpCircle, Layers3, Lock, PlayCircle, RefreshCcw, Server, Shield, ShieldCheck, SlidersHorizontal, Sparkles, TrendingUp, Workflow } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -606,6 +606,12 @@ const Operations = () => {
               <Link to="/compliance">
                 <ShieldCheck className="w-4 h-4 mr-2" />
                 Compliance
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/in-vpc-agent">
+                <Server className="w-4 h-4 mr-2 text-emerald-400" />
+                In-VPC Agent
               </Link>
             </Button>
             <Button variant="outline" size="sm" asChild>
