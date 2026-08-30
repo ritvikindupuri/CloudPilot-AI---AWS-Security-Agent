@@ -53,6 +53,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 interface InVpcAgentRecord {
@@ -86,7 +88,62 @@ interface InVpcEventRecord {
   timestamp: string;
 }
 
-const CLOUDFORMATION_SNIPPET = `AWSTemplateFormatVersion: '2010-09-09'
+export default function InVpcAgent() {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const [agents, setAgents] = useState<InVpcAgentRecord[]>([]);
+  const [events, setEvents] = useState<InVpcEventRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [simulating, setSimulating] = useState(false);
+  const [autoRemediation, setAutoRemediation] = useState(true);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [copiedType, setCopiedType] = useState<string | null>(null);
+  const [activeArchStep, setActiveArchStep] = useState<number>(1);
+  const [activeTab, setActiveTab] = useState<string>("events");
+  const [simulationLogs, setSimulationLogs] = useState<
+    { time: string; text: string; tone: "info" | "warn" | "error" | "success" }[]
+  >([]);
+  const [simulationStatus, setSimulationStatus] = useState<"IDLE" | "RUNNING" | "COMPLETED">("IDLE");
+  const [lastSimulatedEvent, setLastSimulatedEvent] = useState<string | null>(null);
+
+  // User Configurable Stack Parameters
+  const [configVpcId, setConfigVpcId] = useState("");
+  const [configRegion, setConfigRegion] = useState("us-east-1");
+  const [configSubnets, setConfigSubnets] = useState("subnet-0a1b2c3d, subnet-0e4f5a6b");
+  const [configEmail, setConfigEmail] = useState("security-alerts@mycompany.com");
+  const [configAutoRemediation, setConfigAutoRemediation] = useState(true);
+
+  const getTerraformSnippet = () => {
+    const vpc = configVpcId.trim() || "vpc-YOUR_VPC_ID";
+    const subnets = configSubnets
+      .split(",")
+      .map((s) => `"${s.trim()}"`)
+      .filter((s) => s !== '""')
+      .join(", ") || '"subnet-YOUR_SUBNET_1", "subnet-YOUR_SUBNET_2"';
+    const email = configEmail.trim() || "security-alerts@yourcompany.com";
+
+    return `module "cloudpilot_in_vpc_agent" {
+  source = "github.com/ritvikindupuri/aws-ai-agent//deploy/terraform"
+
+  aws_region               = "${configRegion}"
+  vpc_id                   = "${vpc}"
+  subnet_ids               = [${subnets}]
+  cloudpilot_endpoint      = "https://api.cloudpilot.ai"
+  cloudpilot_api_key       = var.cloudpilot_api_key
+  auto_remediation_enabled = ${configAutoRemediation}
+
+  # Configured user email for instant real-time SNS security alerts:
+  notification_email       = "${email}"
+}`;
+  };
+
+  const getCloudFormationSnippet = () => {
+    const vpc = configVpcId.trim() || "vpc-YOUR_VPC_ID";
+    const subnets = configSubnets.trim() || "subnet-YOUR_SUBNET_1,subnet-YOUR_SUBNET_2";
+    const email = configEmail.trim() || "security-alerts@yourcompany.com";
+
+    return `AWSTemplateFormatVersion: '2010-09-09'
 Description: 'CloudPilot In-VPC Mini Agent - Serverless EventBridge & Lambda Security Watchdog'
 
 Parameters:
@@ -98,15 +155,17 @@ Parameters:
     NoEcho: true
   VpcId:
     Type: AWS::EC2::VPC::Id
+    Default: '${vpc}'
   SubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
+    Default: '${subnets}'
   NotificationEmail:
     Type: String
     Description: 'Email address for real-time SNS security alerts'
-    Default: 'security-team@mycompany.com'
+    Default: '${email}'
   AutoRemediationEnabled:
     Type: String
-    Default: 'true'
+    Default: '${configAutoRemediation ? "true" : "false"}'
 
 Resources:
   AlertsSnsTopic:
@@ -156,39 +215,7 @@ Resources:
       Targets:
         - Arn: !GetAtt AgentLambda.Arn
           Id: 'CloudPilotAgentLambdaTarget'`;
-
-const TERRAFORM_SNIPPET = `module "cloudpilot_in_vpc_agent" {
-  source = "github.com/ritvikindupuri/aws-ai-agent//deploy/terraform"
-
-  aws_region               = "us-east-1"
-  vpc_id                   = "vpc-0a1b2c3d4e5f67890"
-  subnet_ids               = ["subnet-0a1b2c3d", "subnet-0e4f5a6b"]
-  cloudpilot_endpoint      = "https://api.cloudpilot.ai"
-  cloudpilot_api_key       = var.cloudpilot_api_key
-  auto_remediation_enabled = true
-  
-  # Configure user email for instant real-time SNS security alerts:
-  notification_email       = "security-team@mycompany.com"
-}`;
-
-export default function InVpcAgent() {
-  const { user, signOut } = useAuth();
-  const navigate = useNavigate();
-
-  const [agents, setAgents] = useState<InVpcAgentRecord[]>([]);
-  const [events, setEvents] = useState<InVpcEventRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [simulating, setSimulating] = useState(false);
-  const [autoRemediation, setAutoRemediation] = useState(true);
-  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
-  const [copiedType, setCopiedType] = useState<string | null>(null);
-  const [activeArchStep, setActiveArchStep] = useState<number>(1);
-  const [activeTab, setActiveTab] = useState<string>("events");
-  const [simulationLogs, setSimulationLogs] = useState<
-    { time: string; text: string; tone: "info" | "warn" | "error" | "success" }[]
-  >([]);
-  const [simulationStatus, setSimulationStatus] = useState<"IDLE" | "RUNNING" | "COMPLETED">("IDLE");
-  const [lastSimulatedEvent, setLastSimulatedEvent] = useState<string | null>(null);
+  };
 
   const [teardownDialogOpen, setTeardownDialogOpen] = useState(false);
   const [tearingDown, setTearingDown] = useState(false);
@@ -497,7 +524,7 @@ export default function InVpcAgent() {
               </div>
 
               <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
-                In-VPC Security Engine
+                In-VPC Agent
               </h2>
             </div>
 
@@ -878,7 +905,7 @@ export default function InVpcAgent() {
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
-                    onClick={() => handleCopy("CloudFormation", CLOUDFORMATION_SNIPPET)}
+                    onClick={() => handleCopy("CloudFormation", getCloudFormationSnippet())}
                     className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground"
                   >
                     <Copy className="w-3 h-3" /> {copiedType === "CloudFormation" ? "Copied!" : "Copy YAML"}
@@ -886,28 +913,70 @@ export default function InVpcAgent() {
                 </div>
               </div>
 
-              {/* Step by step guide */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="p-3.5 rounded-xl bg-background/60 border border-border/50 space-y-1.5">
-                  <span className="text-[10px] font-mono text-primary font-bold">STEP 1</span>
-                  <h4 className="text-xs font-bold text-foreground">Open AWS CloudFormation</h4>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Navigate to CloudFormation in the AWS Console and click <strong>Create Stack (with new resources)</strong>.
-                  </p>
+              {/* Interactive Stack Parameters Configurator */}
+              <div className="p-4 rounded-xl bg-background/60 border border-border/60 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-border/40">
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Sliders className="w-3.5 h-3.5 text-primary" /> Customize CloudFormation Parameters
+                    </h4>
+                    <p className="text-[11px] text-muted-foreground">
+                      Configure your AWS network variables below. The YAML template updates dynamically.
+                    </p>
+                  </div>
                 </div>
-                <div className="p-3.5 rounded-xl bg-background/60 border border-border/50 space-y-1.5">
-                  <span className="text-[10px] font-mono text-primary font-bold">STEP 2</span>
-                  <h4 className="text-xs font-bold text-foreground">Paste Template or Upload</h4>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Select <strong>Upload a template file</strong> and upload <code>deploy/cloudformation/cloudpilot-in-vpc.yaml</code>.
-                  </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-mono text-muted-foreground uppercase">Target VPC ID</Label>
+                    <Input
+                      value={configVpcId}
+                      onChange={(e) => setConfigVpcId(e.target.value)}
+                      placeholder="vpc-0a1b2c3d4e5f"
+                      className="h-8 text-xs font-mono bg-background"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-mono text-muted-foreground uppercase">AWS Region</Label>
+                    <Input
+                      value={configRegion}
+                      onChange={(e) => setConfigRegion(e.target.value)}
+                      placeholder="us-east-1"
+                      className="h-8 text-xs font-mono bg-background"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-mono text-muted-foreground uppercase">Private Subnet IDs</Label>
+                    <Input
+                      value={configSubnets}
+                      onChange={(e) => setConfigSubnets(e.target.value)}
+                      placeholder="subnet-aaa, subnet-bbb"
+                      className="h-8 text-xs font-mono bg-background"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-mono text-muted-foreground uppercase">Alert Email (SNS)</Label>
+                    <Input
+                      value={configEmail}
+                      onChange={(e) => setConfigEmail(e.target.value)}
+                      placeholder="security@company.com"
+                      className="h-8 text-xs font-mono bg-background"
+                    />
+                  </div>
                 </div>
-                <div className="p-3.5 rounded-xl bg-background/60 border border-border/50 space-y-1.5">
-                  <span className="text-[10px] font-mono text-primary font-bold">STEP 3</span>
-                  <h4 className="text-xs font-bold text-foreground">Select Target VPC & Subnets</h4>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Pick your private subnets and set <strong>AutoRemediationEnabled</strong> to <code>true</code>.
-                  </p>
+
+                <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-foreground text-xs">Auto-Remediation Mode</span>
+                    <p className="text-[11px] text-muted-foreground">Automatically revert high-risk security drift in &lt; 2s</p>
+                  </div>
+                  <Switch
+                    checked={configAutoRemediation}
+                    onCheckedChange={setConfigAutoRemediation}
+                  />
                 </div>
               </div>
 
@@ -917,7 +986,7 @@ export default function InVpcAgent() {
                   <span className="text-xs font-mono text-muted-foreground">cloudpilot-in-vpc.yaml</span>
                 </div>
                 <pre className="p-4 rounded-xl bg-background border border-border/70 text-[11px] font-mono text-foreground/90 overflow-x-auto max-h-96 leading-relaxed">
-                  {CLOUDFORMATION_SNIPPET}
+                  {getCloudFormationSnippet()}
                 </pre>
               </div>
             </div>
@@ -935,18 +1004,85 @@ export default function InVpcAgent() {
                 </div>
                 <Button
                   size="sm"
-                  onClick={() => handleCopy("Terraform", TERRAFORM_SNIPPET)}
+                  onClick={() => handleCopy("Terraform", getTerraformSnippet())}
                   className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground"
                 >
                   <Copy className="w-3 h-3" /> {copiedType === "Terraform" ? "Copied!" : "Copy Terraform"}
                 </Button>
               </div>
 
+              {/* Interactive Stack Parameters Configurator */}
+              <div className="p-4 rounded-xl bg-background/60 border border-border/60 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-border/40">
+                  <div>
+                    <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Sliders className="w-3.5 h-3.5 text-primary" /> Customize Terraform Variables
+                    </h4>
+                    <p className="text-[11px] text-muted-foreground">
+                      Input your VPC, region, and subnet IDs. The Terraform module code updates dynamically.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-mono text-muted-foreground uppercase">Target VPC ID</Label>
+                    <Input
+                      value={configVpcId}
+                      onChange={(e) => setConfigVpcId(e.target.value)}
+                      placeholder="vpc-0a1b2c3d4e5f"
+                      className="h-8 text-xs font-mono bg-background"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-mono text-muted-foreground uppercase">AWS Region</Label>
+                    <Input
+                      value={configRegion}
+                      onChange={(e) => setConfigRegion(e.target.value)}
+                      placeholder="us-east-1"
+                      className="h-8 text-xs font-mono bg-background"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-mono text-muted-foreground uppercase">Private Subnet IDs</Label>
+                    <Input
+                      value={configSubnets}
+                      onChange={(e) => setConfigSubnets(e.target.value)}
+                      placeholder="subnet-aaa, subnet-bbb"
+                      className="h-8 text-xs font-mono bg-background"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-mono text-muted-foreground uppercase">Alert Email (SNS)</Label>
+                    <Input
+                      value={configEmail}
+                      onChange={(e) => setConfigEmail(e.target.value)}
+                      placeholder="security@company.com"
+                      className="h-8 text-xs font-mono bg-background"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-foreground text-xs">Auto-Remediation Mode</span>
+                    <p className="text-[11px] text-muted-foreground">Automatically revert high-risk security drift in &lt; 2s</p>
+                  </div>
+                  <Switch
+                    checked={configAutoRemediation}
+                    onCheckedChange={setConfigAutoRemediation}
+                  />
+                </div>
+              </div>
+
               {/* Code Snippet Box */}
               <div className="space-y-1.5">
                 <span className="text-xs font-mono text-muted-foreground">main.tf</span>
                 <pre className="p-4 rounded-xl bg-background border border-border/70 text-[11px] font-mono text-foreground/90 overflow-x-auto leading-relaxed">
-                  {TERRAFORM_SNIPPET}
+                  {getTerraformSnippet()}
                 </pre>
               </div>
 
