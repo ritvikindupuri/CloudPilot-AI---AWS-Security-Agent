@@ -107,13 +107,16 @@ export const useChat = (
           const cachedData = data.response;
           
           const severity = cachedData.totals?.severityCounts || {};
-          const score = Math.max(0,
-            100 -
-            (severity.CRITICAL || 0) * 20 -
-            (severity.HIGH || 0) * 10 -
-            (severity.MEDIUM || 0) * 5 -
-            (severity.LOW || 0) * 2
-          );
+          // Standardized health score calculation: Critical (-20, cap 60), High (-8, cap 45), Medium (-3, cap 30), Low (-1, cap 15)
+          const critDeduct = Math.min(60, (severity.CRITICAL || severity.critical || 0) * 20);
+          const highDeduct = Math.min(45, (severity.HIGH || severity.high || 0) * 8);
+          const medDeduct = Math.min(30, (severity.MEDIUM || severity.medium || 0) * 3);
+          const lowDeduct = Math.min(15, (severity.LOW || severity.low || 0) * 1);
+          const calculatedScore = Math.max(0, 100 - critDeduct - highDeduct - medDeduct - lowDeduct);
+
+          const score = typeof cachedData.accountHealthScore === "number"
+            ? cachedData.accountHealthScore
+            : calculatedScore;
 
           setAuditSummary({
             planner: data.planner,
