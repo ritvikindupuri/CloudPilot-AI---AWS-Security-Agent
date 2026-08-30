@@ -1233,10 +1233,11 @@ const INTENT_TOOL_MAP: Record<AgentIntent, Set<string>> = {
 // ── Agent Skills Engine ──────────────────────────────────────────────────────
 // Each skill maps an intent category to a specialized persona injected into
 // the agent's system prompt and a display badge shown in the UI.
-const AGENT_SKILLS: Record<AgentIntent, { name: string; badge: string; systemSupplement: string }> = {
+const AGENT_SKILLS: Record<AgentIntent, { name: string; badge: string; description: string; systemSupplement: string }> = {
   security_audit: {
     name: "Security Audit Specialist",
     badge: "🔐 Security Audit Specialist",
+    description: "Audits IAM, S3, EC2, and VPC against CIS Benchmarks with severity rankings & fix commands.",
     systemSupplement: `ACTIVE SKILL: Security Audit Specialist
 You are now operating as an elite AWS security auditor. Your priorities in this query are:
 1. Enumerate all security misconfigurations across IAM, S3, EC2, and VPC with explicit resource IDs.
@@ -1248,6 +1249,7 @@ Do NOT skip resource IDs or use placeholder values. Real findings only.`,
   cost_analysis: {
     name: "FinOps Cost Analyst",
     badge: "💰 FinOps Cost Analyst",
+    description: "Analyzes Cost Explorer spend, flags idle resources, and calculates ROI savings.",
     systemSupplement: `ACTIVE SKILL: FinOps Cost Analyst
 You are now operating as a FinOps cost optimization expert. Your priorities:
 1. Break down spend by service, region, and resource with exact dollar amounts from the Cost Explorer API.
@@ -1258,6 +1260,7 @@ You are now operating as a FinOps cost optimization expert. Your priorities:
   drift_detection: {
     name: "Drift Detection Engineer",
     badge: "📊 Drift Detection Engineer",
+    description: "Compares live cloud state against snapshots to detect configuration changes.",
     systemSupplement: `ACTIVE SKILL: Drift Detection Engineer
 You are now operating as a configuration drift detection engineer. Your priorities:
 1. Compare current resource state against the captured baseline snapshot.
@@ -1268,6 +1271,7 @@ You are now operating as a configuration drift detection engineer. Your prioriti
   org_management: {
     name: "AWS Organizations Expert",
     badge: "🏢 AWS Organizations Expert",
+    description: "Maps OU hierarchy, audits SCPs, and inspects multi-account governance.",
     systemSupplement: `ACTIVE SKILL: AWS Organizations Expert
 You are now operating as an AWS Organizations and multi-account governance specialist. Your priorities:
 1. Map the full organizational unit (OU) hierarchy with account IDs.
@@ -1278,6 +1282,7 @@ You are now operating as an AWS Organizations and multi-account governance speci
   ops_automation: {
     name: "Incident Response Operator",
     badge: "⚡ Incident Response Operator",
+    description: "Executes multi-step incident runbooks with confirmation gates and audit logs.",
     systemSupplement: `ACTIVE SKILL: Incident Response Operator
 You are now operating as an incident response and runbook execution specialist. Your priorities:
 1. Execute the requested runbook steps in strict sequence with real API calls.
@@ -1288,6 +1293,7 @@ You are now operating as an incident response and runbook execution specialist. 
   attack_simulation: {
     name: "Red Team Simulation Expert",
     badge: "🎯 Red Team Simulation Expert",
+    description: "Maps IAM privilege escalation vectors and MITRE ATT&CK lateral paths.",
     systemSupplement: `ACTIVE SKILL: Red Team Simulation Expert
 You are now operating as an authorized red team penetration tester. Your priorities:
 1. Execute privilege escalation path discovery using real IAM API calls.
@@ -1298,6 +1304,7 @@ You are now operating as an authorized red team penetration tester. Your priorit
   event_automation: {
     name: "CloudTrail Event Automation Specialist",
     badge: "🔔 Event Automation Specialist",
+    description: "Analyzes CloudTrail event streams and builds auto-remediation policies.",
     systemSupplement: `ACTIVE SKILL: CloudTrail Event Automation Specialist
 You are now operating as a CloudTrail event automation and response policy engineer. Your priorities:
 1. Retrieve and analyze relevant CloudTrail events with exact timestamps and source IPs.
@@ -1308,6 +1315,7 @@ You are now operating as a CloudTrail event automation and response policy engin
   direct_query: {
     name: "AWS Resource Query Agent",
     badge: "🔍 Direct Query Agent",
+    description: "Executes precise, raw AWS SDK API queries with exact ARNs, regions, and structured tables.",
     systemSupplement: `ACTIVE SKILL: Direct Query Agent
 You are now operating as a precise AWS resource query agent. Your priorities:
 1. Execute the exact API call requested with minimal tool calls (prefer single-pass).
@@ -1318,6 +1326,7 @@ You are now operating as a precise AWS resource query agent. Your priorities:
   general: {
     name: "General Cloud Security Assistant",
     badge: "☁️ General Cloud Security Assistant",
+    description: "Comprehensive full-spectrum security assessment across all AWS services.",
     systemSupplement: `ACTIVE SKILL: General Cloud Security Assistant
 You are operating in general mode. Use your full tool set and provide a comprehensive, well-structured response covering all relevant aspects of the user's query.`,
   },
@@ -6529,6 +6538,7 @@ export const handler = async (req: Request): Promise<Response> => {
             activeSkillData = {
               name: builtInSkill.name,
               badge: builtInSkill.badge,
+              description: builtInSkill.description,
               systemSupplement: builtInSkill.systemSupplement,
               intentLabel: classifiedIntent,
             };
@@ -6538,8 +6548,9 @@ export const handler = async (req: Request): Promise<Response> => {
             if (filteredTools.length === 0) filteredTools = tools; // Fallback to all tools if none matched
           }
 
-          liveExecutionLogs.push({ step: "Skills Engine", status: "success", message: `Specialist Persona Activated: ${activeSkillData.badge}` });
-          sendMeta({ executionLogs: [...liveExecutionLogs], activeSkill: { name: activeSkillData.name, badge: activeSkillData.badge } });
+          const skillDesc = (activeSkillData as any).description ? ` — ${(activeSkillData as any).description}` : "";
+          liveExecutionLogs.push({ step: "Skills Engine", status: "success", message: `Specialist Persona Activated: ${activeSkillData.badge}${skillDesc}` });
+          sendMeta({ executionLogs: [...liveExecutionLogs], activeSkill: { name: activeSkillData.name, badge: activeSkillData.badge, description: (activeSkillData as any).description } });
 
           // Inject skill-specific system supplement into the agent context
           if (apiMessages.length > 0 && apiMessages[0].role === "system") {
