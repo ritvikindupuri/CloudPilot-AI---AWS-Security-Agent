@@ -53,6 +53,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
 interface BuiltInSkill {
@@ -358,6 +359,69 @@ const ALL_AVAILABLE_TOOLS = [
   "manage_service_control_policy",
   "manage_iam_permission_boundary",
 ];
+
+const TOOL_METADATA: Record<string, { label: string; description: string; service: string }> = {
+  execute_aws_api: {
+    label: "execute_aws_api",
+    service: "Core AWS SDK",
+    description: "Invokes official AWS SDK APIs (EC2, S3, IAM, CloudWatch, RDS, VPC, Lambda, etc.) using live temporary session credentials.",
+  },
+  run_security_scan: {
+    label: "run_security_scan",
+    service: "CIS Benchmark",
+    description: "Executes automated multi-service security audits evaluating CIS AWS Foundations Benchmark controls.",
+  },
+  run_cost_anomaly_scan: {
+    label: "run_cost_anomaly_scan",
+    service: "Cost Explorer",
+    description: "Pulls daily spend metrics, identifies cost spikes or accelerating trends, and checks for idle cloud resources.",
+  },
+  run_drift_scan: {
+    label: "run_drift_scan",
+    service: "Config Drift",
+    description: "Calculates live cryptographic state fingerprints and diffs them against previously captured security baselines.",
+  },
+  manage_drift_baseline: {
+    label: "manage_drift_baseline",
+    service: "Config Baseline",
+    description: "Captures, saves, or resets infrastructure configuration snapshots used as baseline standards.",
+  },
+  manage_cost_rule: {
+    label: "manage_cost_rule",
+    service: "FinOps Rules",
+    description: "Sets budget limits, spending anomaly threshold rules, and automated SNS email alerts.",
+  },
+  manage_event_policy: {
+    label: "manage_event_policy",
+    service: "EventBridge",
+    description: "Defines event triggers and automated remediation rules responding to real-time CloudTrail security events.",
+  },
+  run_attack_simulation: {
+    label: "run_attack_simulation",
+    service: "Red Team",
+    description: "Simulates authorized IAM privilege escalation paths, lateral movement opportunities, and MITRE ATT&CK techniques.",
+  },
+  execute_runbook: {
+    label: "execute_runbook",
+    service: "Incident Response",
+    description: "Executes structured incident response playbooks sequentially with confirmation gates before mutating infrastructure.",
+  },
+  query_cloudtrail: {
+    label: "query_cloudtrail",
+    service: "CloudTrail",
+    description: "Retrieves and parses historical AWS CloudTrail audit logs with timestamps, source IPs, and identity contexts.",
+  },
+  manage_service_control_policy: {
+    label: "manage_service_control_policy",
+    service: "AWS Organizations",
+    description: "Audits, crafts, and attaches Service Control Policies (SCPs) across organization accounts and OUs.",
+  },
+  manage_iam_permission_boundary: {
+    label: "manage_iam_permission_boundary",
+    service: "IAM Governance",
+    description: "Evaluates and attaches IAM permission boundaries to cap maximum permissions and enforce least privilege.",
+  },
+};
 
 export default function Skills() {
   const { user, signOut } = useAuth();
@@ -797,21 +861,40 @@ Your priorities:
                         {skill.description}
                       </p>
 
-                      {/* Tool Badges */}
+                      {/* Tool Badges with Hover Tooltip */}
                       <div className="pt-1">
                         <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider block mb-1.5">
                           Allowed Tools ({skill.allowedTools.length}):
                         </span>
-                        <div className="flex flex-wrap gap-1">
-                          {skill.allowedTools.map((t) => (
-                            <span
-                              key={t}
-                              className="text-[10px] font-mono px-2 py-0.5 rounded bg-muted/70 text-foreground/80 border border-border/40"
-                            >
-                              {t}
-                            </span>
-                          ))}
-                        </div>
+                        <TooltipProvider delayDuration={100}>
+                          <div className="flex flex-wrap gap-1">
+                            {skill.allowedTools.map((t) => {
+                              const meta = TOOL_METADATA[t];
+                              return (
+                                <Tooltip key={t}>
+                                  <TooltipTrigger asChild>
+                                    <span
+                                      className="text-[10px] font-mono px-2 py-0.5 rounded bg-muted/70 text-foreground/80 border border-border/40 hover:border-primary/50 hover:bg-primary/5 transition-colors cursor-help"
+                                    >
+                                      {t}
+                                    </span>
+                                  </TooltipTrigger>
+                                  {meta && (
+                                    <TooltipContent side="top" className="max-w-xs p-3 space-y-1 bg-card/95 border-border shadow-xl backdrop-blur-md">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="font-mono text-xs font-bold text-primary">{meta.label}</span>
+                                        <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/40">{meta.service}</span>
+                                      </div>
+                                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                        {meta.description}
+                                      </p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              );
+                            })}
+                          </div>
+                        </TooltipProvider>
                       </div>
                     </div>
 
@@ -990,21 +1073,40 @@ Your priorities:
                           </div>
                         )}
 
-                        {/* Allowed Tools */}
+                        {/* Allowed Tools with Hover Tooltips */}
                         <div>
                           <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider block mb-1">
                             Tool Access:
                           </span>
-                          <div className="flex flex-wrap gap-1">
-                            {skill.allowed_tools.map((t) => (
-                              <span
-                                key={t}
-                                className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground border border-border/40"
-                              >
-                                {t}
-                              </span>
-                            ))}
-                          </div>
+                          <TooltipProvider delayDuration={100}>
+                            <div className="flex flex-wrap gap-1">
+                              {skill.allowed_tools.map((t) => {
+                                const meta = TOOL_METADATA[t];
+                                return (
+                                  <Tooltip key={t}>
+                                    <TooltipTrigger asChild>
+                                      <span
+                                        className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground border border-border/40 hover:border-primary/50 hover:bg-primary/5 hover:text-foreground transition-colors cursor-help"
+                                      >
+                                        {t}
+                                      </span>
+                                    </TooltipTrigger>
+                                    {meta && (
+                                      <TooltipContent side="top" className="max-w-xs p-3 space-y-1 bg-card/95 border-border shadow-xl backdrop-blur-md">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="font-mono text-xs font-bold text-primary">{meta.label}</span>
+                                          <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/40">{meta.service}</span>
+                                        </div>
+                                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                          {meta.description}
+                                        </p>
+                                      </TooltipContent>
+                                    )}
+                                  </Tooltip>
+                                );
+                              })}
+                            </div>
+                          </TooltipProvider>
                         </div>
                       </div>
 
@@ -1049,18 +1151,13 @@ Your priorities:
           <TabsContent value="architecture" className="space-y-6">
             <div className="rounded-2xl border border-border bg-card/60 p-6 sm:p-8 space-y-8">
               {/* Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border/60">
-                <div>
-                  <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-                    <Workflow className="w-5 h-5 text-primary" /> Orchestration Architecture Diagram
-                  </h3>
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                    Interactive 5-stage pipeline showing how natural language queries travel through intent routing, persona injection, tool filtering, and safety screening:
-                  </p>
-                </div>
-                <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/25 self-start">
-                  ⚡ End-to-End Latency: ~2-4s
-                </span>
+              <div className="pb-4 border-b border-border/60">
+                <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                  <Workflow className="w-5 h-5 text-primary" /> Orchestration Architecture Diagram
+                </h3>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                  Interactive 5-stage pipeline showing how natural language queries travel through intent routing, persona injection, tool filtering, and safety screening:
+                </p>
               </div>
 
               {/* Visual Pipeline Flow Chart */}
@@ -1306,34 +1403,59 @@ Your priorities:
               </div>
             </div>
 
-            {/* Allowed Tools Checkboxes */}
+            {/* Allowed Tools Checkboxes with Hover Tooltips */}
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground block">
-                Allowed AWS Security Tools ({formAllowedTools.length} selected):
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 rounded-xl border border-border/60 bg-muted/20">
-                {ALL_AVAILABLE_TOOLS.map((tool) => {
-                  const checked = formAllowedTools.includes(tool);
-                  return (
-                    <label
-                      key={tool}
-                      className="flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground hover:text-foreground cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => {
-                          setFormAllowedTools((prev) =>
-                            checked ? prev.filter((t) => t !== tool) : [...prev, tool]
-                          );
-                        }}
-                        className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5"
-                      />
-                      <span className="truncate">{tool}</span>
-                    </label>
-                  );
-                })}
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-foreground block">
+                  Allowed AWS Security Tools ({formAllowedTools.length} selected):
+                </label>
+                <span className="text-[10px] font-mono text-muted-foreground">Hover over any tool for description</span>
               </div>
+              <TooltipProvider delayDuration={100}>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-36 overflow-y-auto p-2 rounded-xl border border-border/60 bg-muted/20">
+                  {ALL_AVAILABLE_TOOLS.map((tool) => {
+                    const checked = formAllowedTools.includes(tool);
+                    const meta = TOOL_METADATA[tool];
+
+                    return (
+                      <Tooltip key={tool}>
+                        <TooltipTrigger asChild>
+                          <label
+                            className={`flex items-center gap-1.5 text-[11px] font-mono p-1.5 rounded-lg border transition-all cursor-pointer ${
+                              checked
+                                ? "bg-primary/10 border-primary/40 text-foreground font-medium"
+                                : "border-border/30 text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                setFormAllowedTools((prev) =>
+                                  checked ? prev.filter((t) => t !== tool) : [...prev, tool]
+                                );
+                              }}
+                              className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5 flex-shrink-0"
+                            />
+                            <span className="truncate">{tool}</span>
+                          </label>
+                        </TooltipTrigger>
+                        {meta && (
+                          <TooltipContent side="top" className="max-w-xs p-3 space-y-1 bg-card/95 border-border shadow-xl backdrop-blur-md">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-mono text-xs font-bold text-primary">{meta.label}</span>
+                              <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/40">{meta.service}</span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground leading-relaxed">
+                              {meta.description}
+                            </p>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              </TooltipProvider>
             </div>
 
             {/* System Supplement Prompt */}
