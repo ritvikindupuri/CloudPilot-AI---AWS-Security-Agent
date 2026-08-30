@@ -179,6 +179,16 @@ For security-conscious enterprise teams requiring all security telemetry and aut
    - Ready-to-use Terraform module with inputs for `vpc_id`, `subnet_ids`, `cloudpilot_api_key`, and `auto_remediation_enabled`.
    - Includes dead-letter queue (DLQ) and CloudWatch Logs retention.
 
+#### Why the In-VPC Agent vs. AWS GuardDuty & Security Hub?
+
+| Capability | AWS GuardDuty | AWS Security Hub | **CloudPilot In-VPC Agent** |
+| :--- | :--- | :--- | :--- |
+| **Response Latency** | 🐌 5–30+ minutes (batch log analysis) | 🐌 Hourly / Daily scans | ⚡ **< 1.8 seconds** (EventBridge to Lambda) |
+| **Action Taken** | 📢 Alert Only (creates finding in console) | 📢 Alert Only (compliance score) | 🛡️ **Autonomous Remediation** (instantly revokes open port 22/3389 rules & locks S3 buckets) |
+| **Data Perimeter** | ☁️ Managed by AWS global SaaS plane | ☁️ Managed by AWS global SaaS plane | 🔒 **100% Inside Your Private VPC** (zero egress of infrastructure configs) |
+| **Human Burden** | 🔴 High (manual intervention at 3 AM) | 🔴 High (manual ticket workflows) | 🟢 **Zero** (self-healing circuit breaker + email post-mortem) |
+| **Idle Cost** | 💸 Billed on VPC flow log & CloudTrail GBs | 💸 Billed per compliance check ($0.0010/chk) | 💵 **$0 Idle / Serverless** (pennies/month on Lambda invocations) |
+
 ---
 
 ## Automated Scheduling — pg_cron

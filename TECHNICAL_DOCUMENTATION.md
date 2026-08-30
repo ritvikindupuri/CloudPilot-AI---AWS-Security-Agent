@@ -3007,3 +3007,14 @@ The In-VPC Mini Agent runs serverlessly inside customer AWS VPCs and subnets, co
    - Single-file YAML defining Lambda, IAM Execution Role, Security Group, SQS DLQ, and EventBridge Rule.
 2. **Terraform Module (`deploy/terraform/`)**:
    - Modular HCL code exportable directly into enterprise Infrastructure-as-Code repositories.
+
+### 46.4 Architectural Advantages vs. AWS GuardDuty & Security Hub
+
+| Metric / Dimension | AWS GuardDuty | AWS Security Hub | CloudPilot In-VPC Mini Agent |
+| :--- | :--- | :--- | :--- |
+| **Detection-to-Remediation SLA** | 5 to 30+ minutes (batch log analysis) | Hourly / Daily compliance evaluations | **< 1.8 seconds** (EventBridge to Lambda in-VPC) |
+| **Action Paradigm** | Passive Alerting (Finding JSON in AWS console) | Passive Aggregation (Compliance posture dial) | **Active Self-Healing** (Instant API rollback of open ports & S3 leaks) |
+| **Data Perimeter** | AWS Global SaaS control plane | AWS Global SaaS control plane | **100% Inside Customer Private VPC** |
+| **Credential & Config Exposure** | Transmits VPC Flow Logs and CloudTrail logs to AWS backend | Aggregates AWS Config resource recordings | **Zero raw configuration or credential egress** (only ephemeral event ID synced via TLS 1.3) |
+| **Human-in-the-Loop Burden** | Requires manual engineer triage at 3 AM | Requires manual ticket creation | **Zero** (Autonomous safe rollback + instant email post-mortem) |
+| **Cost Model** | Billed on VPC Flow Log & CloudTrail gigabytes (often $100s–$1000s/mo) | Billed per compliance check evaluated ($0.0010/chk) | **$0 at Idle** (Serverless EventBridge + Lambda invocation pricing) |

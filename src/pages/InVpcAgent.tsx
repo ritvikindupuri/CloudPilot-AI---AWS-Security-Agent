@@ -1249,6 +1249,42 @@ Resources:
                     "The agent constructs an immutable telemetry record containing event ID, resource ID, action taken, and before/after diffs, posting it over TLS 1.3 to your CloudPilot dashboard. No raw AWS credentials or customer data ever leaves your VPC."}
                 </p>
               </div>
+
+              {/* Comparative Advantage vs GuardDuty & Security Hub */}
+              <div className="rounded-xl border border-border/70 bg-background/50 p-5 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-border/40">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <h4 className="text-xs font-bold text-foreground">
+                    Why In-VPC Agent vs. AWS GuardDuty &amp; Security Hub?
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="p-3 rounded-lg border border-border/50 bg-card/40 space-y-1.5">
+                    <span className="text-[10px] font-mono text-emerald-400 font-bold block">⚡ &lt; 2s CIRCUIT BREAKER</span>
+                    <h5 className="text-xs font-semibold text-foreground">Real-Time vs 30m Lag</h5>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      GuardDuty findings take 5–30 minutes to generate after CloudTrail batching. The In-VPC agent neutralizes open port 22/3389 rules in <strong>&lt; 1.8 seconds</strong> before botnets can scan.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-border/50 bg-card/40 space-y-1.5">
+                    <span className="text-[10px] font-mono text-blue-400 font-bold block">🛡️ ACTIVE AUTO-REMEDIATION</span>
+                    <h5 className="text-xs font-semibold text-foreground">Self-Healing vs Alert Only</h5>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Security Hub only aggregates passive compliance scores. The In-VPC agent acts as an autonomous circuit breaker that automatically revokes non-compliant policies with zero 3 AM human wakeups.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-border/50 bg-card/40 space-y-1.5">
+                    <span className="text-[10px] font-mono text-purple-400 font-bold block">🔒 100% IN-VPC PRIVACY</span>
+                    <h5 className="text-xs font-semibold text-foreground">Air-Gapped &amp; $0 Idle Cost</h5>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      Zero data egress. Evaluated completely within your private VPC perimeter. Fully serverless on EventBridge and Lambda with $0 idle cost.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </TabsContent>
         </Tabs>
