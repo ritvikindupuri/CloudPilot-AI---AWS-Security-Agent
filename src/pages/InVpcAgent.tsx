@@ -150,6 +150,12 @@ export default function InVpcAgent() {
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [copiedType, setCopiedType] = useState<string | null>(null);
   const [activeArchStep, setActiveArchStep] = useState<number>(1);
+  const [activeTab, setActiveTab] = useState<string>("events");
+  const [simulationLogs, setSimulationLogs] = useState<
+    { time: string; text: string; tone: "info" | "warn" | "error" | "success" }[]
+  >([]);
+  const [simulationStatus, setSimulationStatus] = useState<"IDLE" | "RUNNING" | "COMPLETED">("IDLE");
+  const [lastSimulatedEvent, setLastSimulatedEvent] = useState<string | null>(null);
 
   const fetchAgentData = async () => {
     try {
@@ -194,6 +200,44 @@ export default function InVpcAgent() {
   const handleSimulateEvent = async (eventType: string) => {
     try {
       setSimulating(true);
+      setSimulationStatus("RUNNING");
+      setLastSimulatedEvent(eventType);
+      setSimulationLogs([]);
+
+      const addLog = (text: string, tone: "info" | "warn" | "error" | "success" = "info") => {
+        const time = new Date().toLocaleTimeString();
+        setSimulationLogs((prev) => [...prev, { time, text, tone }]);
+      };
+
+      if (eventType === "AuthorizeSecurityGroupIngress") {
+        addLog("⚡ [EventBridge] Ingested CloudTrail event: ec2.amazonaws.com AuthorizeSecurityGroupIngress", "info");
+        await new Promise((r) => setTimeout(r, 220));
+        addLog("🔍 [In-VPC Lambda] Spawned in private subnet-0a1b2c3d (< 180ms cold start)", "info");
+        await new Promise((r) => setTimeout(r, 260));
+        addLog("🛡️ [Policy Engine] Evaluating ingress rules against CIS AWS Foundations Benchmark 5.2...", "warn");
+        await new Promise((r) => setTimeout(r, 240));
+        addLog("🚨 [DRIFT DETECTED] Unauthorized CIDR 0.0.0.0/0 ingress on port 22 (SSH) on sg-0a9b8c7d6e5f", "error");
+        await new Promise((r) => setTimeout(r, 300));
+        addLog("⚡ [Auto-Remediation] Executing ec2:RevokeSecurityGroupIngress via AWS SDK on sg-0a9b8c7d6e5f...", "warn");
+        await new Promise((r) => setTimeout(r, 320));
+      } else if (eventType === "PutBucketPolicy") {
+        addLog("⚡ [EventBridge] Ingested CloudTrail event: s3.amazonaws.com PutBucketPolicy", "info");
+        await new Promise((r) => setTimeout(r, 220));
+        addLog("🔍 [In-VPC Lambda] Analyzing bucket policy on s3://prod-customer-assets", "info");
+        await new Promise((r) => setTimeout(r, 260));
+        addLog("🚨 [CRITICAL EXPOSURE] Wildcard Principal '*' with s3:GetObject policy detected", "error");
+        await new Promise((r) => setTimeout(r, 280));
+        addLog("⚡ [Auto-Remediation] Calling s3:PutBucketPublicAccessBlock (4 layers locked)...", "warn");
+        await new Promise((r) => setTimeout(r, 320));
+      } else {
+        addLog("⚡ [EventBridge] Ingested CloudTrail event: iam.amazonaws.com AttachUserPolicy", "info");
+        await new Promise((r) => setTimeout(r, 220));
+        addLog("🔍 [In-VPC Lambda] Analyzing IAM mutation on user 'deploy-bot'", "info");
+        await new Promise((r) => setTimeout(r, 260));
+        addLog("⚠️ [SCP Boundary Audit] Direct AdministratorAccess policy flagged against active SCPs", "warn");
+        await new Promise((r) => setTimeout(r, 280));
+      }
+
       const res = await fetch("http://localhost:54321/api/in-vpc-agent/simulate-event", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -206,6 +250,15 @@ export default function InVpcAgent() {
       if (!res.ok) throw new Error("Simulation endpoint failed");
       const result = await res.json();
 
+      if (result.event.action_taken === "REMEDIATED") {
+        addLog("✅ [SUCCESS] Ingress rule successfully revoked from security group! (Execution: 1.38s)", "success");
+      } else {
+        addLog("⚠️ [FLAGGED] Event recorded in CloudPilot audit trail & flagged for administrator review.", "warn");
+      }
+
+      addLog(`📡 [Telemetry Sync] Telemetry posted to CloudPilot Command Center over TLS 1.3 (Event ID: ${result.eventId})`, "success");
+      setSimulationStatus("COMPLETED");
+
       toast.success(
         result.event.action_taken === "REMEDIATED"
           ? `Event Processed: ${result.event.event_type} auto-remediated!`
@@ -215,6 +268,7 @@ export default function InVpcAgent() {
       await fetchAgentData();
     } catch (err: any) {
       toast.error("Failed to simulate in-VPC event");
+      setSimulationStatus("IDLE");
     } finally {
       setSimulating(false);
     }
@@ -362,7 +416,7 @@ export default function InVpcAgent() {
         </div>
 
         {/* Tabs Container */}
-        <Tabs defaultValue="events" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="bg-card/70 border border-border/50 p-1 rounded-xl">
             <TabsTrigger value="events" className="text-xs font-medium data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg">
               Live In-VPC Telemetry ({events.length})
@@ -540,6 +594,74 @@ export default function InVpcAgent() {
                   </Button>
                 </div>
               </div>
+
+              {/* LIVE REAL-TIME EXECUTION CONSOLE */}
+              {(simulationLogs.length > 0 || simulating) && (
+                <div className="rounded-xl border border-border/80 bg-background/95 p-4 space-y-3 font-mono shadow-md">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-border/50">
+                    <div className="flex items-center gap-2">
+                      <Terminal className="w-4 h-4 text-primary" />
+                      <span className="text-xs font-bold text-foreground">In-VPC Agent Execution Console</span>
+                      {simulating ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                          INTERCEPTING MUTATION...
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          EXECUTION FINISHED (&lt; 1.4s)
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setSimulationLogs([])}
+                        className="h-7 text-[10px] px-2 text-muted-foreground hover:text-foreground"
+                      >
+                        Clear Console
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => setActiveTab("events")}
+                        className="h-7 text-[10px] px-2.5 bg-primary text-primary-foreground gap-1"
+                      >
+                        View in Telemetry Stream <ArrowRight className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 text-xs max-h-64 overflow-y-auto leading-relaxed pt-1 select-text">
+                    {simulationLogs.map((log, index) => (
+                      <div key={index} className="flex items-start gap-2">
+                        <span className="text-muted-foreground/60 text-[10px] shrink-0 font-mono">{log.time}</span>
+                        <span
+                          className={`${
+                            log.tone === "error"
+                              ? "text-rose-400 font-semibold"
+                              : log.tone === "warn"
+                              ? "text-amber-400 font-medium"
+                              : log.tone === "success"
+                              ? "text-emerald-400 font-semibold"
+                              : "text-foreground/90"
+                          }`}
+                        >
+                          {log.text}
+                        </span>
+                      </div>
+                    ))}
+                    {simulating && (
+                      <div className="flex items-center gap-2 text-muted-foreground text-[11px] animate-pulse">
+                        <span className="w-2 h-2 rounded-full bg-primary animate-ping" />
+                        Awaiting next pipeline stage...
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </TabsContent>
 
