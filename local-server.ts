@@ -85,95 +85,10 @@ ensureTableAndColumns("in_vpc_events", {
   severity: "CRITICAL",
   description: "",
   resource_id: "",
-  raw_event: "{}",
-  timestamp: "",
-});
-
-// Seed default in-VPC agent if none exists
 try {
-  const existingAgents = [...db.queryEntries("SELECT * FROM in_vpc_agents")];
-  if (existingAgents.length === 0) {
-    const defaultAgentId = "in-vpc-123456789012-us-east-1";
-    const now = new Date().toISOString();
-    db.query(`
-      INSERT INTO in_vpc_agents (id, user_id, name, account_id, region, vpc_id, status, version, auto_remediation_enabled, last_heartbeat_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      defaultAgentId,
-      "system",
-      "Production VPC Guard",
-      "123456789012",
-      "us-east-1",
-      "vpc-0a1b2c3d4e5f67890",
-      "ONLINE",
-      "v1.2.0",
-      "true",
-      now,
-      now,
-      now
-    ]);
-
-    // Seed sample initial telemetry events
-    db.query(`
-      INSERT INTO in_vpc_events (id, agent_id, account_id, region, vpc_id, event_source, event_type, action_taken, severity, description, resource_id, raw_event, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      "evt-init-01",
-      defaultAgentId,
-      "123456789012",
-      "us-east-1",
-      "vpc-0a1b2c3d4e5f67890",
-      "aws.ec2",
-      "AuthorizeSecurityGroupIngress",
-      "REMEDIATED",
-      "CRITICAL",
-      "Auto-closed unauthorized 0.0.0.0/0 ingress on port 22 (SSH) on security group sg-0a9b8c7d6e5f",
-      "sg-0a9b8c7d6e5f",
-      JSON.stringify({ port: 22, cidr: "0.0.0.0/0", rule: "SSH" }),
-      new Date(Date.now() - 1000 * 60 * 12).toISOString()
-    ]);
-
-    db.query(`
-      INSERT INTO in_vpc_events (id, agent_id, account_id, region, vpc_id, event_source, event_type, action_taken, severity, description, resource_id, raw_event, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      "evt-init-02",
-      defaultAgentId,
-      "123456789012",
-      "us-east-1",
-      "vpc-0a1b2c3d4e5f67890",
-      "aws.s3",
-      "PutBucketPolicy",
-      "REMEDIATED",
-      "HIGH",
-      "Public wildcard Principal '*' policy detected on s3://prod-customer-assets; applied S3 Public Access Block",
-      "arn:aws:s3:::prod-customer-assets",
-      JSON.stringify({ bucket: "prod-customer-assets", permission: "s3:GetObject" }),
-      new Date(Date.now() - 1000 * 60 * 35).toISOString()
-    ]);
-
-    db.query(`
-      INSERT INTO in_vpc_events (id, agent_id, account_id, region, vpc_id, event_source, event_type, action_taken, severity, description, resource_id, raw_event, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      "evt-init-03",
-      defaultAgentId,
-      "123456789012",
-      "us-east-1",
-      "vpc-0a1b2c3d4e5f67890",
-      "aws.iam",
-      "AttachUserPolicy",
-      "FLAGGED",
-      "MEDIUM",
-      "Direct AdministratorAccess policy attached to IAM user 'deploy-bot'; flagged against SCP boundaries",
-      "arn:aws:iam::123456789012:user/deploy-bot",
-      JSON.stringify({ user: "deploy-bot", policy: "AdministratorAccess" }),
-      new Date(Date.now() - 1000 * 60 * 90).toISOString()
-    ]);
-  }
-} catch (err) {
-  console.warn("[CloudPilot SQLite] Error seeding in_vpc_agents:", err);
-}
+  db.query("DELETE FROM in_vpc_agents WHERE user_id = 'system'");
+  db.query("DELETE FROM in_vpc_events WHERE agent_id = 'in-vpc-123456789012-us-east-1'");
+} catch {}
 
 console.log("[CloudPilot SQLite] SQLite engine active.");
 
@@ -560,7 +475,29 @@ serve(async (req) => {
         now
       ]);
 
-      db.query(`UPDATE in_vpc_agents SET last_heartbeat_at = ?, updated_at = ? WHERE id = ?`, [now, now, agentId]);
+      // Ensure agent record exists on demand
+      const existing = [...db.queryEntries("SELECT id FROM in_vpc_agents WHERE id = ?", [agentId])];
+      if (existing.length === 0) {
+        db.query(`
+          INSERT INTO in_vpc_agents (id, user_id, name, account_id, region, vpc_id, status, version, auto_remediation_enabled, last_heartbeat_at, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          agentId,
+          "sandbox-user",
+          "Sandbox In-VPC Guard",
+          "123456789012",
+          "us-east-1",
+          "vpc-0a1b2c3d4e5f",
+          "ONLINE",
+          "v1.2.0",
+          "true",
+          now,
+          now,
+          now
+        ]);
+      } else {
+        db.query(`UPDATE in_vpc_agents SET last_heartbeat_at = ?, updated_at = ?, status = 'ONLINE' WHERE id = ?`, [now, now, agentId]);
+      }
 
       return new Response(JSON.stringify({
         success: true,

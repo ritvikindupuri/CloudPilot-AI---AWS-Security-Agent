@@ -75,6 +75,7 @@ By tightly coupling LLM reasoning capabilities with strict, restricted, and audi
 43. [Open & Free Console Access](#43-open--free-console-access)
 44. [Production Readiness Roadmap](#44-production-readiness-roadmap)
 45. [Conclusion](#45-conclusion)
+46. [CloudPilot In-VPC Mini Agent — EventBridge & Lambda Sidecar](#46-cloudpilot-in-vpc-mini-agent--eventbridge--lambda-sidecar)
 
 ---
 

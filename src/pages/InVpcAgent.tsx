@@ -274,15 +274,16 @@ export default function InVpcAgent() {
     }
   };
 
+  const isDeployed = agents.length > 0;
   const activeAgent = agents[0] || {
-    id: "in-vpc-123456789012-us-east-1",
-    name: "Production VPC Guard",
-    account_id: "123456789012",
+    id: "in-vpc-pending",
+    name: "Pending Deployment",
+    account_id: "--",
     region: "us-east-1",
-    vpc_id: "vpc-0a1b2c3d4e5f67890",
-    status: "ONLINE",
+    vpc_id: "None (Ready to Deploy)",
+    status: "OFFLINE",
     version: "v1.2.0",
-    last_heartbeat_at: new Date().toISOString(),
+    last_heartbeat_at: "",
   };
 
   const remediatedCount = events.filter((e) => e.action_taken === "REMEDIATED").length;
@@ -363,12 +364,18 @@ export default function InVpcAgent() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-xs font-mono px-2.5 py-0.5 gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  {activeAgent.status}
+                <Badge
+                  className={`text-xs font-mono px-2.5 py-0.5 gap-1.5 ${
+                    isDeployed
+                      ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                      : "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${isDeployed ? "bg-emerald-400 animate-ping" : "bg-amber-400"}`} />
+                  {isDeployed ? activeAgent.status : "READY TO DEPLOY"}
                 </Badge>
                 <span className="text-xs font-mono text-muted-foreground">
-                  VPC: <strong className="text-foreground">{activeAgent.vpc_id}</strong>
+                  VPC: <strong className="text-foreground">{isDeployed ? activeAgent.vpc_id : "Not Connected"}</strong>
                 </span>
                 <span className="text-xs font-mono text-muted-foreground">
                   Region: <strong className="text-foreground">{activeAgent.region}</strong>
@@ -376,22 +383,34 @@ export default function InVpcAgent() {
               </div>
 
               <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
-                In-VPC Security Engine
+                In-VPC Security Engine {isDeployed ? "" : "(Deployment Ready)"}
               </h2>
               <p className="text-xs text-muted-foreground">
-                Serverless Lambda & EventBridge watchdog enforcing zero-trust policies and auto-remediation in &lt; 2s.
+                {isDeployed
+                  ? "Serverless Lambda & EventBridge watchdog enforcing zero-trust policies and auto-remediation in < 2s."
+                  : "Deploy the serverless agent into your AWS VPC using the 1-Click CloudFormation template below, or test in the Simulator."}
               </p>
             </div>
 
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={fetchAgentData}
-              disabled={loading}
-              className="h-8 text-xs gap-1.5 border-border bg-background/50 self-start sm:self-auto"
-            >
-              <RefreshCcw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
-            </Button>
+            {isDeployed ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={fetchAgentData}
+                disabled={loading}
+                className="h-8 text-xs gap-1.5 border-border bg-background/50 self-start sm:self-auto"
+              >
+                <RefreshCcw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => setActiveTab("cloudformation")}
+                className="h-8 text-xs font-semibold gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 self-start sm:self-auto rounded-xl shadow-md"
+              >
+                <Download className="w-3.5 h-3.5" /> Deploy Stack (1-Click)
+              </Button>
+            )}
           </div>
 
           {/* Quick Metrics Bar */}
