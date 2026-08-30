@@ -28,7 +28,8 @@ import {
   Workflow,
   Sparkles,
   Radio,
-  FileText
+  FileText,
+  Info
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -36,6 +37,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
 interface InVpcAgentRecord {
@@ -391,7 +398,7 @@ export default function InVpcAgent() {
         <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-card via-card/90 to-primary/5 p-5 sm:p-6 shadow-lg">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <Badge
                   className={`text-xs font-mono px-2.5 py-0.5 gap-1.5 ${
                     isDeployed
@@ -411,13 +418,8 @@ export default function InVpcAgent() {
               </div>
 
               <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
-                In-VPC Security Engine {isDeployed ? "" : "(Deployment Ready)"}
+                In-VPC Security Engine
               </h2>
-              <p className="text-xs text-muted-foreground">
-                {isDeployed
-                  ? "Serverless Lambda & EventBridge watchdog enforcing zero-trust policies and auto-remediation in < 2s."
-                  : "Deploy the serverless agent into your AWS VPC using the 1-Click CloudFormation template below, or test in the Simulator."}
-              </p>
             </div>
 
             {isDeployed ? (
@@ -441,25 +443,74 @@ export default function InVpcAgent() {
             )}
           </div>
 
-          {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 mt-4 border-t border-border/50">
-            <div className="p-2.5 rounded-xl bg-background/50 border border-border/40">
-              <span className="text-[10px] font-mono text-muted-foreground uppercase block">Monitored VPC</span>
-              <span className="text-xs font-bold text-foreground font-mono mt-0.5 block truncate">{activeAgent.vpc_id}</span>
+          {/* Quick Metrics Bar with Interactive Tooltips */}
+          <TooltipProvider delayDuration={150}>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 mt-4 border-t border-border/50">
+              {/* Monitored VPC */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="p-2.5 rounded-xl bg-background/50 border border-border/40 hover:border-primary/40 transition-colors cursor-help space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-muted-foreground uppercase">Monitored VPC</span>
+                      <Info className="w-3 h-3 text-muted-foreground/60" />
+                    </div>
+                    <span className="text-xs font-bold text-foreground font-mono block truncate">{activeAgent.vpc_id}</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs text-xs">
+                  Target AWS Virtual Private Cloud hosting the isolated Lambda security watchdog.
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Auto-Remediations */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="p-2.5 rounded-xl bg-background/50 border border-border/40 hover:border-emerald-500/40 transition-colors cursor-help space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-muted-foreground uppercase">Auto-Remediations</span>
+                      <Info className="w-3 h-3 text-emerald-400/70" />
+                    </div>
+                    <span className="text-xs font-bold text-emerald-400 font-mono block">{remediatedCount} Reverted Safely</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs text-xs">
+                  Autonomous rollbacks executed in &lt; 2s (e.g. revoking 0.0.0.0/0 on port 22/3389 or locking public S3 buckets).
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Critical Interceptions */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="p-2.5 rounded-xl bg-background/50 border border-border/40 hover:border-rose-500/40 transition-colors cursor-help space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-muted-foreground uppercase">Critical Interceptions</span>
+                      <Info className="w-3 h-3 text-rose-400/70" />
+                    </div>
+                    <span className="text-xs font-bold text-rose-400 font-mono block">{criticalCount} High-Risk Events</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs text-xs">
+                  High-severity CloudTrail mutation events evaluated and flagged against CIS AWS Benchmarks and zero-trust policies.
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Avg Latency */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="p-2.5 rounded-xl bg-background/50 border border-border/40 hover:border-primary/40 transition-colors cursor-help space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-muted-foreground uppercase">Avg Latency</span>
+                      <Info className="w-3 h-3 text-primary/70" />
+                    </div>
+                    <span className="text-xs font-bold text-primary font-mono block">&lt; 1.8 seconds</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs text-xs">
+                  End-to-end duration from CloudTrail event delivery in EventBridge to in-VPC Lambda remediation and telemetry sync.
+                </TooltipContent>
+              </Tooltip>
             </div>
-            <div className="p-2.5 rounded-xl bg-background/50 border border-border/40">
-              <span className="text-[10px] font-mono text-muted-foreground uppercase block">Auto-Remediations</span>
-              <span className="text-xs font-bold text-emerald-400 font-mono mt-0.5 block">{remediatedCount} Reverted Safely</span>
-            </div>
-            <div className="p-2.5 rounded-xl bg-background/50 border border-border/40">
-              <span className="text-[10px] font-mono text-muted-foreground uppercase block">Critical Interceptions</span>
-              <span className="text-xs font-bold text-rose-400 font-mono mt-0.5 block">{criticalCount} High-Risk Events</span>
-            </div>
-            <div className="p-2.5 rounded-xl bg-background/50 border border-border/40">
-              <span className="text-[10px] font-mono text-muted-foreground uppercase block">Avg Latency</span>
-              <span className="text-xs font-bold text-primary font-mono mt-0.5 block">&lt; 1.8 seconds</span>
-            </div>
-          </div>
+          </TooltipProvider>
         </div>
 
         {/* Tabs Container */}
