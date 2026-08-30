@@ -213,7 +213,7 @@ You are now operating as an incident response and runbook execution specialist. 
     badge: "Red Team Simulation Expert",
     intentKey: "attack_simulation",
     category: "Red Team",
-    description: "Conducts authorized IAM privilege escalation simulation, lateral movement path mapping, and MITRE ATT&CK alignment.",
+    description: "Evaluates live IAM policies and trust relationships to discover potential privilege escalation paths, lateral movement vectors, and MITRE ATT&CK mappings.",
     allowedTools: ["execute_aws_api", "run_attack_simulation", "query_cloudtrail"],
     sampleQuery: "Simulate privilege escalation paths on IAM roles and map potential lateral movement.",
     icon: Crosshair,
@@ -399,7 +399,7 @@ const TOOL_METADATA: Record<string, { label: string; description: string; servic
   run_attack_simulation: {
     label: "run_attack_simulation",
     service: "Red Team",
-    description: "Simulates authorized IAM privilege escalation paths, lateral movement opportunities, and MITRE ATT&CK techniques.",
+    description: "Analyzes live IAM policies and trust relationships to discover potential privilege escalation and lateral movement attack paths without destructive mutations.",
   },
   execute_runbook: {
     label: "execute_runbook",
