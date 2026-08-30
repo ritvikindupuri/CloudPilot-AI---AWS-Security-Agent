@@ -6538,7 +6538,7 @@ export const handler = async (req: Request): Promise<Response> => {
             if (filteredTools.length === 0) filteredTools = tools; // Fallback to all tools if none matched
           }
 
-          liveExecutionLogs.push({ step: "Skills Engine", status: "success", message: `Skill activated: ${activeSkillData.badge}` });
+          liveExecutionLogs.push({ step: "Skills Engine", status: "success", message: `Specialist Persona Activated: ${activeSkillData.badge}` });
           sendMeta({ executionLogs: [...liveExecutionLogs], activeSkill: { name: activeSkillData.name, badge: activeSkillData.badge } });
 
           // Inject skill-specific system supplement into the agent context
@@ -6546,7 +6546,8 @@ export const handler = async (req: Request): Promise<Response> => {
             apiMessages[0].content = `${apiMessages[0].content}\n\n---\n${activeSkillData.systemSupplement}`;
           }
 
-          liveExecutionLogs.push({ step: "Router", status: "success", message: `Activated ${filteredTools.length} security tools for skill: ${activeSkillData.name}` });
+          liveExecutionLogs.push({ step: "Skills Engine", status: "info", message: `Injected specialized domain directives & prompt rules for ${activeSkillData.name}` });
+          liveExecutionLogs.push({ step: "Router", status: "success", message: `Scoped toolset to ${filteredTools.length} security tool(s) for ${activeSkillData.name}` });
           sendMeta({ executionLogs: [...liveExecutionLogs] });
 
           const MAX_ITERATIONS = 15;
