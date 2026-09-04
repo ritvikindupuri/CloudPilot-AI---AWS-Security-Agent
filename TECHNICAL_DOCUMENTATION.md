@@ -3018,3 +3018,49 @@ The In-VPC Mini Agent runs serverlessly inside customer AWS VPCs and subnets, co
 | **Credential & Config Exposure** | Transmits VPC Flow Logs and CloudTrail logs to AWS backend | Aggregates AWS Config resource recordings | **Zero raw configuration or credential egress** (only ephemeral event ID synced via TLS 1.3) |
 | **Human-in-the-Loop Burden** | Requires manual engineer triage at 3 AM | Requires manual ticket creation | **Zero** (Autonomous safe rollback + instant email post-mortem) |
 | **Cost Model** | Billed on VPC Flow Log & CloudTrail gigabytes (often $100s–$1000s/mo) | Billed per compliance check evaluated ($0.0010/chk) | **$0 at Idle** (Serverless EventBridge + Lambda invocation pricing) |
+
+### 46.5 Interactive Stack Configurator & 1-Click Teardown Terminal
+
+The In-VPC Agent page (`/in-vpc-agent`) includes enterprise lifecycle management tools:
+
+1. **Interactive Stack Configurator:**
+   - Real-time dynamic snippet re-generation for both CloudFormation (`cloudpilot-in-vpc.yaml`) and Terraform (`main.tf`).
+   - Configurable parameters include `VPC ID`, `AWS Region`, `Subnet IDs`, `Notification Email` (for real-time SNS incident alerts), and an `Auto-Remediation Toggle` (`true`/`false`).
+2. **1-Click Decommissioning & Teardown Terminal:**
+   - A single-click destructive action opens an interactive live terminal modal.
+   - Streams simulated CLI deletion steps (`aws events remove-targets`, `aws events delete-rule`, `aws lambda delete-function`, `aws sns delete-topic`, `aws iam delete-role`).
+   - Sends a backend request to `/api/in-vpc-agent/teardown` to purge database records and cleanly reset the agent state to `READY TO DEPLOY`.
+
+---
+
+## 47. Agent Skills Engine — Dynamic Persona Auto-Generation (`/skills`)
+
+The Agent Skills Engine (`/skills`) allows security engineers to author, inspect, and customize domain-specific specialist personas.
+
+### 47.1 6-Field Prerequisite Auto-Generation Engine
+
+When authoring a custom skill in the Custom Specialist Studio, the **Persona System Supplement Directives** textarea is dynamically auto-generated only after the engineer completes the 6 foundational prerequisites:
+1. **Skill Name** (e.g., `Kubernetes Cluster Hardener`)
+2. **Display Badge** (e.g., `🛡️ EKS Security Specialist`)
+3. **Description** (e.g., `Audits EKS node groups, IAM OIDC trust, and pod security standards`)
+4. **Intent Key** (Identifier for routing, e.g., `eks_hardener`)
+5. **Trigger Keywords** (e.g., `eks, k8s, kubernetes, pod`)
+6. **Allowed AWS Security Tools** (Checklist selection with interactive hover tooltips)
+
+Once all 6 fields are valid, CloudPilot automatically synthesizes prioritized prompt directives, output format requirements (severity-ranked Markdown tables), zero simulation rules, and AWS CLI remediation commands. Engineers retain full freedom to edit the generated text before saving.
+
+### 47.2 Real-Time Execution Telemetry
+
+During chat executions, the live terminal stream explicitly displays:
+- **Specialist Persona Activation:** Emoji badge and concise 1-sentence description (e.g., `Specialist Persona Activated: 🔍 Direct Query Agent — Executes precise, raw AWS SDK API queries with exact ARNs, regions, and structured tables`).
+- **Prompt Injection Notice:** Confirms domain directives are injected into Claude's system context.
+- **Tool Scoping:** Confirms the exact number of authorized AWS SDK tools exposed to the agent loop.
+
+---
+
+## 48. API Quota & Billing Error Handling
+
+CloudPilot AI features proactive, user-friendly error detection for frontier LLM APIs:
+- **Credit Balance Exhaustion (`credit_balance_too_low` / `insufficient_quota`):** Intercepts 400 responses from Anthropic and renders a structured alert banner with direct links to the Anthropic Billing Console (`console.anthropic.com/settings/billing`).
+- **Rate Limit Exceeded (`429 Too Many Requests`):** Alerts the user to concurrency limits and prompts an automatic retry.
+- **Authentication Exceptions (`401 Unauthorized`):** Informs users of invalid or expired `ANTHROPIC_API_KEY` configurations without crashing the chat session.

@@ -134,9 +134,10 @@ The active skill badge is displayed in real-time in the chat UI (e.g., `🔐 Sec
 
 Navigate to the **Skills** tab in the top navigation to:
 - **Inspect System Directives**: View and copy the exact raw system supplements and prompt directives driving all 9 built-in specialist personas.
+- **Dynamic 6-Field Auto-Generation**: When creating custom skills, persona directives are automatically synthesized only after configuring the 6 foundational fields (Skill Name, Display Badge, Description, Intent Key, Trigger Keywords, and Allowed Security Tools).
 - **Author Custom Specialist Skills**: Create your own personas (e.g., `🛡️ Kubernetes & EKS Hardener`, `🏥 HIPAA Compliance Guard`) with custom prompt directives, trigger keywords, and scoped AWS tool access.
 - **Quick-Start Templates**: One-click install preset skills for Kubernetes security, HIPAA health data governance, and serverless FinOps.
-- **Dynamic Activation**: Custom skills persist in your local database and automatically trigger during chat whenever user queries match your custom trigger keywords.
+- **Real-Time Execution Logs**: The live terminal explicitly displays persona activation badges, concise descriptions, prompt injection confirmations, and tool counts.
 
 ### Why Claude Sonnet 5 & Claude Opus 5?
 
@@ -178,6 +179,9 @@ For security-conscious enterprise teams requiring all security telemetry and aut
 2. **Drop-in Terraform Module (`deploy/terraform/`)**:
    - Ready-to-use Terraform module with inputs for `vpc_id`, `subnet_ids`, `cloudpilot_api_key`, and `auto_remediation_enabled`.
    - Includes dead-letter queue (DLQ) and CloudWatch Logs retention.
+3. **Interactive Stack Configurator & 1-Click Teardown Terminal (`/in-vpc-agent`)**:
+   - Dynamic parameter configurators update CloudFormation and Terraform snippets in real-time (VPC ID, Region, Subnets, Notification Email, Auto-Remediation toggle).
+   - 1-Click Decommissioning modal streams live CLI deletion steps (`aws events remove-targets`, `aws lambda delete-function`, `aws sns delete-topic`, `aws iam delete-role`) and purges records.
 
 #### Why the In-VPC Agent vs. AWS GuardDuty & Security Hub?
 
