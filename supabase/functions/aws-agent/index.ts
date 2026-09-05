@@ -7,11 +7,18 @@ import { CloudWatchLogsClient, CreateLogGroupCommand, CreateLogStreamCommand, De
 import { STSClient, GetCallerIdentityCommand } from "https://esm.sh/@aws-sdk/client-sts@3.744.0";
 import { S3Client, CreateBucketCommand, PutObjectLockConfigurationCommand, PutPublicAccessBlockCommand, PutBucketEncryptionCommand, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.744.0";
 
+// SECURITY: CORS origin is restricted. In production, this should be set via
+// ALLOWED_ORIGIN env var to the exact frontend domain (e.g. https://cloudpilot.app).
+// Wildcard is NOT used here.
+const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080";
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
 
 function requireEnv(name: string): string {
   const value = Deno.env.get(name);
@@ -1650,7 +1657,8 @@ Return your response strictly in the following JSON format:
 
     if (!response.ok) {
       console.warn("[CloudPilot Safety Gate] Auditor call failed:", response.status);
-      return { approved: true, reason: "Auditor service unavailable, bypassed for fallback." };
+      // SECURITY: Fail-closed — block mutations when auditor is unavailable
+      return { approved: false, reason: "**BLOCKED** — Safety Gate auditor service is temporarily unavailable. Mutating actions are blocked until the auditor can be reached. Please retry." };
     }
 
     const data = await response.json();
@@ -1663,14 +1671,16 @@ Return your response strictly in the following JSON format:
     const auditResult = JSON.parse(text);
     console.log(`[CloudPilot Safety Gate] Audit results:`, auditResult);
     return {
-      approved: typeof auditResult.approved === "boolean" ? auditResult.approved : true,
+      approved: typeof auditResult.approved === "boolean" ? auditResult.approved : false,
       reason: auditResult.reason || "Audited successfully."
     };
   } catch (err) {
     console.error("[CloudPilot Safety Gate] Error running audit:", err);
-    return { approved: true, reason: "Error parsing audit results, bypassed for fallback." };
+    // SECURITY: Fail-closed — block mutations when auditor errors
+    return { approved: false, reason: "**BLOCKED** — Safety Gate encountered an error. Mutating actions are blocked until the auditor can be verified. Please retry." };
   }
 }
+
 
 const IAM_BLOCKED_ACTIONS = new Set([
   "*",
