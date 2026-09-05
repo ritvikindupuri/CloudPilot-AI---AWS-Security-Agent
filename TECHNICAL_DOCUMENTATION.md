@@ -3064,3 +3064,97 @@ CloudPilot AI features proactive, user-friendly error detection for frontier LLM
 - **Credit Balance Exhaustion (`credit_balance_too_low` / `insufficient_quota`):** Intercepts 400 responses from Anthropic and renders a structured alert banner with direct links to the Anthropic Billing Console (`console.anthropic.com/settings/billing`).
 - **Rate Limit Exceeded (`429 Too Many Requests`):** Alerts the user to concurrency limits and prompts an automatic retry.
 - **Authentication Exceptions (`401 Unauthorized`):** Informs users of invalid or expired `ANTHROPIC_API_KEY` configurations without crashing the chat session.
+
+---
+
+## 49. Production Security Hardening — SAST/DAST Audit (September 2026)
+
+A comprehensive SAST (Static Application Security Testing) and DAST-informed manual audit was conducted across the entire codebase to prepare for production deployment. The following findings were identified and remediated.
+
+### 49.1 SQL Injection — `local-server.ts` (CRITICAL → FIXED)
+
+**Finding:** The PostgREST emulator constructed SQL queries directly from user-controlled URL path segments (`tableName`), query parameter keys (column names in WHERE and ORDER BY clauses), and INSERT/PATCH column keys from request bodies. All were interpolated unsanitized into SQLite query strings.
+
+**Remediations Applied:**
+- **Table name allowlist:** `ALLOWED_TABLES` Set with 21 explicit table names. Any request to a table not in this Set returns HTTP 404 before any SQL is executed.
+- **Column name validation:** `isSafeIdentifier()` regex (`/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/`) gates all column names used in `WHERE`, `ORDER BY`, `INSERT`, and `PATCH` operations.
+- **ORDER BY column verification:** The ORDER BY column is validated against `existingColumns` (fetched via `PRAGMA table_info`) in addition to the regex, ensuring only real schema columns can be sorted.
+- **Direction validation:** ORDER BY direction is strictly checked against `["ASC", "DESC"]` — no other values pass.
+- **`ensureTableAndColumns` hardened:** Column names from URL params and request body keys are now regex-validated before any `ALTER TABLE` DDL.
+
+### 49.2 Plaintext Password Storage — `local-server.ts` (HIGH → FIXED)
+
+**Finding:** User passwords were stored in plaintext in the SQLite `registered_users` table.
+
+**Remediation Applied:**
+- Passwords are now hashed using **PBKDF2-SHA256** with 100,000 iterations via the Web Crypto API (`crypto.subtle.deriveBits`).
+- A per-user salt (`cloudpilot-local-auth-v1-{userId}`) is derived from the user's UUID.
+- The result is a Base64-encoded 256-bit hash stored in the `password` column.
+- Login verification re-derives the hash and uses strict equality (both branches execute the hash operation, making timing side-channels negligible).
+- Minimum password length enforced at signup (8 characters).
+
+### 49.3 Predictable Session Tokens — `local-server.ts` (HIGH → FIXED)
+
+**Finding:** Session access tokens were generated as `mock-access-token-{userId}`, making them trivially predictable and enumerable. Any party who knew a user's UUID could forge a valid session token.
+
+**Remediation Applied:**
+- Tokens are now generated with `crypto.getRandomValues(new Uint8Array(32))` — 256 bits of cryptographically secure randomness encoded as URL-safe Base64.
+- Tokens are stored in an in-memory session Map (`globalThis.__cloudpilotSessions`) keyed by the random token, mapping to the user ID.
+- The user endpoint validates by Map lookup rather than parsing token structure.
+
+### 49.4 Wildcard CORS — All Edge Functions (HIGH → FIXED)
+
+**Finding:** All 13 Supabase Edge Functions and the local Deno gateway used `"Access-Control-Allow-Origin": "*"`, which allows any origin to make authenticated requests to the API.
+
+**Remediation Applied:**
+- All edge functions now read `Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080"` and set that as the CORS origin.
+- For production deployment, set `ALLOWED_ORIGIN=https://your-production-domain.com` in Supabase environment secrets.
+- The local gateway header is now restricted to `http://localhost:8080` by default.
+
+### 49.5 IDOR — Credential Vault Decrypt Action (CRITICAL → FIXED)
+
+**Finding:** The `decrypt` action in `aws-credential-vault/index.ts` fetched credentials by `credentialId` from the request body and returned the plaintext AWS keys **without checking if the authenticated user owns the credential**. Any authenticated user could decrypt any other user's AWS Access Key ID and Secret Access Key by supplying a known credential UUID.
+
+**Remediation Applied:**
+- After fetching the credential record, a strict ownership check enforces `cred.user_id === user.id`.
+- If this check fails, the endpoint returns HTTP 403 Forbidden without revealing any credential data.
+
+### 49.6 Safety Gate Fail-Open — `aws-agent/index.ts` (HIGH → FIXED)
+
+**Finding:** The Safety Gate Judge (`runSafetyAudit`) returned `approved: true` in two failure scenarios: (1) when the Anthropic auditor API returned a non-200 status, and (2) when the JSON response failed to parse. This meant that any auditor outage or malformed response would silently approve mutating AWS actions (SG rule changes, IAM policy creation, deletion operations).
+
+**Remediation Applied:**
+- Both failure paths now return `approved: false` with a clear error message: `"**BLOCKED** — Safety Gate encountered an error. Mutating actions are blocked until the auditor can be verified. Please retry."`
+- The `approved` field default when absent from an auditor response also changed from `true` to `false`.
+- This enforces **fail-closed** semantics: when in doubt, block.
+
+### 49.7 Request Body Size Limits — `local-server.ts` (MEDIUM → FIXED)
+
+**Finding:** The REST emulator accepted arbitrarily large request bodies, creating potential for memory exhaustion DoS attacks.
+
+**Remediation Applied:**
+- `readBodySafe()` helper checks both `Content-Length` header and actual body length against a 1 MB cap.
+- Bulk insert is capped at 100 rows per request.
+- Query results are capped at 500 rows via `LIMIT` max enforcement.
+
+### 49.8 Dependency Vulnerabilities — `npm audit` (MIXED → PARTIALLY FIXED)
+
+**Finding:** `npm audit` identified 25 vulnerabilities including 1 critical (`vitest` arbitrary file execution via UI server), 16 high, 7 moderate, and 1 low.
+
+**Remediations Applied:**
+- `npm audit fix` resolved 21 of 25 vulnerabilities, including the **critical** `vitest` issue and all `brace-expansion` DoS issues.
+- `react-router-dom` updated to latest patched version (CVE-2025-68470 open redirect bypass fix, SSR hydration deserialization fix).
+- Remaining: `adm-zip` HIGH (only in `deno-bin` dev tool — not in application runtime path). Upgrading `deno-bin` would be a breaking change to the Deno version used for the local gateway; this is deferred and tracked.
+
+### 49.9 Security Configuration Guidance for Production
+
+| Setting | Local Dev | Production |
+|---------|-----------|------------|
+| `ALLOWED_ORIGIN` | `http://localhost:8080` (default) | `https://your-domain.com` |
+| `SUPABASE_SERVICE_ROLE_KEY` | From `.env` | Supabase secrets |
+| `ANTHROPIC_API_KEY` | From `.env` | Supabase secrets |
+| SQLite `registered_users` passwords | PBKDF2-SHA256 hashed | N/A (Supabase Auth in cloud) |
+| CORS headers | Origin-restricted | Origin-restricted |
+| Safety Gate | Fail-closed | Fail-closed |
+| Credential vault ownership | Enforced | Enforced (+ Supabase RLS) |
+
