@@ -2,7 +2,7 @@
 
 **Live Demo URL:** [https://cloudpilot-ai.codeworker.workers.dev/](https://cloudpilot-ai.codeworker.workers.dev/)
 
-**CloudPilot AI** is an intelligent, event-driven AWS Cloud Security Operations agent engineered for enterprise security teams. It pairs a multi-model ReAct orchestration engine powered by Claude Sonnet 5 and Opus 5 with an In-VPC auto-remediation daemon to audit, investigate, and remediate cloud misconfigurations in real time. Built with strict **Zero Simulation Tolerance**, every finding and remediation executes via authenticated AWS SDK calls using short-lived STS credentials, protected by an independent **Safety Gate Judge** that intercepts and blocks unauthorized infrastructure mutations before execution.
+**CloudPilot AI** is an intelligent, event-driven AWS cloud security operations agent that helps security teams audit, investigate, and remediate cloud misconfigurations in real time. It pairs a conversational orchestration engine powered by Claude Sonnet and Opus with an in-VPC automation service to detect and fix security issues across IAM, S3, and security groups. Every action executes through live AWS API calls using short-lived credentials, backed by an independent safety gate that inspects and blocks unauthorized infrastructure changes before execution.
 
 **Read the full [Technical Documentation](TECHNICAL_DOCUMENTATION.md) for a comprehensive breakdown of the architecture, data flow, and codebase.**
 
