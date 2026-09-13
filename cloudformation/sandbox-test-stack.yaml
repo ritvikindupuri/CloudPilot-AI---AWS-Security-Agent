@@ -1,0 +1,347 @@
+﻿AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CloudPilot AI — Complete Evaluation Sandbox Environment
+  Pre-populates sample resources across IAM, S3, EC2, VPC, Security Groups, and CloudWatch
+  for evaluating all 68 CloudPilot Quick Action prompts.
+  100% AWS Free Tier compatible ($0.00 cost) with 1-click teardown.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: cloudpilot-sandbox
+    Description: Environment identifier prefix for naming resources
+
+  DeployEC2Instance:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Whether to launch a t2.micro / t3.micro EC2 instance (within Free Tier)
+
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64'
+    Description: Latest Amazon Linux 2023 AMI ID retrieved via SSM Parameter Store
+
+Conditions:
+  ShouldDeployEC2: !Equals [!Ref DeployEC2Instance, 'true']
+
+Resources:
+  # ============================================================================
+  # 1. NETWORKING & VPC
+  # ============================================================================
+  SandboxVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-vpc'
+        - Key: Environment
+          Value: Sandbox
+        - Key: ManagedBy
+          Value: CloudPilot-Evaluator
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-igw'
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref SandboxVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SandboxVPC
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-public-subnet-1'
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref SandboxVPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-public-rt'
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # ============================================================================
+  # 2. SECURITY GROUPS (Misconfigured & Hardened for Testing)
+  # ============================================================================
+  VulnerableOpenIngressSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'INTENTIONAL TEST: Security Group with SSH & RDP exposed to 0.0.0.0/0'
+      GroupName: !Sub '${EnvironmentName}-vulnerable-open-sg'
+      VpcId: !Ref SandboxVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: 'VULNERABLE TEST: Open SSH ingress'
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: 0.0.0.0/0
+          Description: 'VULNERABLE TEST: Open RDP ingress'
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: 'HTTP Web traffic'
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-vulnerable-open-sg'
+        - Key: SecurityPosture
+          Value: NonCompliant-TestingOnly
+
+  RestrictedWebSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'SECURE: Restricted HTTPS Security Group'
+      GroupName: !Sub '${EnvironmentName}-restricted-web-sg'
+      VpcId: !Ref SandboxVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/16
+          Description: 'Internal HTTPS only'
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-restricted-web-sg'
+        - Key: SecurityPosture
+          Value: Compliant
+
+  QuarantineSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'INCIDENT RESPONSE: Zero ingress/egress quarantine group'
+      GroupName: !Sub '${EnvironmentName}-quarantine-sg'
+      VpcId: !Ref SandboxVPC
+      SecurityGroupIngress: []
+      SecurityGroupEgress: []
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-quarantine-sg'
+
+  # ============================================================================
+  # 3. S3 STORAGE (Misconfigured & Compliant Buckets)
+  # ============================================================================
+  PublicTestingBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${EnvironmentName}-public-test-${AWS::AccountId}-${AWS::Region}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-public-test'
+        - Key: Purpose
+          Value: SecurityAuditSimulation
+
+  CompliantArchiveBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${EnvironmentName}-secure-archive-${AWS::AccountId}-${AWS::Region}'
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-secure-archive'
+        - Key: Purpose
+          Value: WORM-Audit-Storage
+
+  # ============================================================================
+  # 4. IAM ROLES & USERS (Testing Privilege Escalation & MFA Gaps)
+  # ============================================================================
+  TestAuditorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${EnvironmentName}-AuditorRole'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SecurityAudit
+        - arn:aws:iam::aws:policy/job-function/ViewOnlyAccess
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-AuditorRole'
+
+  TestOverprivilegedUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: !Sub '${EnvironmentName}-deploy-bot'
+      Policies:
+        - PolicyName: WildcardS3AndPassRole
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:*'
+                  - 'iam:PassRole'
+                  - 'iam:CreatePolicyVersion'
+                Resource: '*'
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-deploy-bot'
+        - Key: RiskType
+          Value: SimulatedPrivilegeEscalationTarget
+
+  TestUnenforcedMfaUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: !Sub '${EnvironmentName}-contractor-user'
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-contractor-user'
+        - Key: RiskType
+          Value: SimulatedNoMfaUser
+
+  # ============================================================================
+  # 5. EC2 INSTANCE (Testing IMDSv2 & Metadata Exposure)
+  # ============================================================================
+  SandboxInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Condition: ShouldDeployEC2
+    Properties:
+      Path: /
+      Roles:
+        - !Ref TestAuditorRole
+
+  SandboxEC2Instance:
+    Type: AWS::EC2::Instance
+    Condition: ShouldDeployEC2
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref LatestAmiId
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref VulnerableOpenIngressSG
+      IamInstanceProfile: !Ref SandboxInstanceProfile
+      # IMDSv1 allowed intentionally to test IMDSv2 hardening audit prompt
+      MetadataOptions:
+        HttpTokens: optional
+        HttpPutResponseHopLimit: 1
+        HttpEndpoint: enabled
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-test-instance'
+        - Key: Environment
+          Value: Sandbox
+
+  # ============================================================================
+  # 6. CLOUDWATCH METRIC FILTERS & ALARMS (For CloudWatch Quick Actions)
+  # ============================================================================
+  SandboxLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/cloudtrail/${EnvironmentName}-events'
+      RetentionInDays: 7
+
+  UnauthorizedApiMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref SandboxLogGroup
+      FilterPattern: '{ ($.errorCode = "*UnauthorizedOperation") || ($.errorCode = "AccessDenied*") }'
+      MetricTransformations:
+        - MetricValue: '1'
+          MetricNamespace: CloudPilot/Security
+          MetricName: UnauthorizedAPICalls
+
+  UnauthorizedApiAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${EnvironmentName}-UnauthorizedApiAlarm'
+      AlarmDescription: 'Triggers on unauthorized AWS API calls'
+      MetricName: UnauthorizedAPICalls
+      Namespace: CloudPilot/Security
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+
+Outputs:
+  VpcId:
+    Description: VPC ID for CloudPilot Network Queries
+    Value: !Ref SandboxVPC
+
+  PublicSubnetId:
+    Description: Public Subnet ID
+    Value: !Ref PublicSubnet
+
+  VulnerableSecurityGroupId:
+    Description: Vulnerable Security Group ID (Open Port 22/3389)
+    Value: !Ref VulnerableOpenIngressSG
+
+  RestrictedSecurityGroupId:
+    Description: Restricted Security Group ID
+    Value: !Ref RestrictedWebSG
+
+  QuarantineSecurityGroupId:
+    Description: Quarantine Security Group ID (Zero Ingress/Egress)
+    Value: !Ref QuarantineSG
+
+  PublicBucketName:
+    Description: S3 Bucket with Public Access Enabled
+    Value: !Ref PublicTestingBucket
+
+  SecureArchiveBucketName:
+    Description: S3 Bucket with Encrypted Compliance Storage
+    Value: !Ref CompliantArchiveBucket
+
+  TestUserWithWildcards:
+    Description: Overprivileged IAM User for Attack Simulation
+    Value: !Ref TestOverprivilegedUser
+
+  TestUserWithoutMfa:
+    Description: IAM User with No MFA configured
+    Value: !Ref TestUnenforcedMfaUser
+
+  EC2InstanceId:
+    Description: Sandbox EC2 Instance ID (if deployed)
+    Value: !If [ShouldDeployEC2, !Ref SandboxEC2Instance, 'Not Deployed']

@@ -3158,3 +3158,46 @@ A comprehensive SAST (Static Application Security Testing) and DAST-informed man
 | Safety Gate | Fail-closed | Fail-closed |
 | Credential vault ownership | Enforced | Enforced (+ Supabase RLS) |
 
+---
+
+## 50. AWS Sandbox Test Stack & Automated Quick Action Evaluator
+
+To facilitate rigorous pre-production evaluation of all 68 built-in Quick Action prompts without manual clicking or risking production cloud assets, CloudPilot AI includes a turnkey evaluation subsystem:
+
+### 50.1 1-Click AWS CloudFormation Sandbox Stack (`cloudformation/sandbox-test-stack.yaml`)
+
+A modular CloudFormation template that provisions a self-contained, vulnerable-by-design sandbox environment in any AWS account within 2 minutes ($0.00 extra cost, 100% Free Tier compatible):
+- **VPC & Subnets:** Isolated 10.0.0.0/16 VPC with public route tables and Internet Gateway.
+- **Security Groups:** Dual posture setup with `vulnerable-open-sg` (SSH 22 & RDP 3389 exposed to 0.0.0.0/0) and `restricted-web-sg` (HTTPS only).
+- **S3 Storage:** Dual bucket setup with public read testing bucket and encrypted WORM compliance archive bucket.
+- **IAM Identity:** Provisions overprivileged service roles and unenforced MFA users to test privilege escalation simulation and posture audit prompts.
+- **EC2 Compute:** Free Tier `t2.micro` instance configured with IMDSv1 optional to test IMDSv2 enforcement prompts.
+- **CloudWatch:** Log groups, metric filters, and alarms for unauthorized API monitoring.
+
+**Deployment Command:**
+```bash
+aws cloudformation create-stack \
+  --stack-name cloudpilot-eval-sandbox \
+  --template-body file://cloudformation/sandbox-test-stack.yaml \
+  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
+```
+
+**1-Click Teardown Command:**
+```bash
+aws cloudformation delete-stack --stack-name cloudpilot-eval-sandbox
+```
+
+### 50.2 Automated Batch Evaluator (`scripts/evaluate-quick-actions.ts`)
+
+A test harness that programmatically fires all 68 Quick Action prompts across all 8 functional categories (Audit, Compliance, Attack Simulation, Incident Response, GuardDuty, Remediation, Reporting, CloudWatch):
+- Validates Intent Classifier routing accuracy against expected domain taxonomies.
+- Verifies domain specialist persona injection and dynamic tool catalog allowlisting.
+- Validates pre-execution Safety Gate Judge approval protocols.
+- Asserts zero unhandled exceptions, SSE buffer dropouts, or JSON deserialization crashes.
+
+**Execution Command:**
+```bash
+npm run eval:quick-actions
+```
+
+

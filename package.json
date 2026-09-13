@@ -17,8 +17,10 @@
     "db:status": "supabase migration list",
     "db:types": "supabase gen types typescript --local > src/integrations/supabase/types.ts",
     "deploy:functions": "supabase functions deploy aws-agent guardian-scheduler guardian-event-processor",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "eval:quick-actions": "npx tsx scripts/evaluate-quick-actions.ts"
   },
+
   "dependencies": {
     "@aws-sdk/client-cloudwatch-logs": "^3.1019.0",
     "@aws-sdk/client-s3": "^3.1019.0",
