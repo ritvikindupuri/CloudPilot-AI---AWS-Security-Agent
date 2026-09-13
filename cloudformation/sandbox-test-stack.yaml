@@ -1,4 +1,4 @@
-﻿AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   CloudPilot AI — Complete Evaluation Sandbox Environment
   Pre-populates sample resources across IAM, S3, EC2, VPC, Security Groups, and CloudWatch

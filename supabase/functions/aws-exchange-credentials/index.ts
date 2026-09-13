@@ -3,7 +3,7 @@ import { STSClient, GetCallerIdentityCommand, AssumeRoleCommand } from "https://
 import { IAMClient, SimulatePrincipalPolicyCommand } from "https://esm.sh/@aws-sdk/client-iam@3.744.0";
 
 const corsHeaders = {
-  Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080",
+  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };

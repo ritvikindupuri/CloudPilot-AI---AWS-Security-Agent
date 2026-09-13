@@ -1,4 +1,4 @@
-﻿/**
+/**
  * CloudPilot AI — Quick Action Automated Batch Evaluator
  * 
  * Runs all 68 Quick Action prompts through the CloudPilot AI Orchestration Engine,
@@ -119,60 +119,84 @@ async function main() {
     const indexStr = `[${i + 1}/${EVALUATION_PROMPTS.length}]`.padEnd(8);
     process.stdout.write(`${indexStr} ${item.category} :: ${item.label.padEnd(25)} ... `);
 
-    const startTime = Date.now();
-    try {
-      // Mock session credentials for local pipeline validation if no live AWS session attached
-      const mockCredentials = {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID || "MOCK_AKIAIOSFODNN7EXAMPLE",
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "MOCK_wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-        sessionToken: process.env.AWS_SESSION_TOKEN || "mock-eval-session-token",
-        region: process.env.AWS_DEFAULT_REGION || "us-east-1",
-      };
+    let attempts = 0;
+    let success = false;
 
-      const response = await fetch(`${baseUrl}/functions/v1/aws-agent`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer mock-eval-jwt-token`,
-          "apikey": "mock-anon-key",
-        },
-        body: JSON.stringify({
-          messages: [{ role: "user", content: item.prompt }],
-          credentials: mockCredentials,
-          scanMode: item.expectedMode,
-          conversationId: `eval-conv-${Date.now()}`,
-          isEvaluationRun: true,
-        }),
-      });
+    while (attempts < 3 && !success) {
+      attempts++;
+      const startTime = Date.now();
+      try {
+        const mockCredentials = {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID || "MOCK_AKIAIOSFODNN7EXAMPLE",
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "MOCK_wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+          sessionToken: process.env.AWS_SESSION_TOKEN || "mock-eval-session-token",
+          region: process.env.AWS_DEFAULT_REGION || "us-east-1",
+        };
 
-      const durationMs = Date.now() - startTime;
+        const response = await fetch(`${baseUrl}/functions/v1/aws-agent`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer mock-eval-jwt-token`,
+            "apikey": "mock-anon-key",
+          },
+          body: JSON.stringify({
+            messages: [{ role: "user", content: item.prompt }],
+            credentials: mockCredentials,
+            scanMode: item.expectedMode,
+            conversationId: `eval-conv-${Date.now()}`,
+            isEvaluationRun: true,
+          }),
+        });
 
-      if (!response.ok && response.status !== 200) {
-        // Evaluate if error is expected AWS auth failure vs internal unhandled crash
-        const errText = await response.text();
-        if (errText.includes("InvalidClientTokenId") || errText.includes("credentials") || errText.includes("UnrecognizedClientException")) {
-          // Intent & Persona stages passed cleanly; stopped at live AWS STS validation
-          process.stdout.write(`✅ PASS (${durationMs}ms) [Pipeline Validated]\n`);
+        const durationMs = Date.now() - startTime;
+
+        if (response.status === 429) {
+          // Rate limited — backoff and retry
+          await new Promise((r) => setTimeout(r, 2000 * attempts));
+          continue;
+        }
+
+        if (!response.ok && response.status !== 200) {
+          const errText = await response.text();
+          if (
+            errText.includes("InvalidClientTokenId") ||
+            errText.includes("credentials") ||
+            errText.includes("UnrecognizedClientException")
+          ) {
+            process.stdout.write(`✅ PASS (${durationMs}ms) [Pipeline Validated]\n`);
+            passCount++;
+            results.push({ category: item.category, label: item.label, status: "PASS", durationMs });
+            success = true;
+          } else {
+            process.stdout.write(`❌ FAIL (${response.status})\n`);
+            failCount++;
+            results.push({ category: item.category, label: item.label, status: "FAIL", durationMs, error: errText.slice(0, 100) });
+            success = true;
+          }
+        } else {
+          process.stdout.write(`✅ PASS (${durationMs}ms)\n`);
           passCount++;
           results.push({ category: item.category, label: item.label, status: "PASS", durationMs });
-        } else {
-          process.stdout.write(`❌ FAIL (${response.status})\n`);
-          failCount++;
-          results.push({ category: item.category, label: item.label, status: "FAIL", durationMs, error: errText.slice(0, 100) });
+          success = true;
         }
-      } else {
-        // Stream completed successfully
-        process.stdout.write(`✅ PASS (${durationMs}ms)\n`);
-        passCount++;
-        results.push({ category: item.category, label: item.label, status: "PASS", durationMs });
+      } catch (err: any) {
+        const durationMs = Date.now() - startTime;
+        if (attempts >= 3) {
+          process.stdout.write(`❌ EXCEPTION (${err.message})\n`);
+          failCount++;
+          results.push({ category: item.category, label: item.label, status: "FAIL", durationMs, error: err.message });
+          success = true;
+        } else {
+          await new Promise((r) => setTimeout(r, 1500));
+        }
       }
-    } catch (err: any) {
-      const durationMs = Date.now() - startTime;
-      process.stdout.write(`❌ EXCEPTION (${err.message})\n`);
-      failCount++;
-      results.push({ category: item.category, label: item.label, status: "FAIL", durationMs, error: err.message });
     }
+
+    // Pacing delay between requests to stay well within Claude concurrency limits
+    await new Promise((r) => setTimeout(r, 500));
   }
+
 
   console.log("\n================================================================================");
   console.log("📊 Quick Actions Batch Evaluation Summary Report");

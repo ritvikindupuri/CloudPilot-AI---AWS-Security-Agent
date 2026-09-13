@@ -212,15 +212,15 @@ async function hashPassword(password: string, userId: string): Promise<string> {
 
 async function verifyPassword(password: string, userId: string, storedHash: string): Promise<boolean> {
   const hash = await hashPassword(password, userId);
-  // SECURITY: Use timing-safe comparison to prevent timing side-channel attacks
-  const encoder = new TextEncoder();
-  const hashBytes = encoder.encode(hash);
-  const storedBytes = encoder.encode(storedHash);
-  if (hashBytes.length !== storedBytes.length) return false;
-  return crypto.subtle.timingSafeEqual
-    ? crypto.subtle.timingSafeEqual(hashBytes, storedBytes)
-    : hashBytes.every((b, i) => b === storedBytes[i]); // fallback for older Deno
+  // SECURITY: Constant-time bitwise comparison to prevent timing side-channel attacks
+  if (hash.length !== storedHash.length) return false;
+  let diff = 0;
+  for (let i = 0; i < hash.length; i++) {
+    diff |= hash.charCodeAt(i) ^ storedHash.charCodeAt(i);
+  }
+  return diff === 0;
 }
+
 
 // ── SECURITY: Max request body size (1 MB) ──
 const MAX_BODY_BYTES = 1_024 * 1_024;

@@ -3,7 +3,7 @@ import AWS from "https://esm.sh/aws-sdk@2.1693.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
-  Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080",
+  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-guardian-secret",
 };
 
