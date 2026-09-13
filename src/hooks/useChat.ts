@@ -153,11 +153,6 @@ export const useChat = (
     if (justCreatedConvRef.current === conversationId) {
       justCreatedConvRef.current = null;
       currentMessagesConvIdRef.current = conversationId;
-      return;
-    }
-
-    console.log("[useChat] useEffect conversationId changed:", conversationId);
-    currentMessagesConvIdRef.current = conversationId;
     
     // Clear transient states and previous conversation messages immediately to avoid flicker
     setMessages([]);
@@ -168,16 +163,18 @@ export const useChat = (
     (supabase
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .from("messages" as any)
-      .select("*")
+      .select("id, role, content, created_at")
       .eq("conversation_id", conversationId)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .order("created_at", { ascending: true }) as any)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .then(({ data, error }: { data: any[] | null; error: any }) => {
-        console.log("[useChat] supabase messages fetch returned:", { data, error });
+        // SECURITY: Do not log message data — may contain AWS findings, resource names, etc.
+        if (error) {
+          console.warn("[useChat] Failed to load messages for conversation");
+        }
         // If the conversation was switched again while fetching, ignore this old response
         if (currentMessagesConvIdRef.current !== conversationId) {
-          console.log("[useChat] stale conversationId branch ignored:", conversationId);
           return;
         }
 
@@ -276,6 +273,8 @@ export const useChat = (
           event: "*",
           schema: "public",
           table: "runbook_execution_steps",
+          // SECURITY: Filter by execution_id to prevent receiving step updates from other users' runbooks
+          ...(liveRunbook?.id ? { filter: `execution_id=eq.${liveRunbook.id}` } : {}),
         },
         () => {
           refreshRunbook();

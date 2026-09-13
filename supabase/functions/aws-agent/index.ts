@@ -1615,7 +1615,7 @@ async function runSafetyAudit(
   const auditorPrompt = `You are the CloudPilot Safety Gate Judge. Your role is to audit proposed AWS API tool calls to ensure they are safe, compliant, do not perform accidental or excessive over-deletion, and strictly match the user's intent.
 
 Review the following context:
-- User Intent / Query: "${latestUserMsg}"
+- User Intent / Query: ${JSON.stringify(typeof latestUserMsg === "string" ? latestUserMsg : JSON.stringify(latestUserMsg))}
 - Proposed AWS Tool Calls:
 ${JSON.stringify(proposedToolCalls, null, 2)}
 

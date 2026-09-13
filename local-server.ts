@@ -212,7 +212,14 @@ async function hashPassword(password: string, userId: string): Promise<string> {
 
 async function verifyPassword(password: string, userId: string, storedHash: string): Promise<boolean> {
   const hash = await hashPassword(password, userId);
-  return hash === storedHash;
+  // SECURITY: Use timing-safe comparison to prevent timing side-channel attacks
+  const encoder = new TextEncoder();
+  const hashBytes = encoder.encode(hash);
+  const storedBytes = encoder.encode(storedHash);
+  if (hashBytes.length !== storedBytes.length) return false;
+  return crypto.subtle.timingSafeEqual
+    ? crypto.subtle.timingSafeEqual(hashBytes, storedBytes)
+    : hashBytes.every((b, i) => b === storedBytes[i]); // fallback for older Deno
 }
 
 // ── SECURITY: Max request body size (1 MB) ──
@@ -572,6 +579,14 @@ serve(async (req) => {
         ensureTableAndColumns(tableName, null, url);
         const existingCols = getExistingColumns();
         const { where, params } = parseFilters(url, existingCols);
+
+        // SECURITY: Require at least one filter — reject unqualified DELETE (full table wipe)
+        if (!where) {
+          return new Response(JSON.stringify({ error: "DELETE requires at least one filter parameter" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
         const deleteSql = `DELETE FROM ${tableName} ${where}`;
         db.query(deleteSql, params);
 
@@ -579,6 +594,7 @@ serve(async (req) => {
           status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
+
     }
 
     // ── IN-VPC AGENT SIMULATION ENDPOINT ─────────────────────────────────────
