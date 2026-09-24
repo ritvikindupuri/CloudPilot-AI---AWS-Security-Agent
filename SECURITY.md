@@ -199,3 +199,37 @@ CloudPilot AI standardizes on **Anthropic Claude 3.5 Sonnet** across all three m
 ### 4. Pipeline Efficiency Benefits
 * **Unified Caching:** Standardizing on a single model family allows the Deno edge container to optimize API gateway caching, reducing overall latency.
 * **Consistent Context Alignment:** The three personas maintain identical formatting styles and context mapping logic, minimizing formatting errors when feeding outputs from one stage into another.
+
+---
+
+## 8. Removal of Automatic Privilege Elevation
+
+**Effective:** September 2026  
+**Status:** Fully removed from production
+
+CloudPilot AI previously included an auto-elevation mechanism in the `aws-executor` edge function that would automatically attach AWS-managed FullAccess policies when encountering AccessDenied errors. This feature has been **completely removed** as part of ongoing security hardening efforts.
+
+### What Was Removed
+- **Policy attachment logic:** The `tryAutoElevate()` function that attempted to attach AWS-managed policies to IAM principals
+- **Retry mechanism:** Automatic retry of failed operations after policy attachment
+- **Policy mapping:** The `SERVICE_TO_MANAGED_POLICY` lookup table (converted to informational-only `SERVICE_TO_MANAGED_POLICY_INFO`)
+- **Elevation cache:** In-memory tracking of attached policies per container lifecycle
+- **Configuration escape hatch:** No `ENABLE_AUTO_ELEVATION` or similar environment variable exists to re-enable this behavior
+
+### Current Behavior
+When the aws-executor encounters an AccessDenied error:
+1. **No policies are attached** — CloudPilot never modifies IAM permissions
+2. **Clear error reporting** — Returns a descriptive error message indicating which AWS-managed policy would grant the required permissions
+3. **Manual resolution required** — Users must attach appropriate IAM policies through AWS Console, CLI, or IaC before retrying
+
+### Security Benefits
+- **Eliminates privilege escalation risk** — No code path can automatically grant broader permissions
+- **Principle of least privilege** — Forces explicit, auditable permission grants through standard IAM workflows
+- **Defense in depth** — Removes a potential attack surface if ENABLE_AUTO_ELEVATION were ever misconfigured
+- **Compliance friendly** — IAM changes follow standard change control processes rather than autonomous agent decisions
+
+### Migration Note
+Organizations that previously relied on auto-elevation should:
+1. Review CloudPilot's actual service usage patterns via CloudTrail logs
+2. Attach appropriate AWS-managed policies (SecurityAudit, AmazonVPCFullAccess, IAMFullAccess, etc.) to the IAM principal used by CloudPilot
+3. For least-privilege configurations, create a custom IAM policy scoped to only the required actions

@@ -308,7 +308,7 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
                         <ul className="list-disc list-inside ml-3 mt-1 space-y-0.5">
                           <li><span className="font-mono text-primary">SecurityAudit</span> — allows all read-only security audits and scans</li>
                           <li><span className="font-mono text-primary">AmazonVPCFullAccess</span> — allows automatic VPC routing provisioning and teardown</li>
-                          <li><span className="font-mono text-primary">IAMFullAccess</span> — allows CloudPilot to manage IAM roles, pass roles to services, and auto-elevate remediation permissions on demand</li>
+                          <li><span className="font-mono text-primary">IAMFullAccess</span> — allows CloudPilot to manage IAM roles and pass roles to services</li>
                         </ul>
                         *(Note: You can attach <span className="font-mono text-primary">AdministratorAccess</span> as a single alternative for full capability, or attach <span className="font-mono text-primary">SecurityAudit</span> alone if you only require read-only scans).*
                       </li>
@@ -316,10 +316,6 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
                       <li>Open the user → <span className="font-mono">Security credentials</span> → <span className="font-mono">Create access key</span> → <span className="font-mono">Application outside AWS</span>.</li>
                       <li>Paste the <span className="font-mono">AKIA…</span> key + secret above. Leave Session Token empty.</li>
                     </ol>
-                    <div className="mt-2 p-2 rounded border border-primary/20 bg-primary/5 text-[10px] text-foreground/85 leading-snug">
-                      <p className="font-bold text-primary mb-0.5 flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> About Auto-Elevation</p>
-                      <p>If you attach <span className="font-mono">IAMFullAccess</span>, CloudPilot will detect the exact service it needs (EC2, VPC, GuardDuty) and dynamically attach the matching policy to your user when you execute actions, avoiding manual setup.</p>
-                    </div>
                   </details>
                   <details className="group mb-2">
                     <summary className="cursor-pointer list-none flex items-center justify-between gap-2 text-[11px] font-bold select-none">

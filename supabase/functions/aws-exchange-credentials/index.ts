@@ -142,8 +142,7 @@ export const handler = async (req: Request): Promise<Response> => {
       } else {
         // Do not call STS:GetSessionToken for long-term IAM user keys.
         // AWS blocks IAM API operations from GetSessionToken credentials unless MFA
-        // auth is included, which prevents CloudPilot's IAMFullAccess-based
-        // auto-elevation from attaching per-service policies on demand.
+        // auth is included. This ensures full IAM API access remains available.
         tempCredentials = {
           accessKeyId,
           secretAccessKey,

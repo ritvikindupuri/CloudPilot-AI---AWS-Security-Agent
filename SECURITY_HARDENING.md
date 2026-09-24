@@ -4,19 +4,21 @@ This document describes the comprehensive security hardening applied to CloudPil
 
 ## Critical Security Fixes
 
-### 1. Auto-Elevation Privilege Escalation (CRITICAL - MITIGATED)
+### 1. Auto-Elevation Privilege Escalation (CRITICAL - REMOVED)
 
-**Issue**: The `aws-executor` edge function automatically attached AWS-managed FullAccess policies to the calling IAM principal when encountering AccessDenied errors. This is a critical privilege escalation vulnerability.
+**Issue**: The `aws-executor` edge function previously automatically attached AWS-managed FullAccess policies to the calling IAM principal when encountering AccessDenied errors. This was a critical privilege escalation vulnerability.
 
-**Fix**: 
-- Auto-elevation is now **DISABLED by default**
-- Requires explicit opt-in via `ENABLE_AUTO_ELEVATION=true` environment variable (NOT RECOMMENDED for production)
-- When disabled, returns clear error messages indicating required permissions without modifying IAM policies
-- Added warning logging when auto-elevation is used (if enabled)
+**Fix**:
+- Auto-elevation has been **COMPLETELY REMOVED** from the codebase
+- `tryAutoElevate()` function deleted
+- `SERVICE_TO_MANAGED_POLICY` converted to informational-only `SERVICE_TO_MANAGED_POLICY_INFO`
+- All retry logic after automatic policy attachment removed
+- No `ENABLE_AUTO_ELEVATION` environment variable exists (no escape hatch to re-enable)
+- AccessDenied errors now return clear error messages with `suggestedPolicy` field indicating required permissions WITHOUT modifying IAM policies
 
 **File**: `supabase/functions/aws-executor/index.ts`
 
-**Impact**: Prevents automatic privilege escalation attacks. Users must now explicitly grant required permissions via IAM policies.
+**Impact**: Eliminates automatic privilege escalation risk entirely. Users must now explicitly grant required permissions via standard IAM workflows. No code path exists to automatically attach policies.
 
 ---
 
@@ -178,35 +180,31 @@ console.log("Credentials:", sanitizeForLogging(credentials));
 
 ## Residual Risks & Future Work
 
-### 1. Auto-Elevation Still Exists (Opt-In)
-**Risk**: If `ENABLE_AUTO_ELEVATION=true` is set, the privilege escalation mechanism is still available.
-**Recommendation**: Remove auto-elevation entirely in future version and require users to grant explicit permissions upfront.
-
-### 2. Edge Function Authentication
+### 1. Edge Function Authentication
 **Current State**: Edge functions validate JWT tokens via Supabase Auth, but no additional authorization checks exist beyond presence of valid JWT.
 **Recommendation**: Implement role-based access control (RBAC) to restrict sensitive operations to authorized users only.
 
-### 3. Credential Storage
+### 2. Credential Storage
 **Current State**: Credentials exist in browser memory and short-lived STS tokens. No long-term storage.
 **Recommendation**: Already secure. Continue avoiding credential persistence.
 
-### 4. Agent Prompt Injection
+### 3. Agent Prompt Injection
 **Current State**: Safety Gate Judge provides secondary LLM validation of proposed actions.
 **Risk**: Sophisticated prompt injection could still bypass safety checks.
 **Recommendation**: Implement hardened system prompts with delimiter-based guardrails and adversarial testing.
 
-### 5. Dependency Vulnerabilities
+### 4. Dependency Vulnerabilities
 **Current State**: Using npm/Deno dependencies from ESM CDNs.
-**Recommendation**: 
+**Recommendation**:
 - Run `npm audit` and `deno task check` regularly
 - Pin dependency versions in imports
 - Set up Dependabot or Renovate for automated security updates
 
-### 6. Secrets Management
+### 5. Secrets Management
 **Current State**: Environment variables for API keys (Anthropic, Supabase).
 **Recommendation**: Migrate to AWS Secrets Manager or HashiCorp Vault for production secret rotation.
 
-### 7. Audit Logging Gaps
+### 6. Audit Logging Gaps
 **Current State**: S3 WORM logging for AWS operations, but edge function access logs are not persisted long-term.
 **Recommendation**: Enable CloudWatch Logs retention and forward to SIEM for compliance.
 
@@ -239,9 +237,6 @@ console.log("Credentials:", sanitizeForLogging(credentials));
 ```bash
 # Required: Comma-separated list of allowed frontend origins
 ALLOWED_ORIGINS=https://cloudpilot.yourcompany.com,https://app.cloudpilot.yourcompany.com
-
-# Optional: Keep auto-elevation DISABLED (default: false)
-# ENABLE_AUTO_ELEVATION=false
 
 # Required: Anthropic API key
 ANTHROPIC_API_KEY=sk-ant-...
