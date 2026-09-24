@@ -2,11 +2,30 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { STSClient, GetCallerIdentityCommand, AssumeRoleCommand } from "https://esm.sh/@aws-sdk/client-sts@3.744.0";
 import { IAMClient, SimulatePrincipalPolicyCommand } from "https://esm.sh/@aws-sdk/client-iam@3.744.0";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+// SECURITY HARDENING: Strict CORS origin validation with allowlist
+const ALLOWED_ORIGINS = [
+  "http://localhost:8080",
+  "http://localhost:5173",
+  ...(Deno.env.get("ALLOWED_ORIGINS") || "").split(",").filter(Boolean),
+];
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") || "";
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) 
+    ? origin 
+    : (Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080");
+  
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+  };
+}
 
 const AWS_REGION_REGEX = /^[a-z]{2}(-[a-z]+-\d+)?$/;
 const ACCESS_KEY_REGEX = /^[A-Z0-9]{16,128}$/;
@@ -33,6 +52,8 @@ function toPolicySourceArn(identityArn: string): string {
 }
 
 export const handler = async (req: Request): Promise<Response> => {
+  const corsHeaders = getCorsHeaders(req);
+  
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -202,22 +223,36 @@ export const handler = async (req: Request): Promise<Response> => {
       region,
     });
 
+    // SECURITY HARDENING: Comprehensive permission preflight testing (folded from PR #41).
+    // This tests all permissions required by Quick Actions and agent operations to provide
+    // accurate permission status in the UI before operations are attempted.
     const actionsToTest = [
+      // API Gateway
       "apigateway:GET",
+      "apigateway:GetRestApis",
+      // Budgets
+      "budgets:CreateBudget",
+      "budgets:CreateNotification",
       "budgets:ModifyBudget",
       "budgets:ViewBudget",
+      // Cost Explorer
       "ce:GetCostAndUsage",
+      // CloudTrail
       "cloudtrail:DescribeTrails",
       "cloudtrail:GetEventSelectors",
       "cloudtrail:GetTrailStatus",
       "cloudtrail:LookupEvents",
+      // CloudWatch
       "cloudwatch:DescribeAlarms",
       "cloudwatch:PutAnomalyDetector",
       "cloudwatch:PutDashboard",
       "cloudwatch:PutMetricAlarm",
+      // Config
       "config:DescribeConfigurationRecorders",
       "config:DescribeConfigurationRecorderStatus",
+      // DynamoDB
       "dynamodb:ListTables",
+      // EC2 (comprehensive coverage for security operations)
       "ec2:AllocateAddress",
       "ec2:AssociateRouteTable",
       "ec2:AttachInternetGateway",
@@ -263,9 +298,13 @@ export const handler = async (req: Request): Promise<Response> => {
       "ec2:RunInstances",
       "ec2:StopInstances",
       "ec2:TerminateInstances",
+      // ECS
       "ecs:DescribeTaskDefinition",
+      "ecs:DescribeTaskDefinitions",
       "ecs:ListTaskDefinitions",
+      // Elastic Load Balancing
       "elasticloadbalancing:DescribeLoadBalancers",
+      // GuardDuty
       "guardduty:CreateDetector",
       "guardduty:GetDetector",
       "guardduty:GetFindings",
@@ -273,6 +312,7 @@ export const handler = async (req: Request): Promise<Response> => {
       "guardduty:ListDetectors",
       "guardduty:ListFindings",
       "guardduty:UpdateDetector",
+      // IAM (comprehensive coverage for security audits)
       "iam:AttachRolePolicy",
       "iam:AttachUserPolicy",
       "iam:CreatePolicy",
@@ -289,45 +329,57 @@ export const handler = async (req: Request): Promise<Response> => {
       "iam:ListUsers",
       "iam:SimulatePrincipalPolicy",
       "iam:UpdateAccessKey",
+      // Lambda
       "lambda:GetFunction",
       "lambda:GetFunctionConfiguration",
       "lambda:GetPolicy",
       "lambda:ListFunctions",
+      // CloudWatch Logs
       "logs:DescribeMetricFilters",
       "logs:FilterLogEvents",
       "logs:GetQueryResults",
       "logs:PutMetricFilter",
       "logs:StartQuery",
+      // Organizations
       "organizations:ListAccounts",
       "organizations:ListPolicies",
       "organizations:ListTargetsForPolicy",
+      // RDS
       "rds:DescribeDBClusters",
       "rds:DescribeDBInstances",
+      // S3 (comprehensive bucket security)
       "s3:GetAccountPublicAccessBlock",
       "s3:GetBucketAcl",
       "s3:GetBucketLogging",
       "s3:GetBucketObjectLockConfiguration",
       "s3:GetBucketPolicy",
       "s3:GetBucketPublicAccessBlock",
+      "s3:GetBucketReplication",
       "s3:GetBucketVersioning",
       "s3:GetEncryptionConfiguration",
-      "s3:GetReplicationConfiguration",
       "s3:ListAllMyBuckets",
+      // Secrets Manager
       "secretsmanager:GetResourcePolicy",
       "secretsmanager:ListSecrets",
+      // Security Hub
       "securityhub:DescribeHub",
       "securityhub:GetEnabledStandards",
       "securityhub:GetFindings",
+      // SES
       "ses:GetIdentityVerificationAttributes",
       "ses:ListIdentities",
+      // SNS
       "sns:ListSubscriptions",
       "sns:ListSubscriptionsByTopic",
       "sns:ListTopics",
+      // Systems Manager
       "ssm:DescribeParameters",
       "ssm:GetParameters",
+      // STS
       "sts:AssumeRole",
       "sts:GetCallerIdentity",
       "sts:GetSessionToken",
+      // WAF
       "wafv2:GetIPSet",
       "wafv2:GetSampledRequests",
       "wafv2:ListIPSets",

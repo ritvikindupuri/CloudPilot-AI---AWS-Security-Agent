@@ -1,10 +1,29 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+// SECURITY HARDENING: Strict CORS origin validation with allowlist
+const ALLOWED_ORIGINS = [
+  "http://localhost:8080",
+  "http://localhost:5173",
+  ...(Deno.env.get("ALLOWED_ORIGINS") || "").split(",").filter(Boolean),
+];
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") || "";
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) 
+    ? origin 
+    : (Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080");
+  
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+  };
+}
 
 // ── AWS SDK v3 Dynamic Module Loader ────────────────────────────────────────
 const _awsModuleCache: Record<string, any> = {};
@@ -247,7 +266,15 @@ async function tryAutoElevate(service: string, config: any): Promise<{ attached:
   }
 }
 
+// SECURITY: Auto-elevation is DISABLED by default for production security.
+// It previously would automatically attach AWS-managed FullAccess policies on
+// AccessDenied errors, which is a privilege escalation risk.
+// Set ENABLE_AUTO_ELEVATION=true to explicitly enable this feature (NOT RECOMMENDED).
+const AUTO_ELEVATION_ENABLED = Deno.env.get("ENABLE_AUTO_ELEVATION") === "true";
+
 export const handler = async (req: Request): Promise<Response> => {
+  const corsHeaders = getCorsHeaders(req);
+  
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -285,6 +312,21 @@ export const handler = async (req: Request): Promise<Response> => {
     } catch (firstErr: any) {
       if (!isAccessDeniedError(firstErr)) throw firstErr;
 
+      // SECURITY HARDENING: Auto-elevation is disabled by default.
+      // This prevents automatic privilege escalation via FullAccess policy attachment.
+      if (!AUTO_ELEVATION_ENABLED) {
+        const requiredPolicy = SERVICE_TO_MANAGED_POLICY[service] || "appropriate service permissions";
+        const msg = `Access Denied: The AWS credentials lack permissions for ${service}.${commandName}. Grant the IAM principal ${requiredPolicy} to perform this operation. Auto-elevation is disabled for security. Set ENABLE_AUTO_ELEVATION=true to enable (not recommended for production).`;
+        return new Response(JSON.stringify({
+          error: msg,
+          name: firstErr?.name || "AccessDenied",
+          code: firstErr?.code || firstErr?.name || "AccessDenied",
+          statusCode: 403,
+          autoElevation: { enabled: false, attempted: false },
+          requiredPolicy,
+        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       // Try to auto-elevate by attaching the managed policy for this service
       elevated = await tryAutoElevate(service, config);
       if (!elevated.attached) {
@@ -296,16 +338,17 @@ export const handler = async (req: Request): Promise<Response> => {
           name: firstErr?.name || "AccessDenied",
           code: firstErr?.code || firstErr?.name || "AccessDenied",
           statusCode: 403,
-          autoElevation: { attempted: true, attached: false, reason },
+          autoElevation: { enabled: true, attempted: true, attached: false, reason },
         }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       // Retry once after attaching the policy
+      console.warn("[aws-executor] SECURITY: Auto-elevation attached policy", elevated.policyArn, "to", elevated.principal);
       const retry = await client.send(new CommandClass(params || {}));
       const { $metadata: _meta, ...retryData } = retry as any;
       return new Response(JSON.stringify({
         result: retryData,
-        autoElevation: { attempted: true, attached: true, policyArn: elevated.policyArn, principal: elevated.principal },
+        autoElevation: { enabled: true, attempted: true, attached: true, policyArn: elevated.policyArn, principal: elevated.principal },
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
   } catch (e: any) {

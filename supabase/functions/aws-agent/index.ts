@@ -7,17 +7,31 @@ import { CloudWatchLogsClient, CreateLogGroupCommand, CreateLogStreamCommand, De
 import { STSClient, GetCallerIdentityCommand } from "https://esm.sh/@aws-sdk/client-sts@3.744.0";
 import { S3Client, CreateBucketCommand, PutObjectLockConfigurationCommand, PutPublicAccessBlockCommand, PutBucketEncryptionCommand, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.744.0";
 
-// SECURITY: CORS origin is restricted. In production, this should be set via
-// ALLOWED_ORIGIN env var to the exact frontend domain (e.g. https://cloudpilot.app).
-// Wildcard is NOT used here.
-const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080";
+// SECURITY HARDENING: Strict CORS origin validation with allowlist
+const ALLOWED_ORIGINS = [
+  "http://localhost:8080",
+  "http://localhost:5173",
+  ...(Deno.env.get("ALLOWED_ORIGINS") || "").split(",").filter(Boolean),
+];
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") || "";
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) 
+    ? origin 
+    : (Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080");
+  
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Content-Security-Policy": "default-src 'self'",
+  };
+}
 
 
 function requireEnv(name: string): string {
@@ -6338,8 +6352,26 @@ function checkRateLimit(ip: string): boolean {
 }
 
 export const handler = async (req: Request): Promise<Response> => {
+  const corsHeaders = getCorsHeaders(req);
+  
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders, status: 204 });
+  }
+
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  
+  // SECURITY HARDENING: Validate Content-Type to prevent MIME confusion attacks
+  const contentType = req.headers.get("Content-Type") || "";
+  if (!contentType.includes("application/json")) {
+    return new Response(JSON.stringify({ error: "Invalid Content-Type. Expected application/json" }), {
+      status: 415,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   const clientIp = req.headers.get("x-forwarded-for") || "unknown";
