@@ -59,8 +59,9 @@ const ChatMessage = ({ message, onAddToS3, onTeardownVpc }: ChatMessageProps) =>
             
             const clonedContent = clonedDoc.getElementById(`msg-content-${message.id}`);
             if (clonedContent) {
+              // SECURITY HARDENING: Use textContent instead of innerHTML for style injection
               const style = clonedDoc.createElement("style");
-              style.innerHTML = `
+              style.textContent = `
                 .pdf-print-container {
                   background-color: #ffffff !important;
                   color: #0f172a !important;
