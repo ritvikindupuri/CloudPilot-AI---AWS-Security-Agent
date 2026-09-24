@@ -1,9 +1,21 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
+// SECURITY: Enforce ALLOWED_ORIGIN in production; fail-closed if not set
+const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN");
+if (!ALLOWED_ORIGIN && Deno.env.get("ENVIRONMENT") === "production") {
+  throw new Error("ALLOWED_ORIGIN must be set in production");
+}
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080",
+  "Access-Control-Allow-Origin": ALLOWED_ORIGIN || "http://localhost:8080",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  // Security headers
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "X-XSS-Protection": "1; mode=block",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
 };
 
 // ── AWS SDK v3 Dynamic Module Loader ────────────────────────────────────────
@@ -275,6 +287,10 @@ export const handler = async (req: Request): Promise<Response> => {
     if (!CommandClass) throw new Error(`Command '${commandName}' not found for service '${service}'`);
 
     const client = new ClientClass({ ...normalizedConfig, maxAttempts: 4 });
+    
+    // SECURITY: Auto-elevation must be explicitly enabled via ENABLE_AUTO_ELEVATION=true
+    const autoElevationEnabled = Deno.env.get("ENABLE_AUTO_ELEVATION") === "true";
+    
     let elevated: { attached: boolean; policyArn?: string; principal?: string; error?: string } | null = null;
     try {
       const result = await client.send(new CommandClass(params || {}));
@@ -285,38 +301,52 @@ export const handler = async (req: Request): Promise<Response> => {
     } catch (firstErr: any) {
       if (!isAccessDeniedError(firstErr)) throw firstErr;
 
-      // Try to auto-elevate by attaching the managed policy for this service
-      elevated = await tryAutoElevate(service, config);
-      if (!elevated.attached) {
-        // Couldn't elevate — surface a clear, actionable error
-        const reason = elevated.error || "unknown";
-        const msg = `Auto-elevation failed for ${service}. Original error: ${firstErr?.message || firstErr?.name}. Elevation attempt: ${reason}. Ensure the connected IAM principal has IAMFullAccess and SecurityAudit so CloudPilot can grant per-service permissions on demand.`;
+      // Try to auto-elevate ONLY if explicitly enabled
+      if (autoElevationEnabled) {
+        elevated = await tryAutoElevate(service, config);
+        if (!elevated.attached) {
+          // Couldn't elevate — surface a clear, actionable error
+          const reason = elevated.error || "unknown";
+          const msg = `Auto-elevation failed for ${service}. Original error: ${firstErr?.message || firstErr?.name}. Elevation attempt: ${reason}. Ensure the connected IAM principal has IAMFullAccess and SecurityAudit so CloudPilot can grant per-service permissions on demand.`;
+          return new Response(JSON.stringify({
+            error: msg,
+            name: firstErr?.name || "AccessDenied",
+            code: firstErr?.code || firstErr?.name || "AccessDenied",
+            statusCode: 403,
+            autoElevation: { attempted: true, attached: false, reason },
+          }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        // Retry once after attaching the policy
+        const retry = await client.send(new CommandClass(params || {}));
+        const { $metadata: _meta, ...retryData } = retry as any;
         return new Response(JSON.stringify({
-          error: msg,
+          result: retryData,
+          autoElevation: { attempted: true, attached: true, policyArn: elevated.policyArn, principal: elevated.principal },
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      } else {
+        // Auto-elevation disabled — return access denied without attempting elevation
+        return new Response(JSON.stringify({
+          error: `Access denied for ${service}. Grant the required permissions to the IAM principal or enable auto-elevation.`,
           name: firstErr?.name || "AccessDenied",
           code: firstErr?.code || firstErr?.name || "AccessDenied",
           statusCode: 403,
-          autoElevation: { attempted: true, attached: false, reason },
-        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          autoElevation: { attempted: false, reason: "Auto-elevation is disabled. Set ENABLE_AUTO_ELEVATION=true to enable." },
+        }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-
-      // Retry once after attaching the policy
-      const retry = await client.send(new CommandClass(params || {}));
-      const { $metadata: _meta, ...retryData } = retry as any;
-      return new Response(JSON.stringify({
-        result: retryData,
-        autoElevation: { attempted: true, attached: true, policyArn: elevated.policyArn, principal: elevated.principal },
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
   } catch (e: any) {
     console.error("[aws-executor] Error:", e.name, e.message);
+    // SECURITY: Don't leak detailed error messages to client in production
+    const isProduction = Deno.env.get("ENVIRONMENT") === "production";
+    const errorMessage = isProduction ? "AWS operation failed" : (e.message || "Execution failed");
     return new Response(JSON.stringify({
-      error: e.message || "Execution failed",
-      name: e.name || "Error",
+      error: errorMessage,
+      name: isProduction ? "OperationError" : (e.name || "Error"),
       code: e.code || e.name || "UNKNOWN",
       statusCode: e.$metadata?.httpStatusCode || e.statusCode || 500,
     }), {
-      status: 200, // Return 200 so caller can parse error details
+      status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

@@ -2,10 +2,22 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { STSClient, GetCallerIdentityCommand, AssumeRoleCommand } from "https://esm.sh/@aws-sdk/client-sts@3.744.0";
 import { IAMClient, SimulatePrincipalPolicyCommand } from "https://esm.sh/@aws-sdk/client-iam@3.744.0";
 
+// SECURITY: Enforce ALLOWED_ORIGIN in production
+const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN");
+if (!ALLOWED_ORIGIN && Deno.env.get("ENVIRONMENT") === "production") {
+  throw new Error("ALLOWED_ORIGIN must be set in production");
+}
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080",
+  "Access-Control-Allow-Origin": ALLOWED_ORIGIN || "http://localhost:8080",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  // Security headers
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "X-XSS-Protection": "1; mode=block",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
 };
 
 const AWS_REGION_REGEX = /^[a-z]{2}(-[a-z]+-\d+)?$/;

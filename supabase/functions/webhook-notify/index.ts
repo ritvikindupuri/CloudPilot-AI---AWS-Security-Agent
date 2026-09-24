@@ -1,9 +1,20 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
+// SECURITY: Enforce ALLOWED_ORIGIN in production
+const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN");
+if (!ALLOWED_ORIGIN && Deno.env.get("ENVIRONMENT") === "production") {
+  throw new Error("ALLOWED_ORIGIN must be set in production");
+}
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080",
+  "Access-Control-Allow-Origin": ALLOWED_ORIGIN || "http://localhost:8080",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-guardian-secret",
+  // Security headers
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "X-XSS-Protection": "1; mode=block",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
 };
 
 /**

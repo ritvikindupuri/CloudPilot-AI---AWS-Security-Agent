@@ -7,16 +7,25 @@ import { CloudWatchLogsClient, CreateLogGroupCommand, CreateLogStreamCommand, De
 import { STSClient, GetCallerIdentityCommand } from "https://esm.sh/@aws-sdk/client-sts@3.744.0";
 import { S3Client, CreateBucketCommand, PutObjectLockConfigurationCommand, PutPublicAccessBlockCommand, PutBucketEncryptionCommand, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.744.0";
 
-// SECURITY: CORS origin is restricted. In production, this should be set via
+// SECURITY: CORS origin is restricted. In production, this MUST be set via
 // ALLOWED_ORIGIN env var to the exact frontend domain (e.g. https://cloudpilot.app).
-// Wildcard is NOT used here.
-const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080";
+// Wildcard is NOT used here. Fail-closed if not set in production.
+const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN");
+if (!ALLOWED_ORIGIN && Deno.env.get("ENVIRONMENT") === "production") {
+  throw new Error("ALLOWED_ORIGIN must be set in production");
+}
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+  "Access-Control-Allow-Origin": ALLOWED_ORIGIN || "http://localhost:8080",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  // Security headers
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "X-XSS-Protection": "1; mode=block",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
 };
 
 
