@@ -2,11 +2,29 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+// SECURITY HARDENING: Strict CORS origin validation with allowlist
+const ALLOWED_ORIGINS = [
+  "http://localhost:8080",
+  "http://localhost:5173",
+  ...(Deno.env.get("ALLOWED_ORIGINS") || "").split(",").filter(Boolean),
+];
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") || "";
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) 
+    ? origin 
+    : (Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080");
+  
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+  };
+}
 
 const PLANS: Record<string, { priceAmount: number; name: string }> = {
   pro: { priceAmount: 4900, name: "Pro" },
@@ -14,6 +32,8 @@ const PLANS: Record<string, { priceAmount: number; name: string }> = {
 };
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
+  
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }

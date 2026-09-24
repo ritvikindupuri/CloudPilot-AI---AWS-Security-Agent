@@ -47,13 +47,24 @@ This document describes the comprehensive security hardening applied to CloudPil
 - Added security headers: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`
 - Set `Access-Control-Max-Age` to 86400 (24 hours) to reduce preflight requests
 
-**Files Modified**:
+**Files Modified** (Core Functions - PR #46):
 - `supabase/functions/aws-exchange-credentials/index.ts`
 - `supabase/functions/aws-executor/index.ts`
 - `supabase/functions/aws-agent-tools/index.ts`
 - `supabase/functions/aws-agent/index.ts`
 
-**Impact**: Prevents CSRF attacks and enforces strict origin validation in production.
+**Files Modified** (Extended Coverage - Follow-Up):
+- `supabase/functions/guardian-event-processor/index.ts`
+- `supabase/functions/guardian-scheduler/index.ts`
+- `supabase/functions/stripe-checkout/index.ts`
+- `supabase/functions/stripe-webhook/index.ts`
+- `supabase/functions/team-invite/index.ts`
+- `supabase/functions/webhook-notify/index.ts`
+- `supabase/functions/aws-credential-vault/index.ts`
+- `supabase/functions/aws-agent-scanner/index.ts`
+- `supabase/functions/aws-agent-ops/index.ts`
+
+**Impact**: Prevents CSRF attacks and enforces strict origin validation in production across all edge functions.
 
 ---
 
