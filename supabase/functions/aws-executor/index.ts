@@ -109,12 +109,11 @@ async function loadAwsModule(service: string): Promise<any> {
   return mod;
 }
 
-// ── Auto-Elevation: attach the right AWS-managed policy on AccessDenied ───
-// Maps the AWS service (as named in our executor) to the AWS-managed policy
-// ARN that grants the permissions needed for that service. We deliberately
-// pick "FullAccess" managed policies so the retry succeeds for any action
-// the agent might call against that service.
-const SERVICE_TO_MANAGED_POLICY: Record<string, string> = {
+// ── Service-to-Policy Reference: for informational error messages only ───
+// Maps AWS services to the AWS-managed policy ARNs that would grant the
+// required permissions. These are used ONLY to generate helpful error messages;
+// CloudPilot does not attach policies automatically.
+const SERVICE_TO_MANAGED_POLICY_INFO: Record<string, string> = {
   EC2: "arn:aws:iam::aws:policy/AmazonEC2FullAccess",
   S3: "arn:aws:iam::aws:policy/AmazonS3FullAccess",
   IAM: "arn:aws:iam::aws:policy/IAMFullAccess",
@@ -177,74 +176,12 @@ function isAccessDeniedError(e: any): boolean {
   );
 }
 
-// In-memory cache so we only attach a given policy to a given principal once
-// per warm container. Key = `${arn}::${policyArn}`.
-const _attachedPolicyCache = new Set<string>();
-
 function normalizeAwsConfig(service: string, config: any): any {
   const globalBillingServices = new Set(["CostExplorer", "Budgets"]);
   return {
     ...config,
     region: globalBillingServices.has(service) ? "us-east-1" : config?.region,
   };
-}
-
-/**
- * Attempts to attach the AWS-managed policy that grants permissions for the
- * given service to the calling principal (IAM user or role). Returns true if
- * an attach was performed (caller should retry the original request).
- *
- * Requires the caller's credentials to have iam:AttachUserPolicy /
- * iam:AttachRolePolicy + iam:GetUser. If those are missing, this no-ops.
- */
-async function tryAutoElevate(service: string, config: any): Promise<{ attached: boolean; policyArn?: string; principal?: string; error?: string }> {
-  const policyArn = SERVICE_TO_MANAGED_POLICY[service];
-  if (!policyArn) return { attached: false, error: `No managed policy mapping for service ${service}` };
-  const normalizedConfig = normalizeAwsConfig(service, config);
-
-  try {
-    const stsMod = await loadAwsModule("STS");
-    const sts = new stsMod.STSClient(normalizedConfig);
-    const id = await sts.send(new stsMod.GetCallerIdentityCommand({}));
-    const callerArn: string = id.Arn || "";
-
-    // Determine principal type + name
-    // arn:aws:iam::123:user/<name>     => attach to user
-    // arn:aws:iam::123:role/<name>     => attach to role
-    // arn:aws:sts::123:assumed-role/<role>/<session> => attach to role <role>
-    let principalType: "user" | "role" | null = null;
-    let principalName = "";
-    const userMatch = callerArn.match(/^arn:aws:iam::\d+:user\/(.+)$/);
-    const roleMatch = callerArn.match(/^arn:aws:iam::\d+:role\/(.+)$/);
-    const assumedMatch = callerArn.match(/^arn:aws:sts::\d+:assumed-role\/([^/]+)\//);
-    if (userMatch) { principalType = "user"; principalName = userMatch[1]; }
-    else if (roleMatch) { principalType = "role"; principalName = roleMatch[1]; }
-    else if (assumedMatch) { principalType = "role"; principalName = assumedMatch[1]; }
-    else return { attached: false, error: `Cannot identify principal type from ARN: ${callerArn}` };
-
-    const cacheKey = `${callerArn}::${policyArn}`;
-    if (_attachedPolicyCache.has(cacheKey)) {
-      return { attached: true, policyArn, principal: callerArn };
-    }
-
-    const iamMod = await loadAwsModule("IAM");
-    const iam = new iamMod.IAMClient(normalizedConfig);
-
-    if (principalType === "user") {
-      await iam.send(new iamMod.AttachUserPolicyCommand({ UserName: principalName, PolicyArn: policyArn }));
-    } else {
-      await iam.send(new iamMod.AttachRolePolicyCommand({ RoleName: principalName, PolicyArn: policyArn }));
-    }
-
-    _attachedPolicyCache.add(cacheKey);
-    console.log(`[aws-executor] Auto-elevated ${principalType} ${principalName} with ${policyArn}`);
-    // IAM policy propagation can take a few seconds; brief delay improves first-retry success.
-    await new Promise((r) => setTimeout(r, 4000));
-    return { attached: true, policyArn, principal: callerArn };
-  } catch (elevErr: any) {
-    console.warn("[aws-executor] Auto-elevation failed:", elevErr?.name, elevErr?.message);
-    return { attached: false, error: `${elevErr?.name || "Error"}: ${elevErr?.message || "unknown"}` };
-  }
 }
 
 export const handler = async (req: Request): Promise<Response> => {
@@ -275,38 +212,28 @@ export const handler = async (req: Request): Promise<Response> => {
     if (!CommandClass) throw new Error(`Command '${commandName}' not found for service '${service}'`);
 
     const client = new ClientClass({ ...normalizedConfig, maxAttempts: 4 });
-    let elevated: { attached: boolean; policyArn?: string; principal?: string; error?: string } | null = null;
     try {
       const result = await client.send(new CommandClass(params || {}));
       const { $metadata, ...data } = result as any;
       return new Response(JSON.stringify({ result: data }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
-    } catch (firstErr: any) {
-      if (!isAccessDeniedError(firstErr)) throw firstErr;
+    } catch (err: any) {
+      if (!isAccessDeniedError(err)) throw err;
 
-      // Try to auto-elevate by attaching the managed policy for this service
-      elevated = await tryAutoElevate(service, config);
-      if (!elevated.attached) {
-        // Couldn't elevate — surface a clear, actionable error
-        const reason = elevated.error || "unknown";
-        const msg = `Auto-elevation failed for ${service}. Original error: ${firstErr?.message || firstErr?.name}. Elevation attempt: ${reason}. Ensure the connected IAM principal has IAMFullAccess and SecurityAudit so CloudPilot can grant per-service permissions on demand.`;
-        return new Response(JSON.stringify({
-          error: msg,
-          name: firstErr?.name || "AccessDenied",
-          code: firstErr?.code || firstErr?.name || "AccessDenied",
-          statusCode: 403,
-          autoElevation: { attempted: true, attached: false, reason },
-        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
+      // AccessDenied: provide clear, actionable guidance without attaching policies
+      const policyArn = SERVICE_TO_MANAGED_POLICY_INFO[service];
+      const msg = policyArn
+        ? `Access denied for ${service}. The IAM principal lacks required permissions. To resolve, manually attach ${policyArn} or grant equivalent permissions via a custom IAM policy. Original error: ${err?.message || err?.name || "AccessDenied"}.`
+        : `Access denied for ${service}. The IAM principal lacks required permissions. Review IAM policies and ensure appropriate service access is granted. Original error: ${err?.message || err?.name || "AccessDenied"}.`;
 
-      // Retry once after attaching the policy
-      const retry = await client.send(new CommandClass(params || {}));
-      const { $metadata: _meta, ...retryData } = retry as any;
       return new Response(JSON.stringify({
-        result: retryData,
-        autoElevation: { attempted: true, attached: true, policyArn: elevated.policyArn, principal: elevated.principal },
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        error: msg,
+        name: err?.name || "AccessDenied",
+        code: err?.code || err?.name || "AccessDenied",
+        statusCode: 403,
+        suggestedPolicy: policyArn || null,
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
   } catch (e: any) {
     console.error("[aws-executor] Error:", e.name, e.message);

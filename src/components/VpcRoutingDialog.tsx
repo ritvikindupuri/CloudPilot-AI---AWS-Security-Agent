@@ -24,10 +24,10 @@ export const VpcRoutingDialog = ({
   onReAuthenticate,
 }: VpcRoutingDialogProps) => {
   const handleYes = () => {
-    // No client-side pre-flight check. The aws-executor performs runtime
-    // auto-elevation (attaches AmazonEC2FullAccess on AccessDenied) using the
-    // user's IAMFullAccess. If elevation actually fails at runtime, the
-    // executor surfaces a precise error in the chat.
+    // The aws-executor will return clear permission errors if the IAM principal
+    // lacks required permissions. Users should attach appropriate policies
+    // (e.g., AmazonEC2FullAccess) manually to their IAM principal before
+    // attempting VPC operations.
     onAccept();
   };
 
