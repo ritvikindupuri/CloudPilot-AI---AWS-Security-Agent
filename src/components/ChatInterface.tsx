@@ -622,7 +622,7 @@ const ChatInterface = () => {
                               <Dialog open={isQuickActionsOpen} onOpenChange={setIsQuickActionsOpen}>
                                 <DialogTrigger asChild>
                                   <Button variant="outline" size="sm" className="font-mono text-xs">
-                                    Browse all 35+ Quick Actions
+                                    Browse all 65+ Quick Actions
                                   </Button>
                                 </DialogTrigger>
                                 <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">

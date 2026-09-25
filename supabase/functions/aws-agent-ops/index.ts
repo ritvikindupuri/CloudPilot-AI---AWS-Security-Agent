@@ -1507,26 +1507,37 @@ async function listOrgAccounts(awsConfig: any): Promise<OrgAccountSummary[]> {
   const accounts: OrgAccountSummary[] = [];
   let nextToken: string | undefined;
 
-  do {
-    const page = await org.listAccounts({ NextToken: nextToken }).promise();
-    for (const acct of page.Accounts || []) {
-      if (!acct.Id || !acct.Name || acct.Status !== "ACTIVE") continue;
-      const tags = await getAccountTags(org, acct.Id);
-      const ou = await getAccountOuPath(org, acct.Id);
-      accounts.push({
-        id: acct.Id,
-        name: acct.Name,
-        email: acct.Email || "",
-        env: tags.env || "unknown",
-        team: tags.team || "unknown",
-        ou,
-        tags,
-      });
-    }
-    nextToken = page.NextToken;
-  } while (nextToken);
+  try {
+    do {
+      const page = await org.listAccounts({ NextToken: nextToken }).promise();
+      for (const acct of page.Accounts || []) {
+        if (!acct.Id || !acct.Name || acct.Status !== "ACTIVE") continue;
+        const tags = await getAccountTags(org, acct.Id);
+        const ou = await getAccountOuPath(org, acct.Id);
+        accounts.push({
+          id: acct.Id,
+          name: acct.Name,
+          email: acct.Email || "",
+          env: tags.env || "unknown",
+          team: tags.team || "unknown",
+          ou,
+          tags,
+        });
+      }
+      nextToken = page.NextToken;
+    } while (nextToken);
 
-  return accounts;
+    return accounts;
+  } catch (err: any) {
+    const errorCode = err?.code || err?.name || "";
+    // Check if account is not in an organization
+    if (errorCode === "AWSOrganizationsNotInUseException" || 
+        errorCode === "AccessDeniedException" && err?.message?.includes("organization")) {
+      // Return empty array to signal standalone account
+      throw new Error("STANDALONE_ACCOUNT");
+    }
+    throw err;
+  }
 }
 
 function applyOrgScope(accounts: OrgAccountSummary[], scope: string): OrgAccountSummary[] {
@@ -1557,11 +1568,33 @@ function applyOrgScope(accounts: OrgAccountSummary[], scope: string): OrgAccount
 }
 
 async function resolveOrgScope(scope: string, awsConfig: any): Promise<OrgScopeResolution> {
-  const accounts = await listOrgAccounts(awsConfig);
-  return {
-    scope: scope || "all",
-    accounts: applyOrgScope(accounts, scope || "all"),
-  };
+  try {
+    const accounts = await listOrgAccounts(awsConfig);
+    return {
+      scope: scope || "all",
+      accounts: applyOrgScope(accounts, scope || "all"),
+    };
+  } catch (err: any) {
+    if (err?.message === "STANDALONE_ACCOUNT") {
+      // Account is not in an organization - return current account only
+      const sts = v2Client("STS", awsConfig);
+      const identity = await sts.getCallerIdentity().promise();
+      return {
+        scope: "current-account-only",
+        accounts: [{
+          id: identity.Account || "unknown",
+          name: "Current Account (standalone)",
+          email: "",
+          env: "unknown",
+          team: "unknown",
+          ou: "N/A (not in organization)",
+          tags: {},
+        }],
+        isStandaloneAccount: true,
+      };
+    }
+    throw err;
+  }
 }
 
 function checkOrgBlastRadius(accounts: OrgAccountSummary[]): OrgBlastRadiusResult {
@@ -1781,6 +1814,50 @@ async function runAccountsWithoutMfaQuery(scope: string, awsConfig: any): Promis
   const resolution = await resolveOrgScope(scope, awsConfig);
   const accountsWithoutMfa: Array<{ accountId: string; accountName: string; nonCompliantUsers: string[]; error?: string }> = [];
 
+  // Standalone account fallback - check IAM directly without AssumeRole
+  if (resolution.isStandaloneAccount) {
+    try {
+      const iam = v2Client("IAM", awsConfig);
+      const users = await iam.listUsers({ MaxItems: 1000 }).promise();
+      const nonCompliantUsers: string[] = [];
+      for (const user of users.Users || []) {
+        if (!user.UserName) continue;
+        const mfa = await iam.listMFADevices({ UserName: user.UserName }).promise();
+        if ((mfa.MFADevices || []).length === 0) {
+          nonCompliantUsers.push(user.UserName);
+        }
+      }
+      if (nonCompliantUsers.length > 0) {
+        accountsWithoutMfa.push({ 
+          accountId: resolution.accounts[0].id, 
+          accountName: resolution.accounts[0].name, 
+          nonCompliantUsers 
+        });
+      }
+    } catch (err: any) {
+      accountsWithoutMfa.push({
+        accountId: resolution.accounts[0].id,
+        accountName: resolution.accounts[0].name,
+        nonCompliantUsers: [],
+        error: err?.message || "Unable to inspect IAM MFA posture for this account.",
+      });
+    }
+
+    const lines = accountsWithoutMfa.length === 0
+      ? ["This is a standalone AWS account (not in an organization). MFA check on current account: all IAM users have MFA enabled or no users were found."]
+      : [`Standalone account ${resolution.accounts[0].id}: ${accountsWithoutMfa[0].nonCompliantUsers.length} IAM user(s) without MFA: ${accountsWithoutMfa[0].nonCompliantUsers.join(", ")}.`];
+
+    return {
+      queryType: "accounts_without_mfa",
+      scope: "standalone-account",
+      totalAccountsConsidered: 1,
+      formalReport: buildOrgQueryReport("This AWS account is not part of an AWS Organization. Single-account MFA check performed.", lines),
+      results: { accounts: accountsWithoutMfa, isStandaloneAccount: true },
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  // Multi-account organization flow
   for (const account of resolution.accounts) {
     try {
       const assumedConfig = await getAssumedAwsConfig(account.id, awsConfig.region);

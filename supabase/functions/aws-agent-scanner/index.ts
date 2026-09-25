@@ -2491,17 +2491,39 @@ export const handler = async (req: Request): Promise<Response> => {
           if (toolCall.function.name === "manage_cost_rule") {
             const startTime = Date.now();
             try {
-              if (!userId) {
-                throw new Error("Authentication is required to store cost automation rules.");
-              }
-
               const rawArgs = JSON.parse(toolCall.function.arguments);
               const rawQuery = sanitizeString(rawArgs.rawQuery, 2000);
+              const mode = rawArgs.mode || "preview"; // Default to preview mode
+              
               if (!rawQuery) {
                 throw new Error("A raw cost rule query is required.");
               }
 
               const rule = parseCostRuleFromQuery(rawQuery, notificationEmail || null);
+              
+              // Preview-only mode (safe without user confirmation)
+              if (mode === "preview" || !userHasConfirmedMutation) {
+                const execTime = Date.now() - startTime;
+                
+                apiMessages.push({
+                  role: "tool",
+                  tool_call_id: toolCall.id,
+                  content: JSON.stringify({
+                    status: "preview_only",
+                    message: "Cost rule preview generated. This rule has NOT been saved. To save this rule, send an explicit confirmation message.",
+                    rule,
+                    riskLevel: rule.action === "auto_stop_idle_ec2" ? "HIGH — Automatic resource termination" : "MEDIUM — Monitoring and alerts",
+                    executionTimeMs: execTime,
+                  }),
+                } as any);
+                continue;
+              }
+              
+              // Apply mode (requires authentication and confirmation)
+              if (!userId) {
+                throw new Error("Authentication is required to store cost automation rules. Please sign in to CloudPilot.");
+              }
+
               await saveCostRule(supabaseAdmin, userId, rule);
               const execTime = Date.now() - startTime;
 
@@ -2522,7 +2544,9 @@ export const handler = async (req: Request): Promise<Response> => {
                 tool_call_id: toolCall.id,
                 content: JSON.stringify({
                   status: "stored",
+                  message: "Cost rule has been saved and is now active.",
                   rule,
+                  applied: true,
                 }),
               } as any);
             } catch (err: any) {

@@ -361,31 +361,31 @@ const categories = [
       {
         icon: AlertTriangle,
         label: "SG Preview 443",
-        prompt: "Open port 443 to 0.0.0.0/0 on the security group prod-web-sg. Preview the exact rule change and risk level first, and do not apply anything until I confirm.",
+        prompt: "First, list all security groups in my VPC. Then open port 443 to 0.0.0.0/0 on the first web-facing security group you find (look for names containing 'web', 'public', or 'alb'). Preview the exact rule change and risk level first, and do not apply anything until I confirm. If no web security group exists, show me all available security groups and ask which one to target.",
         requiredPermissions: ["ec2:DescribeSecurityGroups"],
       },
       {
         icon: Network,
         label: "SG-to-SG Preview",
-        prompt: "Allow the security group app-sg to reach db-sg on TCP port 5432. Show the exact security group rule preview and wait for confirmation before applying.",
+        prompt: "First, list all security groups. Then allow the first application-tier security group (look for names containing 'app', 'application', or 'backend') to reach the first database security group (look for names containing 'db', 'database', or 'rds') on TCP port 5432. Show the exact security group rule preview and wait for confirmation before applying. If the groups cannot be identified, list all security groups and ask which ones to use.",
         requiredPermissions: ["ec2:DescribeSecurityGroups"],
       },
       {
         icon: Ban,
         label: "SG Block Test",
-        prompt: "Open port 22 to 0.0.0.0/0 on the security group prod-web-sg.",
+        prompt: "Attempt to open port 22 to 0.0.0.0/0 on a web-facing security group. This should be blocked by the Safety Gate. List security groups first if needed.",
         requiredPermissions: ["ec2:AuthorizeSecurityGroupIngress"],
       },
       {
         icon: Globe,
         label: "SG Egress Preview",
-        prompt: "Allow outbound HTTPS traffic to 0.0.0.0/0 from the security group app-sg. Preview the exact egress rule and risk level first, and do not apply anything until I confirm.",
+        prompt: "First, list all security groups. Then allow outbound HTTPS traffic to 0.0.0.0/0 from the first application security group found (look for names containing 'app', 'application', or 'backend'). Preview the exact egress rule and risk level first, and do not apply anything until I confirm.",
         requiredPermissions: ["ec2:DescribeSecurityGroups"],
       },
       {
         icon: ShieldCheck,
         label: "SG Revoke Egress",
-        prompt: "Remove outbound HTTPS access to 0.0.0.0/0 from the security group app-sg. Show the exact egress rule preview and wait for confirmation before applying.",
+        prompt: "First, list all security groups and their egress rules. Then remove outbound HTTPS access to 0.0.0.0/0 from the first application security group that has such a rule. Show the exact egress rule preview and wait for confirmation before applying.",
         requiredPermissions: ["ec2:DescribeSecurityGroups","ec2:RevokeSecurityGroupEgress"],
       },
       {
@@ -415,7 +415,7 @@ const categories = [
       {
         icon: Bot,
         label: "S3 Lockdown Runbook",
-        prompt: "Run the public S3 lockdown playbook for customer-data-bucket. Show the formal step plan first and wait for me to say run playbook before executing.",
+        prompt: "First, list all S3 buckets and identify any that are public or have public access enabled. Then run the public S3 lockdown playbook for the first public bucket found (or ask me which bucket to target if multiple are found). Show the formal step plan first and wait for me to say run playbook before executing.",
         requiredPermissions: ["s3:GetBucketPublicAccessBlock"],
       },
       {
@@ -433,13 +433,13 @@ const categories = [
       {
         icon: Key,
         label: "IAM S3 Preview",
-        prompt: "Give the IAM group dev-team read-only S3 access. Preview the exact IAM policy first, do not apply anything until I confirm.",
+        prompt: "First, list all IAM groups. Then give the first development or team IAM group found (look for names containing 'dev', 'team', or 'developer') read-only S3 access. Preview the exact IAM policy first, do not apply anything until I confirm. If no suitable group exists, list all groups and ask which one to target.",
         requiredPermissions: ["iam:GetGroup"],
       },
       {
         icon: Users,
         label: "IAM Scoped Preview",
-        prompt: "Prepare a least-privilege IAM policy to give the IAM group contractor-group read-only S3 access to arn:aws:s3:::example-bucket and arn:aws:s3:::example-bucket/* only. Show the preview and wait for confirmation.",
+        prompt: "First, list all IAM groups and S3 buckets. Then prepare a least-privilege IAM policy to give the first contractor or external IAM group found read-only S3 access to the first available bucket. Show the preview with the exact group name, bucket ARN, and policy JSON, and wait for confirmation. If resources cannot be identified, list them and ask which to use.",
         requiredPermissions: ["iam:GetGroup"],
       },
       {
