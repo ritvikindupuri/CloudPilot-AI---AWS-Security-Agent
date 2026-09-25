@@ -8,6 +8,7 @@ import { STSClient, GetCallerIdentityCommand } from "https://esm.sh/@aws-sdk/cli
 import { S3Client, CreateBucketCommand, PutObjectLockConfigurationCommand, PutPublicAccessBlockCommand, PutBucketEncryptionCommand, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.744.0";
 import { getVersionMeta, generateReportId, getCurrentTimestamp } from "../_shared/version.ts";
 import { classifyError, isToolResultError, extractToolResultError, analyzeToolResults, type ErrorClass } from "../_shared/tool-result-classifier.ts";
+import { CIS_AWS_V3_CONTROLS, getCISControl } from "../_shared/cis-aws-v3.ts";
 
 // SECURITY HARDENING: Strict CORS origin validation with allowlist
 const ALLOWED_ORIGINS = [
@@ -510,6 +511,18 @@ Run real attack technique simulations and automated defense measures against the
 CIS AWS Foundations Benchmark v3.0, NIST 800-53 Rev. 5, SOC 2 Type II, PCI-DSS v4.0,
 HIPAA, ISO 27001:2022, FedRAMP, AWS Well-Architected Security Pillar, MITRE ATT&CK Cloud,
 GDPR, CCPA, CMMC 2.0, NIST CSF v2.0, NIS2, DORA, HITRUST CSF, IRAP, and more.
+
+IMPORTANT: For CIS AWS v3.0 controls, reference only the canonical control IDs and mappings from the system's CIS_AWS_V3_CONTROLS registry. Do not invent control numbers. The correct mappings include:
+- GuardDuty: Not a specific CIS v3.0 control (general security monitoring best practice)
+- Security Hub: 4.16
+- Password policy: 1.8 (length), 1.9 (reuse)
+- Config recorder: 3.5 (not 3.3)
+- Default security group: 5.4
+- Admin ports IPv4: 5.2
+- Admin ports IPv6: 5.3
+- S3 account BPA: 2.1.4
+- S3 object logging (write): 3.10
+- S3 object logging (read): 3.11
 
 ## Incident Response
 - Autonomous Incident Response Runbooks: Execute more than recommendations (snapshotting, quarantining, revoking, preserving evidence).
@@ -1211,7 +1224,7 @@ const tools = [
 ];
 
 // ── Intent Router ────────────────────────────────────────────────────────────
-// Classifies user intent via LLM, then selects the relevant tool subset
+// Classifies user intent via Claude Sonnet/Opus, then selects the relevant tool subset
 
 type AgentIntent =
   | "security_audit"
