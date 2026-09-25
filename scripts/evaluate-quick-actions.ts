@@ -164,9 +164,9 @@ async function main() {
             errText.includes("credentials") ||
             errText.includes("UnrecognizedClientException")
           ) {
-            process.stdout.write(`✅ PASS (${durationMs}ms) [Pipeline Validated]\n`);
-            passCount++;
-            results.push({ category: item.category, label: item.label, status: "PASS", durationMs });
+            process.stdout.write(`❌ FAIL (${durationMs}ms) [Invalid Credentials]\n`);
+            failCount++;
+            results.push({ category: item.category, label: item.label, status: "FAIL", durationMs, error: "Invalid credentials" });
             success = true;
           } else {
             process.stdout.write(`❌ FAIL (${response.status})\n`);
@@ -175,10 +175,24 @@ async function main() {
             success = true;
           }
         } else {
-          process.stdout.write(`✅ PASS (${durationMs}ms)\n`);
-          passCount++;
-          results.push({ category: item.category, label: item.label, status: "PASS", durationMs });
-          success = true;
+          // Check response body for tool dispatch or auth errors
+          const responseText = await response.text();
+          const hasToolDispatchError = responseText.includes("Tool dispatch error");
+          const hasAuthError = responseText.includes("Conflicting API keys") || 
+                               responseText.includes("401") ||
+                               responseText.includes("authentication error");
+          
+          if (hasToolDispatchError || hasAuthError) {
+            process.stdout.write(`❌ FAIL (${durationMs}ms) [Tool/Auth Error]\n`);
+            failCount++;
+            results.push({ category: item.category, label: item.label, status: "FAIL", durationMs, error: "Tool dispatch or auth error detected" });
+            success = true;
+          } else {
+            process.stdout.write(`✅ PASS (${durationMs}ms)\n`);
+            passCount++;
+            results.push({ category: item.category, label: item.label, status: "PASS", durationMs });
+            success = true;
+          }
         }
       } catch (err: any) {
         const durationMs = Date.now() - startTime;

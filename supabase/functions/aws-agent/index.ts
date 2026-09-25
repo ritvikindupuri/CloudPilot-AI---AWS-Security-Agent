@@ -6816,7 +6816,43 @@ export const handler = async (req: Request): Promise<Response> => {
               }
 
               const toolResults = await toolsResp.json();
-              liveExecutionLogs.push({ step: "Execution", status: "success", message: `AWS API batch successfully executed (${toolResults.results.length} result(s) returned).` });
+              
+              // Check for tool dispatch or authentication errors
+              const errorResults = (toolResults.results || []).filter((r: any) => {
+                try {
+                  const content = typeof r.content === 'string' ? JSON.parse(r.content) : r.content;
+                  return content.error && (
+                    content.error.includes("Tool dispatch error") ||
+                    content.error.includes("Conflicting API keys") ||
+                    content.message?.includes("Conflicting API keys")
+                  );
+                } catch {
+                  return false;
+                }
+              });
+              
+              const errorCount = errorResults.length;
+              const totalCount = toolResults.results.length;
+              
+              if (errorCount === totalCount && totalCount > 0) {
+                liveExecutionLogs.push({ 
+                  step: "Execution", 
+                  status: "error", 
+                  message: `AWS API batch failed: all ${totalCount} tool call(s) returned errors.` 
+                });
+              } else if (errorCount > 0) {
+                liveExecutionLogs.push({ 
+                  step: "Execution", 
+                  status: "warning", 
+                  message: `AWS API batch partially failed: ${errorCount} of ${totalCount} tool call(s) returned errors.` 
+                });
+              } else {
+                liveExecutionLogs.push({ 
+                  step: "Execution", 
+                  status: "success", 
+                  message: `AWS API batch successfully executed (${totalCount} result(s) returned).` 
+                });
+              }
               sendMeta({ executionLogs: [...liveExecutionLogs] });
 
               for (const result of toolResults.results) {

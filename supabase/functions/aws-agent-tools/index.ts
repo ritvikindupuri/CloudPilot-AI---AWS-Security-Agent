@@ -46,7 +46,7 @@ async function dispatch(calls: any[], functionName: string, rest: Record<string,
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: authHeader || `Bearer ${SERVICE_ROLE_KEY}`,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
       apikey: SERVICE_ROLE_KEY,
     },
     body: JSON.stringify({ toolCalls: calls, ...rest }),
