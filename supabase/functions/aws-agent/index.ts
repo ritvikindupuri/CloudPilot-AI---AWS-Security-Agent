@@ -1678,17 +1678,21 @@ async function runSafetyAudit(
         const args = typeof tc.function?.arguments === "string"
           ? JSON.parse(tc.function.arguments)
           : (tc.function?.arguments || tc.arguments);
+        
+        const action = args?.action || "";
         const cidr = args?.cidrIp || args?.cidr || "";
         const fromPort = Number(args?.fromPort || args?.port || 0);
         const toPort = Number(args?.toPort || args?.port || fromPort);
         const protocol = String(args?.protocol || "tcp").toLowerCase();
         
-        // Block SSH (22) or RDP (3389) from 0.0.0.0/0 or ::/0
+        // Block SSH (22) or RDP (3389) from 0.0.0.0/0 or ::/0 ONLY for allow_ingress
+        // Revoking is the CIS 5.2 remediation and must not be blocked
         // Also check if protocol is -1 (all) or ranges that include these ports
+        const isAllowIngress = action === "allow_ingress" || !action; // Fail-safe: block if action is missing/unparseable
         const isSshOrRdp = (fromPort <= 22 && toPort >= 22) || (fromPort <= 3389 && toPort >= 3389) || protocol === "-1" || protocol === "all";
         const isWorldOpen = cidr === "0.0.0.0/0" || cidr === "::/0";
         
-        if (isWorldOpen && isSshOrRdp) {
+        if (isAllowIngress && isWorldOpen && isSshOrRdp) {
           return {
             approved: false,
             reason: `Opening SSH/RDP ports (22/3389) to ${cidr} creates a critical security vulnerability and is blocked by policy. Use AWS Systems Manager Session Manager or a specific CIDR range instead.`,
@@ -1696,7 +1700,12 @@ async function runSafetyAudit(
           };
         }
       } catch {
-        // Parse error, continue to LLM judge
+        // Parse error - fail safe by blocking if we can't parse the action
+        return {
+          approved: false,
+          reason: `Failed to parse security group rule arguments. Cannot verify safety. Please ensure the request is properly formatted.`,
+          summary: `BLOCKED: Parse error`
+        };
       }
     }
   }
@@ -7011,23 +7020,29 @@ export const handler = async (req: Request): Promise<Response> => {
               liveExecutionLogs.push({ step: "Safety Gate", status: "success", message: `Safety Gate Judge: ${summaryMsg}` });
               
               // Filter out duplicate tool calls (CP-16)
+              // IMPORTANT: Never mutate responseMessage.tool_calls - it's already in apiMessages
               const uniqueToolCalls = [];
-              const duplicateCount = responseMessage.tool_calls.length;
+              const allToolCalls = responseMessage.tool_calls;
+              const duplicateToolCallIds = new Set<string>();
               
-              for (const tc of responseMessage.tool_calls) {
+              for (const tc of allToolCalls) {
                 const hash = getToolCallHash(tc);
                 if (!calledToolsSet.has(hash)) {
                   calledToolsSet.add(hash);
                   uniqueToolCalls.push(tc);
+                } else {
+                  duplicateToolCallIds.add(tc.id);
                 }
               }
+              
+              const duplicateCount = duplicateToolCallIds.size;
               
               if (uniqueToolCalls.length === 0) {
                 liveExecutionLogs.push({ step: "Execution", status: "warning", message: `Skipping ${duplicateCount} duplicate tool call(s). All operations already attempted.` });
                 sendMeta({ executionLogs: [...liveExecutionLogs] });
                 
                 // Push synthetic tool_result blocks for all skipped duplicates to avoid Anthropic 400 error
-                for (const tc of responseMessage.tool_calls) {
+                for (const tc of allToolCalls) {
                   apiMessages.push({
                     role: "tool",
                     tool_call_id: tc.id,
@@ -7046,41 +7061,24 @@ export const handler = async (req: Request): Promise<Response> => {
                 break;
               }
               
-              // Push synthetic tool_result blocks for partial duplicates
-              if (uniqueToolCalls.length < duplicateCount) {
-                const skippedCalls = responseMessage.tool_calls.filter((tc: any) => {
-                  const hash = getToolCallHash(tc);
-                  return calledToolsSet.has(hash) && !uniqueToolCalls.some((u: any) => getToolCallHash(u) === hash);
-                });
-                for (const tc of skippedCalls) {
-                  apiMessages.push({
-                    role: "tool",
-                    tool_call_id: tc.id,
-                    content: JSON.stringify({
-                      error: "Duplicate call skipped",
-                      errorClass: "DUPLICATE_CALL",
-                      message: "This operation was already attempted earlier in the conversation."
-                    })
-                  });
-                }
-                liveExecutionLogs.push({ step: "Execution", status: "info", message: `Filtered ${duplicateCount - uniqueToolCalls.length} duplicate call(s). Executing ${uniqueToolCalls.length} unique operation(s)...` });
+              if (duplicateCount > 0) {
+                liveExecutionLogs.push({ step: "Execution", status: "info", message: `Filtered ${duplicateCount} duplicate call(s). Executing ${uniqueToolCalls.length} unique operation(s)...` });
               } else {
                 liveExecutionLogs.push({ step: "Execution", status: "info", message: `Executing AWS SDK commands on account...` });
               }
               
-              responseMessage.tool_calls = uniqueToolCalls;
               sendMeta({ executionLogs: [...liveExecutionLogs] });
 
-              // Dispatch ALL tool calls to aws-agent-tools in a single batch
+              // Dispatch ONLY unique tool calls to aws-agent-tools in a single batch
               const toolsResp = await fetch(TOOLS_URL, {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
-                  Authorization: authHeader || "",
-                  apikey: RUNTIME_CONFIG.supabaseAnonKey,
+                  Authorization: `Bearer ${RUNTIME_CONFIG.supabaseServiceRoleKey}`,
+                  apikey: RUNTIME_CONFIG.supabaseServiceRoleKey,
                 },
                 body: JSON.stringify({
-                  toolCalls: responseMessage.tool_calls,
+                  toolCalls: uniqueToolCalls,
                   awsConfig,
                   userId,
                   conversationId: conversationId || null,
@@ -7152,6 +7150,19 @@ export const handler = async (req: Request): Promise<Response> => {
                   latestUnifiedAuditSummary = result.auditSummary;
                   sendMeta({ auditSummary: latestUnifiedAuditSummary });
                 }
+              }
+              
+              // Push synthetic tool_result for every duplicate tool call ID
+              for (const toolCallId of duplicateToolCallIds) {
+                apiMessages.push({
+                  role: "tool",
+                  tool_call_id: toolCallId,
+                  content: JSON.stringify({
+                    error: "Duplicate call skipped",
+                    errorClass: "DUPLICATE_CALL",
+                    message: "This operation was already attempted earlier in the conversation."
+                  })
+                });
               }
             } else {
               finalResponseText = responseMessage.content || "";

@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { requireServiceRole } from "../_shared/internal-auth.ts";
 
 // SECURITY HARDENING: Strict CORS origin validation with allowlist
 const ALLOWED_ORIGINS = [
@@ -3469,6 +3470,13 @@ export const handler = async (req: Request): Promise<Response> => {
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // SECURITY: Only aws-agent-tools can call this endpoint (verified via service role key)
+  // This prevents direct calls from the public anon key from forging userId or userHasConfirmedMutation
+  const authError = requireServiceRole(req, ENV.supabaseServiceRoleKey, corsHeaders, "aws-agent-ops");
+  if (authError) {
+    return authError;
   }
 
   const clientIp = req.headers.get("x-forwarded-for") || "unknown";

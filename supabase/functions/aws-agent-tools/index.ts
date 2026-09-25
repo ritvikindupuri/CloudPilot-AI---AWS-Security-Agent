@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getVersionMeta } from "../_shared/version.ts";
+import { requireServiceRole } from "../_shared/internal-auth.ts";
 
 // SECURITY HARDENING: Strict CORS origin validation with allowlist
 const ALLOWED_ORIGINS = [
@@ -27,21 +28,7 @@ function getCorsHeaders(req: Request): Record<string, string> {
 }
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-/**
- * Constant-time string comparison to prevent timing attacks
- */
-function constantTimeCompare(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return result === 0;
-}
+const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 const SCANNER_TOOLS = new Set([
   "run_unified_audit", "run_cost_anomaly_scan", "manage_cost_rule",
@@ -107,18 +94,9 @@ export const handler = async (req: Request): Promise<Response> => {
 
   // SECURITY: Only aws-agent can call the POST endpoint (verified via service role key)
   // This prevents direct calls from the public anon key from forging userId or userHasConfirmedMutation
-  const authHeader = req.headers.get("Authorization");
-  const bearerToken = authHeader?.replace(/^Bearer\s+/i, "");
-  
-  // Constant-time comparison to prevent timing attacks
-  if (!bearerToken || !constantTimeCompare(bearerToken, SERVICE_ROLE_KEY)) {
-    return new Response(
-      JSON.stringify({
-        error: "Unauthorized",
-        message: "This endpoint requires service role authentication.",
-      }),
-      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  const authError = requireServiceRole(req, SERVICE_ROLE_KEY, corsHeaders, "aws-agent-tools");
+  if (authError) {
+    return authError;
   }
 
   try {
