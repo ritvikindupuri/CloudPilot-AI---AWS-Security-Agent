@@ -6,6 +6,7 @@ import AWS from "https://esm.sh/aws-sdk@2.1693.0?target=deno";
 import { CloudWatchLogsClient, CreateLogGroupCommand, CreateLogStreamCommand, DescribeLogStreamsCommand, PutLogEventsCommand } from "https://esm.sh/@aws-sdk/client-cloudwatch-logs@3.744.0";
 import { STSClient, GetCallerIdentityCommand } from "https://esm.sh/@aws-sdk/client-sts@3.744.0";
 import { S3Client, CreateBucketCommand, PutObjectLockConfigurationCommand, PutPublicAccessBlockCommand, PutBucketEncryptionCommand, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.744.0";
+import { isToolResultError } from "./tool-result-classifier.ts";
 
 // SECURITY HARDENING: Strict CORS origin validation with allowlist
 const ALLOWED_ORIGINS = [
@@ -6816,7 +6817,36 @@ export const handler = async (req: Request): Promise<Response> => {
               }
 
               const toolResults = await toolsResp.json();
-              liveExecutionLogs.push({ step: "Execution", status: "success", message: `AWS API batch successfully executed (${toolResults.results.length} result(s) returned).` });
+              
+              // Check for errors using proper classification (handles validator warnings, non-JSON, etc.)
+              const results = toolResults.results || [];
+              const errorResults = results.filter((r: any) => {
+                const content = typeof r.content === 'string' ? r.content : JSON.stringify(r.content);
+                return isToolResultError(content);
+              });
+              
+              const errorCount = errorResults.length;
+              const totalCount = results.length;
+              
+              if (errorCount === totalCount && totalCount > 0) {
+                liveExecutionLogs.push({ 
+                  step: "Execution", 
+                  status: "error", 
+                  message: `AWS API batch failed: all ${totalCount} tool call(s) returned errors.` 
+                });
+              } else if (errorCount > 0) {
+                liveExecutionLogs.push({ 
+                  step: "Execution", 
+                  status: "warning", 
+                  message: `AWS API batch partially failed: ${errorCount} of ${totalCount} tool call(s) returned errors.` 
+                });
+              } else {
+                liveExecutionLogs.push({ 
+                  step: "Execution", 
+                  status: "success", 
+                  message: `AWS API batch successfully executed (${totalCount} result(s) returned).` 
+                });
+              }
               sendMeta({ executionLogs: [...liveExecutionLogs] });
 
               for (const result of toolResults.results) {
