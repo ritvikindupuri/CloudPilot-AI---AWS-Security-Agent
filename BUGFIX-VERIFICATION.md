@@ -45,25 +45,24 @@ The `aws-agent` function logs "AWS API batch successfully executed" immediately 
 ### Fix Applied
 **File**: `supabase/functions/aws-agent/index.ts` (line ~6819)
 
-Added error detection logic before logging success:
+Added comprehensive error detection logic before logging success:
 
 ```typescript
-// Check for tool dispatch or authentication errors
-const errorResults = (toolResults.results || []).filter((r: any) => {
+// Check for ANY result with an error field (dispatch errors, AccessDenied, throttling, etc.)
+const results = toolResults.results || [];
+const errorResults = results.filter((r: any) => {
   try {
     const content = typeof r.content === 'string' ? JSON.parse(r.content) : r.content;
-    return content.error && (
-      content.error.includes("Tool dispatch error") ||
-      content.error.includes("Conflicting API keys") ||
-      content.message?.includes("Conflicting API keys")
-    );
+    // Count any result with a truthy error field as failed
+    return !!content.error;
   } catch {
-    return false;
+    // If content is not parseable JSON, treat non-empty strings as potential errors
+    return typeof r.content === 'string' && r.content.trim().length > 0;
   }
 });
 
 const errorCount = errorResults.length;
-const totalCount = toolResults.results.length;
+const totalCount = results.length;
 
 if (errorCount === totalCount && totalCount > 0) {
   // Log as error: all failed
@@ -80,12 +79,19 @@ if (errorCount === totalCount && totalCount > 0) {
 }
 ```
 
+**Key improvements:**
+- Detects ANY result with a truthy `error` field (not just specific error types)
+- Catches AccessDenied, throttling errors, tool dispatch errors, auth conflicts, and any other failures
+- Safely handles missing `toolResults.results` (defaults to empty array)
+- Handles non-JSON error strings gracefully
+- Never logs success when calls have actually failed
+
 ## Nice to Have: Evaluation Script Improvement
 
 ### Fix Applied
 **File**: `scripts/evaluate-quick-actions.ts`
 
-Changed credential error handling to fail tests instead of passing them, and added detection for tool dispatch and auth errors:
+Changed credential error handling to fail tests instead of passing them, and added specific pattern detection for tool dispatch and auth errors:
 
 ```typescript
 // BEFORE: Treated credential errors as PASS
@@ -94,19 +100,31 @@ if (errText.includes("InvalidClientTokenId") || ...) {
   passCount++;
 }
 
-// AFTER: Fails credential errors and checks response body
+// AFTER: Fails credential errors and checks response body with specific patterns
 if (errText.includes("InvalidClientTokenId") || ...) {
   process.stdout.write(`❌ FAIL (${durationMs}ms) [Invalid Credentials]\n`);
   failCount++;
 }
 
-// Also checks HTTP 200 responses for embedded errors
+// Checks HTTP 200 responses for embedded errors using specific patterns
 const hasToolDispatchError = responseText.includes("Tool dispatch error");
-const hasAuthError = responseText.includes("Conflicting API keys") || ...;
-if (hasToolDispatchError || hasAuthError) {
+const hasAuthError = responseText.includes("Conflicting API keys") || 
+                     responseText.includes("Unauthorized") ||
+                     responseText.includes("(401)") ||  // Specific pattern, not broad "401"
+                     responseText.includes("authentication error");
+const hasExecutionFailure = responseText.includes("AWS API batch failed") ||
+                            responseText.includes("partially failed");
+
+if (hasToolDispatchError || hasAuthError || hasExecutionFailure) {
   failCount++;
 }
 ```
+
+**Key improvements:**
+- Uses specific patterns like `(401)` instead of broad `"401"` to avoid false positives on account IDs, timestamps, etc.
+- Detects the new "AWS API batch failed" and "partially failed" log messages
+- Properly fails tests with credential errors instead of treating them as validation passes
+- Detects "Unauthorized", "Tool dispatch error", and "Conflicting API keys" patterns
 
 ## Deployment Steps Required
 

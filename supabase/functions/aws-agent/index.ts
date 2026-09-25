@@ -6817,22 +6817,21 @@ export const handler = async (req: Request): Promise<Response> => {
 
               const toolResults = await toolsResp.json();
               
-              // Check for tool dispatch or authentication errors
-              const errorResults = (toolResults.results || []).filter((r: any) => {
+              // Check for ANY result with an error field (dispatch errors, AccessDenied, throttling, etc.)
+              const results = toolResults.results || [];
+              const errorResults = results.filter((r: any) => {
                 try {
                   const content = typeof r.content === 'string' ? JSON.parse(r.content) : r.content;
-                  return content.error && (
-                    content.error.includes("Tool dispatch error") ||
-                    content.error.includes("Conflicting API keys") ||
-                    content.message?.includes("Conflicting API keys")
-                  );
+                  // Count any result with a truthy error field as failed
+                  return !!content.error;
                 } catch {
-                  return false;
+                  // If content is not parseable JSON, treat non-empty strings as potential errors
+                  return typeof r.content === 'string' && r.content.trim().length > 0;
                 }
               });
               
               const errorCount = errorResults.length;
-              const totalCount = toolResults.results.length;
+              const totalCount = results.length;
               
               if (errorCount === totalCount && totalCount > 0) {
                 liveExecutionLogs.push({ 

@@ -179,10 +179,13 @@ async function main() {
           const responseText = await response.text();
           const hasToolDispatchError = responseText.includes("Tool dispatch error");
           const hasAuthError = responseText.includes("Conflicting API keys") || 
-                               responseText.includes("401") ||
+                               responseText.includes("Unauthorized") ||
+                               responseText.includes("(401)") ||
                                responseText.includes("authentication error");
+          const hasExecutionFailure = responseText.includes("AWS API batch failed") ||
+                                      responseText.includes("partially failed");
           
-          if (hasToolDispatchError || hasAuthError) {
+          if (hasToolDispatchError || hasAuthError || hasExecutionFailure) {
             process.stdout.write(`❌ FAIL (${durationMs}ms) [Tool/Auth Error]\n`);
             failCount++;
             results.push({ category: item.category, label: item.label, status: "FAIL", durationMs, error: "Tool dispatch or auth error detected" });
