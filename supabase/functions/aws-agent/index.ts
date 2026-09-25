@@ -1887,6 +1887,7 @@ const IAM_BLOCKED_ACTIONS = new Set([
 const IAM_CONFIRM_PATTERNS = [
   /^confirm$/i,
   /^confirm\s+apply$/i,
+  /^confirm\s+auto[- ]?stop$/i,
   /^apply$/i,
   /^proceed$/i,
   /^approved?$/i,
@@ -7103,6 +7104,20 @@ export const handler = async (req: Request): Promise<Response> => {
 
               const toolResults = await toolsResp.json();
               
+              // Push synthetic tool_result for every duplicate tool call ID (BEFORE any branching)
+              // This ensures EVERY tool_use has a matching tool_result, preventing Anthropic 400 errors
+              for (const toolCallId of duplicateToolCallIds) {
+                apiMessages.push({
+                  role: "tool",
+                  tool_call_id: toolCallId,
+                  content: JSON.stringify({
+                    error: "Duplicate call skipped",
+                    errorClass: "DUPLICATE_CALL",
+                    message: "This operation was already attempted earlier in the conversation."
+                  })
+                });
+              }
+              
               // Analyze tool results to determine success vs failure
               const analysis = analyzeToolResults(toolResults.results);
               
@@ -7150,19 +7165,6 @@ export const handler = async (req: Request): Promise<Response> => {
                   latestUnifiedAuditSummary = result.auditSummary;
                   sendMeta({ auditSummary: latestUnifiedAuditSummary });
                 }
-              }
-              
-              // Push synthetic tool_result for every duplicate tool call ID
-              for (const toolCallId of duplicateToolCallIds) {
-                apiMessages.push({
-                  role: "tool",
-                  tool_call_id: toolCallId,
-                  content: JSON.stringify({
-                    error: "Duplicate call skipped",
-                    errorClass: "DUPLICATE_CALL",
-                    message: "This operation was already attempted earlier in the conversation."
-                  })
-                });
               }
             } else {
               finalResponseText = responseMessage.content || "";

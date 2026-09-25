@@ -42,7 +42,7 @@ const OPS_TOOLS = new Set([
   "run_attack_simulation", "run_evasion_test",
 ]);
 
-async function dispatch(calls: any[], functionName: string, rest: Record<string, any>, authHeader: string | null): Promise<any[]> {
+async function dispatch(calls: any[], functionName: string, rest: Record<string, any>, serviceKey: string): Promise<any[]> {
   if (calls.length === 0) return [];
   
   // Always use service role key for internal function-to-function calls
@@ -51,8 +51,8 @@ async function dispatch(calls: any[], functionName: string, rest: Record<string,
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-      apikey: SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${serviceKey}`,
+      apikey: serviceKey,
     },
     body: JSON.stringify({ toolCalls: calls, ...rest }),
   });
@@ -99,6 +99,9 @@ export const handler = async (req: Request): Promise<Response> => {
     return authError;
   }
 
+  // After requireServiceRole passes, SERVICE_ROLE_KEY is guaranteed to be non-empty
+  const serviceKey = SERVICE_ROLE_KEY as string;
+
   try {
     const body = await req.json();
     const { toolCalls, ...rest } = body;
@@ -118,10 +121,8 @@ export const handler = async (req: Request): Promise<Response> => {
       }),
     }));
 
-    const [scannerResults, opsResults] = await Promise.all([
-      dispatch(scannerCalls, "aws-agent-scanner", rest, authHeader),
-      dispatch(opsCalls, "aws-agent-ops", rest, authHeader),
-    ]);
+    const scannerResults = await dispatch(scannerCalls, "aws-agent-scanner", rest, serviceKey);
+    const opsResults = await dispatch(opsCalls, "aws-agent-ops", rest, serviceKey);
 
     const results = [...scannerResults, ...opsResults, ...unknownResults];
 
