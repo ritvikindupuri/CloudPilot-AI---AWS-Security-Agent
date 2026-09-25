@@ -2513,7 +2513,7 @@ export const handler = async (req: Request): Promise<Response> => {
               // Check if this is an auto-stop rule requiring explicit confirmation
               const isAutoStop = rule.action === "auto_stop_idle_ec2";
               const latestMsgLower = (latestUserMessage || "").toLowerCase();
-              const hasAutoStopConfirmation = latestMsgLower.includes("auto-stop") || latestMsgLower.includes("auto stop");
+              const hasAutoStopConfirmation = latestMsgLower.includes("auto-stop") || latestMsgLower.includes("auto stop") || latestMsgLower.includes("autostop");
               
               // Preview-only mode (safe without user confirmation)
               // Strict: only apply when mode === "apply" AND userHasConfirmedMutation === true AND userId
@@ -2541,7 +2541,7 @@ export const handler = async (req: Request): Promise<Response> => {
                     executionTimeMs: execTime,
                   }),
                 } as any);
-                continue;
+                return { apiMessages, latestUnifiedAuditSummary };
               }
               
               // Apply mode (requires authentication and confirmation)
@@ -2574,12 +2574,14 @@ export const handler = async (req: Request): Promise<Response> => {
                   applied: true,
                 }),
               } as any);
+              return { apiMessages, latestUnifiedAuditSummary };
             } catch (err: any) {
               apiMessages.push({
                 role: "tool",
                 tool_call_id: toolCall.id,
                 content: JSON.stringify({ error: err?.message || "Cost rule creation failed." }),
               } as any);
+              return { apiMessages, latestUnifiedAuditSummary };
             }
           }
 

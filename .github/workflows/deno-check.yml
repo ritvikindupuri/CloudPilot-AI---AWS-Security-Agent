@@ -19,6 +19,20 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Lint edge functions for syntax errors
+        run: |
+          echo "Linting edge functions for syntax errors..."
+          for func in aws-agent aws-agent-tools aws-agent-scanner aws-agent-ops aws-executor; do
+            echo "Linting $func..."
+            output=$(deno lint supabase/functions/$func/index.ts 2>&1 || true)
+            echo "$output"
+            if echo "$output" | grep -qi "SyntaxError"; then
+              echo "❌ SyntaxError detected in $func"
+              exit 1
+            fi
+          done
+          echo "✅ No syntax errors found"
+
       - name: Type check edge functions
         run: |
           echo "Type checking aws-agent..."
@@ -37,6 +51,41 @@ jobs:
           deno check supabase/functions/aws-executor/index.ts
           
           echo "All type checks passed!"
+
+      - name: Boot smoke test edge functions
+        run: |
+          echo "Testing edge functions can boot..."
+          for func in aws-agent aws-agent-tools aws-agent-scanner aws-agent-ops; do
+            echo "Testing $func boot..."
+            cd supabase/functions/$func
+            
+            # Set dummy env vars and try to boot
+            output=$(SUPABASE_URL=https://example.supabase.co \
+              SUPABASE_SERVICE_ROLE_KEY=dummy \
+              SUPABASE_ANON_KEY=dummy \
+              timeout 20 deno run -A --quiet index.ts 2>&1 || true)
+            rc=$?
+            
+            # Check for uncaught errors or syntax errors
+            if echo "$output" | grep -qE 'error: Uncaught.*SyntaxError'; then
+              echo "❌ $func failed to boot:"
+              echo "$output"
+              exit 1
+            fi
+            
+            # timeout returns 124 if the process is still running after timeout
+            # which means the server started successfully and is serving
+            if [ $rc -eq 124 ]; then
+              echo "✅ $func booted successfully"
+            else
+              echo "⚠️  $func exited with code $rc (expected 124 for timeout)"
+              echo "$output"
+              exit 1
+            fi
+            
+            cd ../../..
+          done
+          echo "✅ All functions boot successfully"
 
       - name: Run classifier tests
         run: |
