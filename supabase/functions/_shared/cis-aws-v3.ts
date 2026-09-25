@@ -172,6 +172,21 @@ export const CIS_AWS_V3_CONTROLS: Record<string, CISControl> = {
     checkOperation: "ListAnalyzers",
     service: "AccessAnalyzer",
   },
+  "1.21": {
+    id: "1.21",
+    section: "IAM",
+    title: "Ensure IAM users are managed centrally via identity federation or AWS Organizations for multi-account environments",
+    level: 2,
+    service: "IAM",
+  },
+  "1.22": {
+    id: "1.22",
+    section: "IAM",
+    title: "Ensure access to AWSCloudShellFullAccess is restricted",
+    level: 1,
+    checkOperation: "ListPolicies, GetPolicyVersion, ListEntitiesForPolicy",
+    service: "IAM",
+  },
 
   // Section 2: Storage
   "2.1.1": {
@@ -261,6 +276,14 @@ export const CIS_AWS_V3_CONTROLS: Record<string, CISControl> = {
     checkOperation: "DescribeDBInstances",
     service: "RDS",
   },
+  "2.4.1": {
+    id: "2.4.1",
+    section: "EFS",
+    title: "Ensure that encryption is enabled for EFS file systems",
+    level: 1,
+    checkOperation: "DescribeFileSystems",
+    service: "EFS",
+  },
 
   // Section 3: Logging
   "3.1": {
@@ -282,69 +305,53 @@ export const CIS_AWS_V3_CONTROLS: Record<string, CISControl> = {
   "3.3": {
     id: "3.3",
     section: "Config",
-    title: "Ensure the S3 bucket used to store CloudTrail logs is not publicly accessible",
-    level: 1,
-    checkOperation: "GetBucketAcl, GetBucketPolicy, GetPublicAccessBlock",
-    service: "S3",
-  },
-  "3.4": {
-    id: "3.4",
-    section: "CloudTrail",
-    title: "Ensure CloudTrail trails are integrated with CloudWatch Logs",
-    level: 1,
-    checkOperation: "DescribeTrails",
-    service: "CloudTrail",
-  },
-  "3.5": {
-    id: "3.5",
-    section: "Config",
     title: "Ensure AWS Config is enabled in all regions",
     level: 1,
     checkOperation: "DescribeConfigurationRecorders, DescribeConfigurationRecorderStatus",
     service: "Config",
   },
-  "3.6": {
-    id: "3.6",
+  "3.4": {
+    id: "3.4",
     section: "CloudTrail",
     title: "Ensure S3 bucket access logging is enabled on the CloudTrail S3 bucket",
     level: 1,
     checkOperation: "GetBucketLogging",
     service: "S3",
   },
-  "3.7": {
-    id: "3.7",
+  "3.5": {
+    id: "3.5",
     section: "CloudTrail",
     title: "Ensure CloudTrail logs are encrypted at rest using KMS CMKs",
     level: 2,
     checkOperation: "DescribeTrails",
     service: "CloudTrail",
   },
-  "3.8": {
-    id: "3.8",
-    section: "CloudTrail",
+  "3.6": {
+    id: "3.6",
+    section: "KMS",
     title: "Ensure rotation for customer created symmetric CMKs is enabled",
     level: 2,
     checkOperation: "GetKeyRotationStatus",
     service: "KMS",
   },
-  "3.9": {
-    id: "3.9",
+  "3.7": {
+    id: "3.7",
     section: "VPC",
     title: "Ensure VPC flow logging is enabled in all VPCs",
     level: 2,
     checkOperation: "DescribeFlowLogs",
     service: "EC2",
   },
-  "3.10": {
-    id: "3.10",
+  "3.8": {
+    id: "3.8",
     section: "S3",
     title: "Ensure that Object-level logging for write events is enabled for S3 bucket",
     level: 2,
     checkOperation: "GetEventSelectors",
     service: "CloudTrail",
   },
-  "3.11": {
-    id: "3.11",
+  "3.9": {
+    id: "3.9",
     section: "S3",
     title: "Ensure that Object-level logging for read events is enabled for S3 bucket",
     level: 2,
@@ -521,6 +528,14 @@ export const CIS_AWS_V3_CONTROLS: Record<string, CISControl> = {
     title: "Ensure routing tables for VPC peering are 'least access'",
     level: 2,
     checkOperation: "DescribeRouteTables, DescribeVpcPeeringConnections",
+    service: "EC2",
+  },
+  "5.6": {
+    id: "5.6",
+    section: "EC2",
+    title: "Ensure EC2 Instance Metadata Service Version 2 (IMDSv2) is enabled",
+    level: 1,
+    checkOperation: "DescribeInstances",
     service: "EC2",
   },
 };

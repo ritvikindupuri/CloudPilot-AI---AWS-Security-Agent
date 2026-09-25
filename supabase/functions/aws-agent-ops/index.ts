@@ -632,6 +632,7 @@ interface OrgAccountSummary {
 interface OrgScopeResolution {
   scope: string;
   accounts: OrgAccountSummary[];
+  isStandaloneAccount?: boolean;
 }
 
 interface OrgBlastRadiusResult {

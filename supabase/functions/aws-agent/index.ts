@@ -27,7 +27,7 @@ function getCorsHeaders(req: Request): Record<string, string> {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
     "Access-Control-Max-Age": "86400",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
@@ -516,13 +516,13 @@ IMPORTANT: For CIS AWS v3.0 controls, reference only the canonical control IDs a
 - GuardDuty: Not a specific CIS v3.0 control (general security monitoring best practice)
 - Security Hub: 4.16
 - Password policy: 1.8 (length), 1.9 (reuse)
-- Config recorder: 3.5 (not 3.3)
+- Config recorder: 3.3
 - Default security group: 5.4
 - Admin ports IPv4: 5.2
 - Admin ports IPv6: 5.3
 - S3 account BPA: 2.1.4
-- S3 object logging (write): 3.10
-- S3 object logging (read): 3.11
+- S3 object logging (write): 3.8
+- S3 object logging (read): 3.9
 
 ## Incident Response
 - Autonomous Incident Response Runbooks: Execute more than recommendations (snapshotting, quarantining, revoking, preserving evidence).
@@ -875,6 +875,12 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          mode: {
+            type: "string",
+            enum: ["preview", "apply"],
+            description: "preview (default): show what would change. apply: execute the change after explicit confirmation.",
+            default: "preview",
+          },
           action: {
             type: "string",
             enum: ["attach_policy"],
@@ -920,6 +926,12 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          mode: {
+            type: "string",
+            enum: ["preview", "apply"],
+            description: "preview (default): show what would change. apply: execute the change after explicit confirmation.",
+            default: "preview",
+          },
           action: {
             type: "string",
             enum: ["allow_ingress", "revoke_ingress", "allow_egress", "revoke_egress"],
@@ -1023,6 +1035,12 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          mode: {
+            type: "string",
+            enum: ["preview", "apply"],
+            description: "preview (default): show the rule without saving. apply: save the rule after explicit confirmation.",
+            default: "preview",
+          },
           rawQuery: {
             type: "string",
             description: "The user's original natural-language cost rule request.",
@@ -1132,6 +1150,12 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          mode: {
+            type: "string",
+            enum: ["preview", "apply"],
+            description: "preview (default): show what would be affected. apply: execute the operation after explicit confirmation.",
+            default: "preview",
+          },
           action: {
             type: "string",
             enum: ["attach_scp"],
@@ -1644,84 +1668,9 @@ async function runSafetyAudit(
     return { approved: true, reason: "No tool calls to audit.", summary: "No tool calls" };
   }
 
-  // Expanded read-only operations that bypass LLM judge
-  const READ_ONLY_OPS = new Set([
-    "get", "list", "describe", "lookup", "generate", "simulate", "scan",
-    "startquery", "getqueryresults", "filterlogevents", "describelogstreams",
-    "lookupevents", "generatecredentialreport",
-  ]);
-
-  // Tools that are always safe (read-only or preview-only by design)
-  const SAFE_TOOLS = new Set([
-    "run_unified_audit",
-    "run_cost_anomaly_scan",
-    "run_drift_detection",
-    "run_org_query",
-    "run_attack_simulation", // Simulation, not mutating
-    "replay_cloudtrail_events", // Read-only replay
-  ]);
-
-  // Preview-mode tools (safe when not confirmed)
-  const PREVIEW_TOOLS = new Set([
-    "manage_security_group_rule",
-    "manage_iam_access",
-    "manage_cost_rule",
-    "manage_org_operation",
-    "manage_runbook_execution",
-  ]);
-
-  let isAllReadOnly = true;
-  let hasPreviewOnlyTools = false;
-
-  for (const tc of proposedToolCalls) {
-    const fnName = tc.function?.name || tc.name;
-
-    // Check if it's a safe tool
-    if (SAFE_TOOLS.has(fnName)) {
-      continue;
-    }
-
-    // Check if it's a preview tool without confirmation
-    if (PREVIEW_TOOLS.has(fnName) && !userHasConfirmedMutation) {
-      hasPreviewOnlyTools = true;
-      continue; // Preview mode is safe
-    }
-
-    // Check execute_aws_api operations
-    if (fnName === "execute_aws_api") {
-      try {
-        const args = typeof tc.function?.arguments === "string"
-          ? JSON.parse(tc.function.arguments)
-          : (tc.function?.arguments || tc.arguments);
-        const op = (args?.operation || "").toLowerCase();
-        
-        // Check if operation is read-only
-        if (READ_ONLY_OPS.has(op) || Array.from(READ_ONLY_OPS).some(prefix => op.startsWith(prefix))) {
-          continue;
-        }
-      } catch {
-        // Parse error - treat as potentially mutating
-      }
-    }
-
-    // If we get here, this tool call is potentially mutating
-    isAllReadOnly = false;
-    break;
-  }
-
-  if (isAllReadOnly || (hasPreviewOnlyTools && !userHasConfirmedMutation)) {
-    return { 
-      approved: true, 
-      reason: hasPreviewOnlyTools 
-        ? "Preview-only operations (no user confirmation provided)." 
-        : "Read-only status and audit commands.",
-      summary: "Read-only/preview"
-    };
-  }
-
   const latestUserMsg = [...apiMessages].reverse().find((m) => m.role === "user")?.content || "";
 
-  // Deterministic block for critical security group rules
+  // CRITICAL: Deterministic block for SSH/RDP from 0.0.0.0/0 (BEFORE fast path)
   for (const tc of proposedToolCalls) {
     const fnName = tc.function?.name || tc.name;
     if (fnName === "manage_security_group_rule") {
@@ -1730,20 +1679,109 @@ async function runSafetyAudit(
           ? JSON.parse(tc.function.arguments)
           : (tc.function?.arguments || tc.arguments);
         const cidr = args?.cidrIp || args?.cidr || "";
-        const port = args?.fromPort || args?.port || 0;
+        const fromPort = Number(args?.fromPort || args?.port || 0);
+        const toPort = Number(args?.toPort || args?.port || fromPort);
+        const protocol = String(args?.protocol || "tcp").toLowerCase();
         
-        // Block SSH/RDP from 0.0.0.0/0
-        if ((cidr === "0.0.0.0/0" || cidr === "::/0") && (port === 22 || port === 3389)) {
+        // Block SSH (22) or RDP (3389) from 0.0.0.0/0 or ::/0
+        // Also check if protocol is -1 (all) or ranges that include these ports
+        const isSshOrRdp = (fromPort <= 22 && toPort >= 22) || (fromPort <= 3389 && toPort >= 3389) || protocol === "-1" || protocol === "all";
+        const isWorldOpen = cidr === "0.0.0.0/0" || cidr === "::/0";
+        
+        if (isWorldOpen && isSshOrRdp) {
           return {
             approved: false,
-            reason: `Opening port ${port} to ${cidr} creates a critical security vulnerability and is blocked by policy. Use AWS Systems Manager Session Manager or a specific CIDR range instead.`,
-            summary: `BLOCKED: Port ${port} to world`
+            reason: `Opening SSH/RDP ports (22/3389) to ${cidr} creates a critical security vulnerability and is blocked by policy. Use AWS Systems Manager Session Manager or a specific CIDR range instead.`,
+            summary: `BLOCKED: Admin ports to world`
           };
         }
       } catch {
         // Parse error, continue to LLM judge
       }
     }
+  }
+
+  // Read-only AWS API operations (prefix match only for get/list/describe)
+  const READ_ONLY_PREFIXES = ["get", "list", "describe"];
+  
+  // Exact-match safe operations (case-insensitive)
+  const SAFE_OPERATIONS = new Set([
+    "lookupevents",
+    "filterlogevents",
+    "startquery",
+    "getqueryresults",
+    "describelogstreams",
+    "simulateprincipalpolicy",
+    "simulatecustompolicy",
+    "generatecredentialreport",
+  ]);
+
+  // Tools that are always safe (read-only or simulation-only by design)
+  const SAFE_TOOLS = new Set([
+    "run_unified_audit",
+    "run_cost_anomaly_scan",
+    "run_drift_detection",
+    "run_org_query",
+    "run_attack_simulation",
+    "replay_cloudtrail_events",
+  ]);
+
+  // Preview-mode tools that server-enforce preview when !userHasConfirmedMutation
+  // ONLY these three have server-side preview enforcement
+  const PREVIEW_TOOLS = new Set([
+    "manage_security_group_rule",
+    "manage_iam_access",
+    "manage_cost_rule",
+  ]);
+
+  // Check if EVERY call in the batch is truly read-only or server-enforced preview
+  let allCallsAreSafe = true;
+
+  for (const tc of proposedToolCalls) {
+    const fnName = tc.function?.name || tc.name;
+    let thisCallIsSafe = false;
+
+    // Check if it's a safe tool
+    if (SAFE_TOOLS.has(fnName)) {
+      thisCallIsSafe = true;
+    }
+    // Check if it's a preview tool without confirmation (server enforces preview)
+    else if (PREVIEW_TOOLS.has(fnName) && !userHasConfirmedMutation) {
+      thisCallIsSafe = true;
+    }
+    // Check execute_aws_api operations
+    else if (fnName === "execute_aws_api") {
+      try {
+        const args = typeof tc.function?.arguments === "string"
+          ? JSON.parse(tc.function.arguments)
+          : (tc.function?.arguments || tc.arguments);
+        const op = (args?.operation || "").toLowerCase();
+        
+        // Check if operation is read-only (prefix match OR exact match)
+        const isReadOnly = READ_ONLY_PREFIXES.some(prefix => op.startsWith(prefix)) || SAFE_OPERATIONS.has(op);
+        if (isReadOnly) {
+          thisCallIsSafe = true;
+        }
+      } catch {
+        // Parse error - treat as potentially mutating
+        thisCallIsSafe = false;
+      }
+    }
+
+    // If this call is NOT safe, the whole batch must go to the judge
+    if (!thisCallIsSafe) {
+      allCallsAreSafe = false;
+      break;
+    }
+  }
+
+  // Fast path: skip judge ONLY when EVERY call is safe
+  if (allCallsAreSafe) {
+    return { 
+      approved: true, 
+      reason: "All calls are read-only, simulation-only, or server-enforced preview-only.",
+      summary: "Read-only/preview batch"
+    };
   }
 
   const auditorPrompt = `You are the CloudPilot Safety Gate Judge. Your role is to audit proposed AWS API tool calls to ensure they are safe, compliant, do not perform accidental or excessive over-deletion, and strictly match the user's intent.
@@ -2371,6 +2409,7 @@ interface OrgAccountSummary {
 interface OrgScopeResolution {
   scope: string;
   accounts: OrgAccountSummary[];
+  isStandaloneAccount?: boolean;
 }
 
 interface OrgBlastRadiusResult {
@@ -6489,6 +6528,18 @@ export const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders, status: 204 });
   }
 
+  // Health check endpoint (no auth required)
+  if (req.method === "GET" && new URL(req.url).pathname.endsWith("/health")) {
+    return new Response(
+      JSON.stringify({
+        status: "healthy",
+        service: "aws-agent",
+        ...getVersionMeta(),
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
@@ -6668,8 +6719,9 @@ export const handler = async (req: Request): Promise<Response> => {
 
         try {
           // ── Intent-based routing & Skills Engine ─────────────────────────────────
+          const versionMeta = getVersionMeta();
           liveExecutionLogs.push({ step: "Router", status: "info", message: "Evaluating query intent & skills engine..." });
-          sendMeta({ executionLogs: [...liveExecutionLogs] });
+          sendMeta({ executionLogs: [...liveExecutionLogs], gitSha: versionMeta.gitSha, buildTimestamp: versionMeta.buildTimestamp });
 
           let activeSkillData: { name: string; badge: string; description?: string; systemSupplement: string; allowedTools?: string[]; intentLabel?: string; isCustom?: boolean } | null = null;
 
@@ -6974,6 +7026,19 @@ export const handler = async (req: Request): Promise<Response> => {
                 liveExecutionLogs.push({ step: "Execution", status: "warning", message: `Skipping ${duplicateCount} duplicate tool call(s). All operations already attempted.` });
                 sendMeta({ executionLogs: [...liveExecutionLogs] });
                 
+                // Push synthetic tool_result blocks for all skipped duplicates to avoid Anthropic 400 error
+                for (const tc of responseMessage.tool_calls) {
+                  apiMessages.push({
+                    role: "tool",
+                    tool_call_id: tc.id,
+                    content: JSON.stringify({
+                      error: "Duplicate call skipped",
+                      errorClass: "DUPLICATE_CALL",
+                      message: "This operation was already attempted earlier in the conversation."
+                    })
+                  });
+                }
+                
                 // Force synthesis without more tool calls
                 const finalSynthesis = await getLLMResponse(apiMessages, [], "none", resolvedGeminiKey);
                 finalResponseText = finalSynthesis.content || "All requested operations have been completed. Please review the results above.";
@@ -6981,7 +7046,23 @@ export const handler = async (req: Request): Promise<Response> => {
                 break;
               }
               
+              // Push synthetic tool_result blocks for partial duplicates
               if (uniqueToolCalls.length < duplicateCount) {
+                const skippedCalls = responseMessage.tool_calls.filter((tc: any) => {
+                  const hash = getToolCallHash(tc);
+                  return calledToolsSet.has(hash) && !uniqueToolCalls.some((u: any) => getToolCallHash(u) === hash);
+                });
+                for (const tc of skippedCalls) {
+                  apiMessages.push({
+                    role: "tool",
+                    tool_call_id: tc.id,
+                    content: JSON.stringify({
+                      error: "Duplicate call skipped",
+                      errorClass: "DUPLICATE_CALL",
+                      message: "This operation was already attempted earlier in the conversation."
+                    })
+                  });
+                }
                 liveExecutionLogs.push({ step: "Execution", status: "info", message: `Filtered ${duplicateCount - uniqueToolCalls.length} duplicate call(s). Executing ${uniqueToolCalls.length} unique operation(s)...` });
               } else {
                 liveExecutionLogs.push({ step: "Execution", status: "info", message: `Executing AWS SDK commands on account...` });

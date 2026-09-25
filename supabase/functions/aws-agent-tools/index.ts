@@ -18,7 +18,7 @@ function getCorsHeaders(req: Request): Record<string, string> {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
     "Access-Control-Max-Age": "86400",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
@@ -28,6 +28,20 @@ function getCorsHeaders(req: Request): Record<string, string> {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+/**
+ * Constant-time string comparison to prevent timing attacks
+ */
+function constantTimeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
 
 const SCANNER_TOOLS = new Set([
   "run_unified_audit", "run_cost_anomaly_scan", "manage_cost_rule",
@@ -79,7 +93,7 @@ export const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
   
-  // Health check endpoint with version info
+  // Health check endpoint with version info (no auth required)
   if (req.method === "GET" && new URL(req.url).pathname.endsWith("/health")) {
     return new Response(
       JSON.stringify({
@@ -91,10 +105,25 @@ export const handler = async (req: Request): Promise<Response> => {
     );
   }
 
+  // SECURITY: Only aws-agent can call the POST endpoint (verified via service role key)
+  // This prevents direct calls from the public anon key from forging userId or userHasConfirmedMutation
+  const authHeader = req.headers.get("Authorization");
+  const bearerToken = authHeader?.replace(/^Bearer\s+/i, "");
+  
+  // Constant-time comparison to prevent timing attacks
+  if (!bearerToken || !constantTimeCompare(bearerToken, SERVICE_ROLE_KEY)) {
+    return new Response(
+      JSON.stringify({
+        error: "Unauthorized",
+        message: "This endpoint requires service role authentication.",
+      }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   try {
     const body = await req.json();
     const { toolCalls, ...rest } = body;
-    const authHeader = req.headers.get("Authorization");
 
     const scannerCalls = toolCalls.filter((tc: any) => SCANNER_TOOLS.has(tc.function.name));
     const opsCalls = toolCalls.filter((tc: any) => OPS_TOOLS.has(tc.function.name));
