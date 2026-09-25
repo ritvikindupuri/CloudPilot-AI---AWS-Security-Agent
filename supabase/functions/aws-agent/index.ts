@@ -6,6 +6,7 @@ import AWS from "https://esm.sh/aws-sdk@2.1693.0?target=deno";
 import { CloudWatchLogsClient, CreateLogGroupCommand, CreateLogStreamCommand, DescribeLogStreamsCommand, PutLogEventsCommand } from "https://esm.sh/@aws-sdk/client-cloudwatch-logs@3.744.0";
 import { STSClient, GetCallerIdentityCommand } from "https://esm.sh/@aws-sdk/client-sts@3.744.0";
 import { S3Client, CreateBucketCommand, PutObjectLockConfigurationCommand, PutPublicAccessBlockCommand, PutBucketEncryptionCommand, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.744.0";
+import { isToolResultError } from "./tool-result-classifier.ts";
 
 // SECURITY HARDENING: Strict CORS origin validation with allowlist
 const ALLOWED_ORIGINS = [
@@ -6817,17 +6818,11 @@ export const handler = async (req: Request): Promise<Response> => {
 
               const toolResults = await toolsResp.json();
               
-              // Check for ANY result with an error field (dispatch errors, AccessDenied, throttling, etc.)
+              // Check for errors using proper classification (handles validator warnings, non-JSON, etc.)
               const results = toolResults.results || [];
               const errorResults = results.filter((r: any) => {
-                try {
-                  const content = typeof r.content === 'string' ? JSON.parse(r.content) : r.content;
-                  // Count any result with a truthy error field as failed
-                  return !!content.error;
-                } catch {
-                  // If content is not parseable JSON, treat non-empty strings as potential errors
-                  return typeof r.content === 'string' && r.content.trim().length > 0;
-                }
+                const content = typeof r.content === 'string' ? r.content : JSON.stringify(r.content);
+                return isToolResultError(content);
               });
               
               const errorCount = errorResults.length;

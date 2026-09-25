@@ -45,46 +45,70 @@ The `aws-agent` function logs "AWS API batch successfully executed" immediately 
 ### Fix Applied
 **File**: `supabase/functions/aws-agent/index.ts` (line ~6819)
 
-Added comprehensive error detection logic before logging success:
+Added comprehensive error detection logic using a pure, testable classifier function:
+
+**New file**: `supabase/functions/aws-agent/tool-result-classifier.ts`
+
+Extracted error detection into a pure function with proper handling of edge cases:
 
 ```typescript
-// Check for ANY result with an error field (dispatch errors, AccessDenied, throttling, etc.)
-const results = toolResults.results || [];
-const errorResults = results.filter((r: any) => {
+export function isToolResultError(resultContent: string): boolean {
+  // 1. If content parses as JSON and has truthy error field, it's an error
   try {
-    const content = typeof r.content === 'string' ? JSON.parse(r.content) : r.content;
-    // Count any result with a truthy error field as failed
+    const content = JSON.parse(resultContent);
     return !!content.error;
   } catch {
-    // If content is not parseable JSON, treat non-empty strings as potential errors
-    return typeof r.content === 'string' && r.content.trim().length > 0;
+    // Not valid JSON, continue to other checks
   }
-});
 
-const errorCount = errorResults.length;
-const totalCount = results.length;
+  // 2. Strip [VALIDATOR WARNING: ...] prefix if present and try parsing again
+  const validatorWarningMatch = resultContent.match(/^\[VALIDATOR WARNING:.*?\]\n\n/s);
+  if (validatorWarningMatch) {
+    const withoutPrefix = resultContent.slice(validatorWarningMatch[0].length);
+    try {
+      const content = JSON.parse(withoutPrefix);
+      return !!content.error;
+    } catch {
+      // Still not JSON after stripping prefix
+    }
+  }
 
-if (errorCount === totalCount && totalCount > 0) {
-  // Log as error: all failed
-  status: "error", 
-  message: `AWS API batch failed: all ${totalCount} tool call(s) returned errors.`
-} else if (errorCount > 0) {
-  // Log as warning: partial failure
-  status: "warning", 
-  message: `AWS API batch partially failed: ${errorCount} of ${totalCount} tool call(s) returned errors.`
-} else {
-  // Log as success: all succeeded
-  status: "success", 
-  message: `AWS API batch successfully executed (${totalCount} result(s) returned).`
+  // 3. Non-JSON content is only an error if it clearly looks like an error
+  const errorPatterns = [
+    /^\{"error"/i,           // Starts with {"error"
+    /^Error:/i,              // Starts with "Error:"
+    /^Tool dispatch error/i, // Tool dispatch errors
+    /^AccessDenied/i,        // AWS AccessDenied errors
+    /^Unauthorized/i,        // Unauthorized errors
+  ];
+
+  for (const pattern of errorPatterns) {
+    if (pattern.test(resultContent.trim())) {
+      return true;
+    }
+  }
+
+  // 4. Default non-JSON content to success
+  return false;
 }
 ```
 
 **Key improvements:**
 - Detects ANY result with a truthy `error` field (not just specific error types)
+- Properly handles HIGH_RISK calls with `[VALIDATOR WARNING: ...]` prefix from aws-agent-scanner
 - Catches AccessDenied, throttling errors, tool dispatch errors, auth conflicts, and any other failures
 - Safely handles missing `toolResults.results` (defaults to empty array)
-- Handles non-JSON error strings gracefully
+- **Defaults non-JSON content to success** (fixes regression where truncated/non-JSON success results were logged as errors)
+- Handles truncated results like `{"buckets": [... (truncated)`
+- Only treats non-JSON as error if it clearly matches error patterns
 - Never logs success when calls have actually failed
+
+**Testing:**
+Added comprehensive test suite in `tool-result-classifier.test.ts` (Deno) and `tool-result-classifier-node.test.js` (Node.js) with 11 test cases covering:
+- JSON with/without error fields
+- Validator warning prefix with success/error/non-JSON
+- Non-JSON error patterns vs success patterns
+- Edge cases and real-world examples
 
 ## Nice to Have: Evaluation Script Improvement
 
