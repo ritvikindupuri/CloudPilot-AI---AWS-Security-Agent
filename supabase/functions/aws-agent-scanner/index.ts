@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { requireServiceRole } from "../_shared/internal-auth.ts";
 
 // SECURITY HARDENING: Strict CORS origin validation with allowlist
 const ALLOWED_ORIGINS = [
@@ -428,6 +429,7 @@ interface OrgAccountSummary {
 interface OrgScopeResolution {
   scope: string;
   accounts: OrgAccountSummary[];
+  isStandaloneAccount?: boolean;
 }
 
 interface OrgBlastRadiusResult {
@@ -2473,6 +2475,13 @@ export const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // SECURITY: Only aws-agent-tools can call this endpoint (verified via service role key)
+  // This prevents direct calls from the public anon key from forging userId or userHasConfirmedMutation
+  const authError = requireServiceRole(req, ENV.supabaseServiceRoleKey, corsHeaders, "aws-agent-scanner");
+  if (authError) {
+    return authError;
+  }
+
   const clientIp = req.headers.get("x-forwarded-for") || "unknown";
   if (!checkRateLimit(clientIp)) {
     return new Response(
@@ -2491,17 +2500,55 @@ export const handler = async (req: Request): Promise<Response> => {
           if (toolCall.function.name === "manage_cost_rule") {
             const startTime = Date.now();
             try {
-              if (!userId) {
-                throw new Error("Authentication is required to store cost automation rules.");
-              }
-
               const rawArgs = JSON.parse(toolCall.function.arguments);
               const rawQuery = sanitizeString(rawArgs.rawQuery, 2000);
+              const mode = rawArgs.mode || "preview"; // Default to preview mode
+              
               if (!rawQuery) {
                 throw new Error("A raw cost rule query is required.");
               }
 
               const rule = parseCostRuleFromQuery(rawQuery, notificationEmail || null);
+              
+              // Check if this is an auto-stop rule requiring explicit confirmation
+              const isAutoStop = rule.action === "auto_stop_idle_ec2";
+              const latestMsgLower = (latestUserMessage || "").toLowerCase();
+              const hasAutoStopConfirmation = latestMsgLower.includes("auto-stop") || latestMsgLower.includes("auto stop");
+              
+              // Preview-only mode (safe without user confirmation)
+              // Strict: only apply when mode === "apply" AND userHasConfirmedMutation === true AND userId
+              const shouldApply = mode === "apply" && userHasConfirmedMutation === true && userId;
+              
+              if (!shouldApply || (isAutoStop && !hasAutoStopConfirmation)) {
+                const execTime = Date.now() - startTime;
+                let previewMessage = "Cost rule preview generated. This rule has NOT been saved.";
+                
+                if (isAutoStop && !hasAutoStopConfirmation) {
+                  previewMessage += " To save this auto-stop rule, send an explicit confirmation that includes 'confirm auto-stop' or 'confirm auto stop'.";
+                } else {
+                  previewMessage += " To save this rule, send an explicit confirmation message with mode=apply.";
+                }
+                
+                apiMessages.push({
+                  role: "tool",
+                  tool_call_id: toolCall.id,
+                  content: JSON.stringify({
+                    status: "preview_only",
+                    applied: false,
+                    message: previewMessage,
+                    rule,
+                    riskLevel: isAutoStop ? "HIGH — Automatic resource termination" : "MEDIUM — Monitoring and alerts",
+                    executionTimeMs: execTime,
+                  }),
+                } as any);
+                continue;
+              }
+              
+              // Apply mode (requires authentication and confirmation)
+              if (!userId) {
+                throw new Error("Authentication is required to store cost automation rules. Please sign in to CloudPilot.");
+              }
+
               await saveCostRule(supabaseAdmin, userId, rule);
               const execTime = Date.now() - startTime;
 
@@ -2522,7 +2569,9 @@ export const handler = async (req: Request): Promise<Response> => {
                 tool_call_id: toolCall.id,
                 content: JSON.stringify({
                   status: "stored",
+                  message: "Cost rule has been saved and is now active.",
                   rule,
+                  applied: true,
                 }),
               } as any);
             } catch (err: any) {

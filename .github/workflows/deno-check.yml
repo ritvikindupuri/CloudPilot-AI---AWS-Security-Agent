@@ -1,0 +1,53 @@
+name: Deno Type Check and Tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['main']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type check edge functions
+        run: |
+          echo "Type checking aws-agent..."
+          deno check supabase/functions/aws-agent/index.ts
+          
+          echo "Type checking aws-agent-tools..."
+          deno check supabase/functions/aws-agent-tools/index.ts
+          
+          echo "Type checking aws-agent-scanner..."
+          deno check supabase/functions/aws-agent-scanner/index.ts
+          
+          echo "Type checking aws-agent-ops..."
+          deno check supabase/functions/aws-agent-ops/index.ts
+          
+          echo "Type checking aws-executor..."
+          deno check supabase/functions/aws-executor/index.ts
+          
+          echo "All type checks passed!"
+
+      - name: Run classifier tests
+        run: |
+          echo "Running Deno tests..."
+          deno test --allow-env supabase/functions/_shared/tool-result-classifier.test.ts
+          
+          echo "Running Node.js compatibility tests..."
+          deno test --allow-env supabase/functions/aws-agent/tool-result-classifier.test.ts
+          
+          echo "All tests passed!"
+
+      - name: Summary
+        if: success()
+        run: echo "✅ All Deno type checks and tests passed successfully!"

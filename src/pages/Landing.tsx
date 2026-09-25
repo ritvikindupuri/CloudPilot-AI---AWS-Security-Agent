@@ -702,7 +702,7 @@ const Landing = () => {
             transition={{ duration: 0.5 }}
             className="max-w-2xl mb-12 text-center lg:text-left"
           >
-            <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-[#f5f5f7]">25+ One-Click Security Playbooks</h2>
+            <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-[#f5f5f7]">68 One-Click Security Playbooks</h2>
             <p className="text-[#86868b] text-xs font-normal mt-2 leading-relaxed">
               No prompt engineering required. Launch specialized AWS security audits, compliance evaluations, and red-teaming simulations with a single click.
             </p>
