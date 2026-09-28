@@ -271,9 +271,10 @@ The fastest way to get started. Docker handles all dependencies (Node.js, Deno, 
 #### 1. Clone the Repository
 
 ```sh
-git clone <https://github.com/ritvikindupuri/aws-guardian-buddy.git>
-cd <aws-guardian-buddy>
+git clone https://github.com/ritvikindupuri/CloudPilot-AI---AWS-Security-Agent.git
+cd CloudPilot-AI---AWS-Security-Agent
 ```
+
 
 #### 2. Configure Environment Variables
 
@@ -326,13 +327,14 @@ Run directly on your machine using Node.js and npm.
 #### 1. Clone & Install Dependencies
 
 ```sh
-git clone <https://github.com/ritvikindupuri/aws-guardian-buddy.git>
-cd <aws-guardian-buddy>
+git clone https://github.com/ritvikindupuri/CloudPilot-AI---AWS-Security-Agent.git
+cd CloudPilot-AI---AWS-Security-Agent
 
 npm install
 # or
 bun install
 ```
+
 
 #### 2. Configure Environment Variables
 
@@ -358,6 +360,33 @@ bun run dev
 This launches both the React Vite frontend and the local Deno server gateway concurrently. Open **http://localhost:8080** in your browser. All database states are persisted in your local `cloudpilot.db` SQLite file.
 
 ---
+
+### Option C: 1-Click AWS Evaluation Sandbox & Automated Batch Test Suite
+
+To evaluate all built-in Quick Action prompts without manual clicking or risking production cloud assets:
+
+1. **Deploy 1-Click Sandbox Stack (Free Tier Compatible, $0 Cost):**
+   ```bash
+   aws cloudformation create-stack \
+     --stack-name cloudpilot-eval-sandbox \
+     --template-body file://cloudformation/sandbox-test-stack.yaml \
+     --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
+   ```
+   *Pre-populates test S3 buckets, open Security Groups, IAM roles with wildcard policies, and a `t2.micro` EC2 instance in `us-east-1` in under 2 minutes.*
+
+2. **Run Automated Batch Evaluator Across All Prompts:**
+   ```bash
+   npm run eval:quick-actions
+   ```
+   *Programmatically evaluates all Quick Action prompts, validating intent classification, persona injection, tool allowlists, and Safety Gate approvals with 0 runtime exceptions.*
+
+3. **1-Click Teardown (When Finished):**
+   ```bash
+   aws cloudformation delete-stack --stack-name cloudpilot-eval-sandbox
+   ```
+
+---
+
 
 ## How to Use CloudPilot AI
 
