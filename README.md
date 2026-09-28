@@ -242,12 +242,13 @@ This approach is simpler than AWS EventBridge because it runs inside the databas
 
 ## Tech Stack
 
-- **Frontend:** React, TypeScript, Vite, Tailwind CSS, shadcn-ui, Framer Motion
-- **Backend / API:** Local Deno Gateway (`local-server.ts`), running Edge Function modules locally on port 54321
-- **Database / Auth:** Mocked locally using browser `localStorage` and client-side session handlers
-- **AI Model:** Anthropic Claude Sonnet 5 (via official API)
-- **Cloud Integration:** AWS SDK for JavaScript v3 (35+ services)
-- **Containerization:** Docker & Docker Compose (single-command setup)
+- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui, Framer Motion
+- **Backend & Compute:** Supabase Edge Functions (Deno runtime in cloud) / Local Deno Server (`local-server.ts`)
+- **Database & Auth:** Supabase (PostgreSQL with RLS & GoTrue Auth) in cloud / SQLite relational database (`cloudpilot.db` with PBKDF2 password hashing) in local dev
+- **AI Models & Orchestration:** Anthropic Claude Sonnet 5 (Fast Scan) & Claude Opus 5 (Deep Audit) with ReAct agentic loop
+- **Cloud Integration:** AWS SDK for JavaScript v3 (35+ services across IAM, S3, EC2, VPC, CloudTrail, CloudWatch, GuardDuty)
+- **Containerization & IaC:** Docker, Docker Compose, AWS CloudFormation & Terraform (In-VPC Stack)
+
 
 ---
 
