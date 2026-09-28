@@ -70,8 +70,11 @@
 
 The architecture also shows two supporting components that operate alongside the main request path:
 
-- **User Interface:** chat, pre-built security workflows, and AWS credential controls feed requests and configuration into the pipeline.
-- **Data & State:** `cloudpilot.db` (SQLite) persists application state such as conversations, messages, runbooks, and compliance baselines.
+- **User Interface:** Chat console, pre-built security workflows, and AWS credential controls feed requests and configuration into the pipeline.
+- **Data & State (Dual-Mode Database Architecture):**
+  - **Production (Cloud):** Connects to **Supabase (PostgreSQL)** utilizing Supabase GoTrue Auth (JWTs), Row-Level Security (RLS) policies, and hosted Edge Functions.
+  - **Local Development / Docker:** Uses a local Deno gateway (`local-server.ts`) that provides a zero-dependency **Supabase Auth & PostgREST emulation layer** backed by a local SQLite database (`cloudpilot.db`).
+  - **Unified Client SDK:** The React frontend uses the official `@supabase/supabase-js` client identically in both environments without code changes (`supabase.from('messages').select(...)`, `supabase.auth.signInWithPassword(...)`).
 
 ---
 
