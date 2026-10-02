@@ -121,8 +121,10 @@ export const handler = async (req: Request): Promise<Response> => {
       }),
     }));
 
-    const scannerResults = await dispatch(scannerCalls, "aws-agent-scanner", rest, serviceKey);
-    const opsResults = await dispatch(opsCalls, "aws-agent-ops", rest, serviceKey);
+    const [scannerResults, opsResults] = await Promise.all([
+      dispatch(scannerCalls, "aws-agent-scanner", rest, serviceKey),
+      dispatch(opsCalls, "aws-agent-ops", rest, serviceKey),
+    ]);
 
     const results = [...scannerResults, ...opsResults, ...unknownResults];
 

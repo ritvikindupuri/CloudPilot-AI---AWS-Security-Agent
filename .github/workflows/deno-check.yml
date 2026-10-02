@@ -19,6 +19,20 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Lint edge functions for syntax errors
+        run: |
+          echo "Linting edge functions for syntax errors..."
+          for func in aws-agent aws-agent-tools aws-agent-scanner aws-agent-ops aws-executor; do
+            echo "Linting $func..."
+            output=$(deno lint supabase/functions/$func/index.ts 2>&1 || true)
+            echo "$output"
+            if echo "$output" | grep -qi "SyntaxError"; then
+              echo "❌ SyntaxError detected in $func"
+              exit 1
+            fi
+          done
+          echo "✅ No syntax errors found"
+
       - name: Type check edge functions
         run: |
           echo "Type checking aws-agent..."
@@ -37,6 +51,25 @@ jobs:
           deno check supabase/functions/aws-executor/index.ts
           
           echo "All type checks passed!"
+
+      - name: Boot smoke test edge functions
+        run: |
+          for func in aws-agent aws-agent-tools aws-agent-scanner aws-agent-ops; do
+            echo "Testing $func boot..."
+            rc=0
+            output=$(cd supabase/functions/$func && NO_COLOR=1 SUPABASE_URL=https://example.supabase.co \
+              SUPABASE_SERVICE_ROLE_KEY=dummy SUPABASE_ANON_KEY=dummy \
+              timeout 20 deno run -A --quiet index.ts 2>&1) || rc=$?
+            if grep -qE 'SyntaxError|error: Uncaught' <<<"$output"; then
+              echo "FAIL: $func threw at boot:"; echo "$output" | tail -20; exit 1
+            fi
+            if [ "$rc" -ne 124 ]; then
+              echo "FAIL: $func exited with code $rc before the 20s timeout (expected 124 = still serving)"
+              echo "$output" | tail -20; exit 1
+            fi
+            echo "OK: $func booted"
+          done
+          echo "All functions boot successfully"
 
       - name: Run classifier tests
         run: |

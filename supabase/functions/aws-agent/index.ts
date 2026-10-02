@@ -1887,7 +1887,7 @@ const IAM_BLOCKED_ACTIONS = new Set([
 const IAM_CONFIRM_PATTERNS = [
   /^confirm$/i,
   /^confirm\s+apply$/i,
-  /^confirm\s+auto[- ]?stop$/i,
+  /^confirm\s*auto[- ]?stop$/i,
   /^apply$/i,
   /^proceed$/i,
   /^approved?$/i,
