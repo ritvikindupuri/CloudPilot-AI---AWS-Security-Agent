@@ -3,20 +3,13 @@ title = "CloudPilot"
 [extend]
 useDefault = true
 
-# Current-tree scan: placeholders only. Do not allowlist whole docs files.
-
-[[rules]]
-id = "placeholder-supabase-publishable"
-description = "Documentation placeholders"
-regex = '''sb_publishable_\.\.\.'''
+# Current-tree scan: placeholders only. Do not allowlist whole documentation files.
 
 [allowlist]
+regexTarget = "match"
 regexes = [
   '''sb_publishable_\.\.\.''',
+  '''sb_publishable_PLACEHOLDER''',
   '''xoxb-example''',
   '''AKIAEXAMPLE''',
-]
-paths = [
-  '''.*\.test\.ts$''',
-  '''.*\.test\.tsx$''',
 ]
