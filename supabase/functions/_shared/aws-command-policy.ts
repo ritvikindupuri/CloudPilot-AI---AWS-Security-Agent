@@ -153,6 +153,9 @@ export const PASSROLE_COMBO_OPS: Record<string, Set<string>> = {
     "runinstances",
     "associateiaminstanceprofile",
     "replaceiaminstanceprofileassociation",
+    "createlaunchtemplate",
+    "createlaunchtemplateversion",
+    "modifylaunchtemplate",
   ]),
   LAMBDA: new Set([
     "updatefunctionconfiguration",
@@ -196,7 +199,7 @@ const PASSROLE_PARAM_KEYS = new Set([
 /** Secret-returning reads: not auto-allowed even though they match Get*. */
 const SECRET_RETURNING_READS: Record<string, Set<string>> = {
   SECRETSMANAGER: new Set(["getsecretvalue"]),
-  SSM: new Set(["getparameter", "getparameters", "getparametersbypath"]),
+  SSM: new Set(["getparameter", "getparameters", "getparametersbypath", "getparameterhistory"]),
   ECR: new Set(["getauthorizationtoken"]),
   EC2: new Set(["getpassworddata"]),
   LAMBDA: new Set(["getfunction"]),
@@ -308,10 +311,24 @@ function isGuardDutyDisable(params: unknown): boolean {
 
 function isSsmDecryptRead(operation: string, params: unknown): boolean {
   const op = normalizeOperation(operation).toLowerCase();
-  if (!["getparameter", "getparameters", "getparametersbypath"].includes(op)) return false;
+  if (!["getparameter", "getparameters", "getparametersbypath", "getparameterhistory"].includes(op)) return false;
   if (!params || typeof params !== "object") return false;
   const p = params as Record<string, unknown>;
   return p.WithDecryption === true || p.withDecryption === true;
+}
+
+export function callerAccountMatchesPending(
+  callerAccount: string | undefined | null,
+  pendingAccount: string | undefined | null,
+): boolean {
+  const caller = String(callerAccount || "").trim();
+  const pending = String(pendingAccount || "").trim();
+  if (!/^\d{12}$/.test(caller) || !/^\d{12}$/.test(pending)) return false;
+  return caller === pending;
+}
+
+export interface PlatformAllowlistContext {
+  targetAccountId?: string | null;
 }
 
 export function isSecretReturningRead(service: string, operation: string, params?: unknown): boolean {
@@ -406,14 +423,41 @@ export function classifyAwsOperation(
   };
 }
 
-function snsTopicAllowed(nameOrArn: string): boolean {
-  const value = String(nameOrArn || "");
+function parseSnsTopicArn(value: string): { accountId: string; name: string } | null {
+  const match = /^arn:aws:sns:[a-z0-9-]+:(\d{12}):(.+)$/i.exec(String(value || "").trim());
+  if (!match) return null;
+  return { accountId: match[1], name: match[2] };
+}
+
+function snsTopicNameAllowed(name: string, targetAccountId?: string | null): boolean {
+  const topic = String(name || "").trim();
+  if (!topic) return false;
+  if (topic === PLATFORM_SNS_ALERT_TOPIC) return true;
+  if (targetAccountId) return topic === `${PLATFORM_SNS_TOPIC_PREFIX}${targetAccountId}`;
+  return topic.startsWith(PLATFORM_SNS_TOPIC_PREFIX);
+}
+
+function snsTopicAllowed(nameOrArn: string, targetAccountId?: string | null): boolean {
+  const value = String(nameOrArn || "").trim();
   if (!value) return false;
-  if (value === PLATFORM_SNS_ALERT_TOPIC) return true;
-  if (value.includes(`:${PLATFORM_SNS_ALERT_TOPIC}`) || value.endsWith(PLATFORM_SNS_ALERT_TOPIC)) return true;
-  if (value.startsWith(PLATFORM_SNS_TOPIC_PREFIX)) return true;
-  if (value.includes(`:${PLATFORM_SNS_TOPIC_PREFIX}`)) return true;
-  return false;
+  const arn = parseSnsTopicArn(value);
+  if (arn) {
+    if (!targetAccountId || arn.accountId !== targetAccountId) return false;
+    return snsTopicNameAllowed(arn.name, targetAccountId);
+  }
+  if (value.toLowerCase().startsWith("arn:")) return false;
+  return snsTopicNameAllowed(value, targetAccountId);
+}
+
+function publicAccessBlockFullyEnabled(params: Record<string, unknown>): boolean {
+  const cfg = (params.PublicAccessBlockConfiguration || params.publicAccessBlockConfiguration) as
+    | Record<string, unknown>
+    | undefined;
+  if (!cfg || typeof cfg !== "object") return false;
+  return cfg.BlockPublicAcls === true
+    && cfg.IgnorePublicAcls === true
+    && cfg.BlockPublicPolicy === true
+    && cfg.RestrictPublicBuckets === true;
 }
 
 function auditBucketAllowed(bucket: string): boolean {
@@ -425,11 +469,13 @@ export function isPlatformAllowlisted(
   service: string,
   operation: string,
   params?: unknown,
+  ctx?: PlatformAllowlistContext,
 ): boolean {
   if (purpose !== "audit" && purpose !== "notify" && purpose !== "autofix") return false;
   const svc = String(service || "").toUpperCase();
   const op = normalizeOperation(operation).toLowerCase();
   const p = (params && typeof params === "object") ? params as Record<string, unknown> : {};
+  const targetAccountId = ctx?.targetAccountId || null;
 
   if (purpose === "audit") {
     if (svc === "STS" && op === "getcalleridentity") return true;
@@ -441,6 +487,7 @@ export function isPlatformAllowlisted(
     if (svc === "S3") {
       const bucket = String(p.Bucket || p.bucket || "");
       if (["createbucket", "putobject", "putobjectlockconfiguration", "putpublicaccessblock", "putbucketencryption"].includes(op)) {
+        if (op === "putpublicaccessblock" && !publicAccessBlockFullyEnabled(p)) return false;
         return auditBucketAllowed(bucket);
       }
     }
@@ -450,9 +497,9 @@ export function isPlatformAllowlisted(
   if (purpose === "notify") {
     if (svc === "STS" && op === "getcalleridentity") return true;
     if (svc === "SNS") {
-      if (op === "createtopic") return snsTopicAllowed(String(p.Name || p.name || ""));
+      if (op === "createtopic") return snsTopicAllowed(String(p.Name || p.name || ""), targetAccountId);
       if (["subscribe", "publish", "listsubscriptionsbytopic"].includes(op)) {
-        return snsTopicAllowed(String(p.TopicArn || p.topicArn || ""));
+        return snsTopicAllowed(String(p.TopicArn || p.topicArn || ""), targetAccountId);
       }
       if (op === "listtopics") return true;
     }
@@ -460,7 +507,9 @@ export function isPlatformAllowlisted(
   }
 
   // autofix: standing user-configured policy; still refuse BLOCKED ops via classify first.
-  if (svc === "S3" && op === "putpublicaccessblock") return typeof (p.Bucket || p.bucket) === "string";
+  if (svc === "S3" && op === "putpublicaccessblock") {
+    return typeof (p.Bucket || p.bucket) === "string" && String(p.Bucket || p.bucket).length > 0 && publicAccessBlockFullyEnabled(p);
+  }
   if (svc === "S3" && op === "putbucketencryption") return typeof (p.Bucket || p.bucket) === "string";
   if (svc === "CLOUDTRAIL" && op === "startlogging") return true;
   if (svc === "EC2" && op === "revokesecuritygroupingress") return true;

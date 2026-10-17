@@ -24,21 +24,26 @@ Names only. Never paste secret values into tickets, chat, or git.
 
 Frontend may only expose `VITE_SUPABASE_URL` and the publishable anon key.
 
-## 2. Migrations
+## 2. Migrations (must be applied before deploying functions)
 
-Apply in order, including:
+Apply **all** migrations, in filename order, **before** deploying Edge Functions. The database-backed limiter (`rate_limit_hit`) **fails closed**: if the RPC is missing or `service_role` cannot execute it, `aws-agent`, `guardian-scheduler`, and related functions return **429**. Deploying functions first will lock users out until migrations land.
 
 ```text
 supabase/migrations/20261017120000_enterprise_security_hardening.sql
 supabase/migrations/20261017200000_pending_binding_rate_limit_org_members.sql
+supabase/migrations/20261017210000_revoke_anon_rate_limit_and_last_owner.sql
 ```
 
 The second migration binds pending AWS actions to a stored credential/account, adds the atomic `rate_limit_hit` RPC, and restricts `org_members` so only owners can manage `owner`/`admin` rows (admins may manage `member`/`viewer` only; the last owner cannot be deleted).
+
+The third migration revokes `EXECUTE` on `rate_limit_hit` and `cleanup_rate_limit_entries` from `anon` and `authenticated` (Supabase default grants survive `REVOKE FROM PUBLIC`) and grants those RPCs only to `service_role`. It also revokes `is_org_member` / `get_org_role` from `anon`, qualifies `org_members.org_id` in the first-owner INSERT policy, and blocks last-owner self-demotion.
 
 ```bash
 supabase db push
 # or: npm run db:push
 ```
+
+Do not skip this step. Then deploy functions (section 6).
 
 Verify in SQL:
 
@@ -104,10 +109,22 @@ supabase functions deploy aws-agent aws-agent-tools aws-agent-scanner aws-agent-
 
 - Unauthenticated `POST /functions/v1/aws-agent` → 401.
 - `aws-executor` with anon JWT → 401.
+- Anon must **not** be able to hit the rate-limit RPC (expect 401/403, never 200):
+
+```bash
+curl -sS -o /tmp/rl.json -w "%{http_code}\n" \
+  "$SUPABASE_URL/rest/v1/rpc/rate_limit_hit" \
+  -H "apikey: $SUPABASE_ANON_KEY" \
+  -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"p_key":"probe","p_max":1,"p_window_seconds":60}'
+# HTTP status must not be 200. Body must not include "allowed":
+```
+
 - Connect via role ARN + ExternalId; chat a read-only question.
 - Ask the agent to `CreateAccessKey` → blocked.
 - Ask for a security-group mutation → pending row with **full parameters and account id**; Approve in UI runs against the stored credential; Reject works.
-- Secret reads (`GetSecretValue`, SSM `GetParameter` with `WithDecryption`) → pending, not auto-run.
+- Secret reads (`GetSecretValue`, SSM `GetParameter`/`GetParameterHistory` with `WithDecryption`) → pending, not auto-run.
 - Register a webhook URL `http://127.0.0.1/` or `https://[fe80::1]/` → rejected.
 - `npm run build` and vitest are required CI checks on this repository.
 

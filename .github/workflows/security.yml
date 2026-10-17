@@ -19,6 +19,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Check migrations enable RLS
         run: node scripts/check-rls.mjs
+      - name: Check SECURITY DEFINER function grants
+        run: node scripts/check-function-grants.mjs
 
   gitleaks:
     name: Secret scanning

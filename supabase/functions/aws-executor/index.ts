@@ -2,7 +2,13 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { requireServiceRole } from "../_shared/internal-auth.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { classifyAwsOperation, isPlatformAllowlisted, sanitizeAwsClientConfig, type PlatformPurpose } from "../_shared/aws-command-policy.ts";
+import {
+  callerAccountMatchesPending,
+  classifyAwsOperation,
+  isPlatformAllowlisted,
+  sanitizeAwsClientConfig,
+  type PlatformPurpose,
+} from "../_shared/aws-command-policy.ts";
 import { GENERIC_ERRORS, logInternalError } from "../_shared/generic-error.ts";
 import { consumeApprovedAction } from "../_shared/pending-aws-actions.ts";
 
@@ -116,6 +122,19 @@ function json(req: Request, body: unknown, status = 200): Response {
   });
 }
 
+async function getCallerAccount(normalizedConfig: {
+  region?: string;
+  credentials?: { accessKeyId: string; secretAccessKey: string; sessionToken?: string };
+}): Promise<string> {
+  const stsMod = await loadAwsModule("STS");
+  const ClientClass = stsMod.STSClient;
+  const CommandClass = stsMod.GetCallerIdentityCommand;
+  if (!ClientClass || !CommandClass) return "";
+  const client = new ClientClass({ ...normalizedConfig, maxAttempts: 4 });
+  const ident = await client.send(new CommandClass({}));
+  return String(ident?.Account || "");
+}
+
 export const handler = async (req: Request): Promise<Response> => {
   const corsHeaders = getCorsHeaders(req);
 
@@ -143,8 +162,32 @@ export const handler = async (req: Request): Promise<Response> => {
     if (decision.riskLevel === "BLOCKED") {
       return json(req, { error: GENERIC_ERRORS.mutationBlocked }, 403);
     }
+
+    const sanitized = sanitizeAwsClientConfig(config);
+    const globalBillingServices = new Set(["CostExplorer", "Budgets"]);
+    const normalizedConfig = {
+      ...sanitized,
+      region: globalBillingServices.has(decision.normalizedService) ? "us-east-1" : sanitized.region,
+    };
+
+    let callerAccount = "";
+    const ensureCallerAccount = async (): Promise<string> => {
+      if (!callerAccount) callerAccount = await getCallerAccount(normalizedConfig);
+      return callerAccount;
+    };
+
     const purpose = platformPurpose as PlatformPurpose | undefined;
-    const platformOk = isPlatformAllowlisted(purpose, effectiveService, effectiveCommand, effectiveParams);
+    const allowlistCtx = { targetAccountId: undefined as string | undefined };
+    if (purpose === "notify" && String(effectiveService || "").toUpperCase() === "SNS" && decision.requiresApproval) {
+      allowlistCtx.targetAccountId = await ensureCallerAccount();
+    }
+    const platformOk = isPlatformAllowlisted(
+      purpose,
+      effectiveService,
+      effectiveCommand,
+      effectiveParams,
+      allowlistCtx,
+    );
     if (decision.requiresApproval && !platformOk) {
       if (!approvalId || !userId) {
         return json(req, { error: GENERIC_ERRORS.approvalRequired }, 403);
@@ -164,6 +207,13 @@ export const handler = async (req: Request): Promise<Response> => {
       effectiveService = approved.record.service;
       effectiveCommand = approved.record.operation;
       effectiveParams = approved.params;
+      const pendingAccount = approved.record.account_id;
+      if (pendingAccount) {
+        const account = await ensureCallerAccount();
+        if (!callerAccountMatchesPending(account, pendingAccount)) {
+          return json(req, { error: GENERIC_ERRORS.approvalInvalid }, 403);
+        }
+      }
       decision = classifyAwsOperation(effectiveService, effectiveCommand, effectiveParams);
       if (decision.riskLevel === "BLOCKED") {
         return json(req, { error: GENERIC_ERRORS.mutationBlocked }, 403);
@@ -171,13 +221,6 @@ export const handler = async (req: Request): Promise<Response> => {
     }
 
     const mod = await loadAwsModule(decision.normalizedService);
-    const sanitized = sanitizeAwsClientConfig(config);
-    const globalBillingServices = new Set(["CostExplorer", "Budgets"]);
-    const normalizedConfig = {
-      ...sanitized,
-      region: globalBillingServices.has(decision.normalizedService) ? "us-east-1" : sanitized.region,
-    };
-
     const clientName = V3_CLIENT_NAMES[decision.normalizedService] || `${decision.normalizedService}Client`;
     const ClientClass = mod[clientName];
     if (!ClientClass) {

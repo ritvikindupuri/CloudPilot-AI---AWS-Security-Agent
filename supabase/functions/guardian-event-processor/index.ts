@@ -1,11 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import AWS from "https://esm.sh/aws-sdk@2.1693.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { constantTimeCompare } from "../_shared/internal-auth.ts";
 import { resolveAwsConfigForUser } from "../_shared/customer-aws.ts";
-import { classifyAwsOperation, isPlatformAllowlisted, sanitizeAwsClientConfig } from "../_shared/aws-command-policy.ts";
+import {
+  classifyAwsOperation,
+  isPlatformAllowlisted,
+  sanitizeAwsClientConfig,
+  type PlatformPurpose,
+} from "../_shared/aws-command-policy.ts";
 import { isLegacyKeysEnabled } from "../_shared/vault-crypto.ts";
 import { GENERIC_ERRORS, logInternalError } from "../_shared/generic-error.ts";
 
@@ -148,37 +152,49 @@ async function resolveUserId(req: Request, body: any, supabaseAdmin: any): Promi
   throw new Error("Unauthorized event-processor request.");
 }
 
-async function getAwsAccountId(awsConfig: any): Promise<string> {
-  const sts = new AWS.STS(awsConfig);
-  const identity = await sts.getCallerIdentity({}).promise();
-  if (!identity.Account) throw new Error("Unable to resolve AWS account ID.");
-  return identity.Account;
+async function getAwsAccountId(awsConfig: Record<string, unknown>): Promise<string> {
+  const identity = await invokeExecutor("STS", "GetCallerIdentityCommand", awsConfig, {}, "audit");
+  const account = String((identity as { Account?: string } | null)?.Account || "");
+  if (!account) throw new Error("Unable to resolve AWS account ID.");
+  return account;
 }
 
-async function ensureAlertTopicAndSubscription(awsConfig: any, notificationEmail: string) {
-  const sns = new AWS.SNS(awsConfig);
+async function ensureAlertTopicAndSubscription(awsConfig: Record<string, unknown>, notificationEmail: string) {
   const accountId = await getAwsAccountId(awsConfig);
-  const topic = await sns.createTopic({ Name: `cloudpilot-alerts-${accountId}` }).promise();
-  if (!topic.TopicArn) throw new Error("Failed to create SNS topic.");
-  const subscriptions = await sns.listSubscriptionsByTopic({ TopicArn: topic.TopicArn }).promise();
-  const existing = (subscriptions.Subscriptions || []).find(
-    (subscription) => subscription.Protocol === "email" && subscription.Endpoint === notificationEmail,
+  const topic = await invokeExecutor("SNS", "CreateTopicCommand", awsConfig, {
+    Name: `cloudpilot-alerts-${accountId}`,
+  }, "notify", accountId) as { TopicArn?: string };
+  if (!topic?.TopicArn) throw new Error("Failed to create SNS topic.");
+  const subscriptions = await invokeExecutor("SNS", "ListSubscriptionsByTopicCommand", awsConfig, {
+    TopicArn: topic.TopicArn,
+  }, "notify", accountId) as { Subscriptions?: Array<{ Protocol?: string; Endpoint?: string }> };
+  const existing = (subscriptions.Subscriptions || []).find((subscription: { Protocol?: string; Endpoint?: string }) =>
+    subscription.Protocol === "email" && subscription.Endpoint === notificationEmail
   );
   if (!existing) {
-    await sns.subscribe({ TopicArn: topic.TopicArn, Protocol: "email", Endpoint: notificationEmail }).promise();
+    await invokeExecutor("SNS", "SubscribeCommand", awsConfig, {
+      TopicArn: topic.TopicArn,
+      Protocol: "email",
+      Endpoint: notificationEmail,
+    }, "notify", accountId);
   }
   return topic.TopicArn;
 }
 
-async function publishAlert(awsConfig: any, notificationEmail: string | null, subject: string, message: string) {
+async function publishAlert(
+  awsConfig: Record<string, unknown>,
+  notificationEmail: string | null,
+  subject: string,
+  message: string,
+) {
   if (!notificationEmail) return { sent: false, target: null, note: "No notification email configured." };
-  const sns = new AWS.SNS(awsConfig);
+  const accountId = await getAwsAccountId(awsConfig);
   const topicArn = await ensureAlertTopicAndSubscription(awsConfig, notificationEmail);
-  const result = await sns.publish({
+  const result = await invokeExecutor("SNS", "PublishCommand", awsConfig, {
     TopicArn: topicArn,
     Subject: subject.slice(0, 100),
     Message: message,
-  }).promise();
+  }, "notify", accountId) as { MessageId?: string };
   return { sent: true, target: notificationEmail, topicArn, messageId: result.MessageId || null };
 }
 
@@ -350,14 +366,16 @@ function canAutoFixEvent(event: EnrichedEvent, policy: PolicyRecord) {
 async function invokeExecutor(
   service: string,
   commandName: string,
-  awsConfig: any,
+  awsConfig: Record<string, unknown> | unknown,
   params: unknown,
-): Promise<void> {
+  purpose: PlatformPurpose = "autofix",
+  targetAccountId?: string,
+): Promise<Record<string, unknown>> {
   const decision = classifyAwsOperation(service, commandName, params);
   if (decision.riskLevel === "BLOCKED") {
     throw new Error(decision.reason || GENERIC_ERRORS.mutationBlocked);
   }
-  if (decision.requiresApproval && !isPlatformAllowlisted("autofix", service, commandName, params)) {
+  if (decision.requiresApproval && !isPlatformAllowlisted(purpose, service, commandName, params, { targetAccountId })) {
     throw new Error(GENERIC_ERRORS.approvalRequired);
   }
   const resp = await fetch(`${REQUIRED_EVENT_PROCESSOR_ENVS.supabaseUrl}/functions/v1/aws-executor`, {
@@ -372,16 +390,17 @@ async function invokeExecutor(
       commandName,
       config: sanitizeAwsClientConfig(awsConfig),
       params,
-      platformPurpose: "autofix",
+      platformPurpose: purpose,
     }),
   });
-  const data = await resp.json().catch(() => ({}));
+  const data = await resp.json().catch(() => ({})) as { error?: string; result?: Record<string, unknown> };
   if (!resp.ok || data.error) {
     throw new Error(GENERIC_ERRORS.awsFailed);
   }
+  return data.result || {};
 }
 
-async function autoFixEvent(awsConfig: any, event: EnrichedEvent) {
+async function autoFixEvent(awsConfig: Record<string, unknown>, event: EnrichedEvent) {
   switch (event.event_name) {
     case "DeleteBucketPublicAccessBlock": {
       const params = {
@@ -454,7 +473,7 @@ async function createRunbookExecutionForEvent(supabaseAdmin: any, userId: string
   return { runbookId, executionId: id };
 }
 
-async function recordDriftEvent(supabaseAdmin: any, userId: string, awsConfig: any, event: EnrichedEvent) {
+async function recordDriftEvent(supabaseAdmin: any, userId: string, awsConfig: Record<string, unknown>, event: EnrichedEvent) {
   const accountId = await getAwsAccountId(awsConfig);
   await supabaseAdmin.from("drift_events").insert({
     id: crypto.randomUUID(),

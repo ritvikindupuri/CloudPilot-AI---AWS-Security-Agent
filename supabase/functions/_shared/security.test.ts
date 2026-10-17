@@ -8,9 +8,11 @@ import {
   isPrivilegeEscalation,
   isPlatformAllowlisted,
   isSecretReturningRead,
+  callerAccountMatchesPending,
   PLATFORM_AUDIT_LOG_GROUP,
   PLATFORM_WORM_BUCKET_PREFIX,
   PLATFORM_SNS_ALERT_TOPIC,
+  PLATFORM_SNS_TOPIC_PREFIX,
 } from "./aws-command-policy.ts";
 import {
   wrapUntrustedAwsData,
@@ -151,6 +153,9 @@ Deno.test("C3: PassRole combinations are blocked when role-like params are prese
     ["EC2", "RunInstances", { IamInstanceProfile: { Name: "admin-profile" } }],
     ["EC2", "AssociateIamInstanceProfile", { IamInstanceProfile: { Name: "p" }, InstanceId: "i-1" }],
     ["EC2", "ReplaceIamInstanceProfileAssociation", { IamInstanceProfile: { Arn: "arn:aws:iam::1:instance-profile/x" } }],
+    ["EC2", "CreateLaunchTemplate", { LaunchTemplateData: { IamInstanceProfile: { Name: "admin-profile" } } }],
+    ["EC2", "CreateLaunchTemplateVersion", { LaunchTemplateData: { IamInstanceProfile: { Arn: "arn:aws:iam::1:instance-profile/x" } } }],
+    ["EC2", "ModifyLaunchTemplate", { LaunchTemplateData: { IamInstanceProfile: { Name: "p" } } }],
     ["Lambda", "UpdateFunctionConfiguration", { FunctionName: "fn", Role: "arn:aws:iam::1:role/r" }],
     ["Lambda", "CreateEventSourceMapping", { FunctionName: "fn" }],
     ["ECS", "RegisterTaskDefinition", { Family: "web", TaskRoleArn: "arn:aws:iam::1:role/task" }],
@@ -166,6 +171,11 @@ Deno.test("C3: PassRole combinations are blocked when role-like params are prese
   }
   const runWithoutProfile = classifyAwsOperation("EC2", "RunInstances", { ImageId: "ami-1", MinCount: 1, MaxCount: 1 });
   assertEquals(runWithoutProfile.riskLevel, "REQUIRES_APPROVAL");
+  const launchTemplateNoProfile = classifyAwsOperation("EC2", "CreateLaunchTemplate", {
+    LaunchTemplateName: "web",
+    LaunchTemplateData: { ImageId: "ami-1" },
+  });
+  assertEquals(launchTemplateNoProfile.riskLevel, "REQUIRES_APPROVAL");
   const lambdaNoRole = classifyAwsOperation("Lambda", "UpdateFunctionConfiguration", { FunctionName: "fn", Timeout: 10 });
   assertEquals(lambdaNoRole.riskLevel, "REQUIRES_APPROVAL");
 });
@@ -205,6 +215,11 @@ Deno.test("C3: secret-returning reads require approval", () => {
   assertEquals(ssmDecrypt.riskLevel, "REQUIRES_APPROVAL");
   const ssmListDecrypt = classifyAwsOperation("SSM", "GetParametersByPath", { Path: "/app", WithDecryption: true });
   assertEquals(ssmListDecrypt.riskLevel, "REQUIRES_APPROVAL");
+  const ssmHistoryPlain = classifyAwsOperation("SSM", "GetParameterHistory", { Name: "/app/flag" });
+  assertEquals(ssmHistoryPlain.riskLevel, "ALLOWED");
+  const ssmHistoryDecrypt = classifyAwsOperation("SSM", "GetParameterHistory", { Name: "/app/db", WithDecryption: true });
+  assertEquals(ssmHistoryDecrypt.riskLevel, "REQUIRES_APPROVAL");
+  assertEquals(isSecretReturningRead("SSM", "GetParameterHistory", { WithDecryption: true }), true);
 
   assertEquals(classifyAwsOperation("ECR", "GetAuthorizationToken").riskLevel, "REQUIRES_APPROVAL");
   assertEquals(classifyAwsOperation("EC2", "GetPasswordData", { InstanceId: "i-1" }).riskLevel, "REQUIRES_APPROVAL");
@@ -225,15 +240,47 @@ Deno.test("C3: destructive operations stay blocked", () => {
 });
 
 Deno.test("platform allowlist only matches server-built audit/notify resources", () => {
+  const account = "123456789012";
+  const pab = {
+    BlockPublicAcls: true,
+    IgnorePublicAcls: true,
+    BlockPublicPolicy: true,
+    RestrictPublicBuckets: true,
+  };
   assertEquals(isPlatformAllowlisted("audit", "CloudWatchLogs", "PutLogEvents", { logGroupName: PLATFORM_AUDIT_LOG_GROUP }), true);
   assertEquals(isPlatformAllowlisted("audit", "CloudWatchLogs", "PutLogEvents", { logGroupName: "/aws/lambda/evil" }), false);
   assertEquals(isPlatformAllowlisted("audit", "S3", "PutObject", { Bucket: `${PLATFORM_WORM_BUCKET_PREFIX}123`, Key: "a" }), true);
   assertEquals(isPlatformAllowlisted("audit", "S3", "PutObject", { Bucket: "my-bucket", Key: "a" }), false);
   assertEquals(isPlatformAllowlisted("notify", "SNS", "CreateTopic", { Name: PLATFORM_SNS_ALERT_TOPIC }), true);
+  assertEquals(isPlatformAllowlisted("notify", "SNS", "CreateTopic", { Name: `${PLATFORM_SNS_TOPIC_PREFIX}${account}` }, { targetAccountId: account }), true);
+  assertEquals(isPlatformAllowlisted("notify", "SNS", "CreateTopic", { Name: `${PLATFORM_SNS_TOPIC_PREFIX}999999999999` }, { targetAccountId: account }), false);
   assertEquals(isPlatformAllowlisted("notify", "SNS", "Publish", { TopicArn: "arn:aws:sns:us-east-1:1:other" }), false);
-  assertEquals(isPlatformAllowlisted("notify", "SNS", "Publish", { TopicArn: `arn:aws:sns:us-east-1:1:${PLATFORM_SNS_ALERT_TOPIC}` }), true);
-  assertEquals(isPlatformAllowlisted("autofix", "S3", "PutPublicAccessBlock", { Bucket: "b" }), true);
+  assertEquals(isPlatformAllowlisted("notify", "SNS", "Publish", {
+    TopicArn: `arn:aws:sns:us-east-1:${account}:${PLATFORM_SNS_ALERT_TOPIC}`,
+  }), false);
+  assertEquals(isPlatformAllowlisted("notify", "SNS", "Publish", {
+    TopicArn: `arn:aws:sns:us-east-1:${account}:${PLATFORM_SNS_ALERT_TOPIC}`,
+  }, { targetAccountId: account }), true);
+  assertEquals(isPlatformAllowlisted("notify", "SNS", "Publish", {
+    TopicArn: `arn:aws:sns:us-east-1:999999999999:${PLATFORM_SNS_ALERT_TOPIC}`,
+  }, { targetAccountId: account }), false);
+  assertEquals(isPlatformAllowlisted("autofix", "S3", "PutPublicAccessBlock", { Bucket: "b" }), false);
+  assertEquals(isPlatformAllowlisted("autofix", "S3", "PutPublicAccessBlock", {
+    Bucket: "b",
+    PublicAccessBlockConfiguration: { ...pab, BlockPublicAcls: false },
+  }), false);
+  assertEquals(isPlatformAllowlisted("autofix", "S3", "PutPublicAccessBlock", {
+    Bucket: "b",
+    PublicAccessBlockConfiguration: pab,
+  }), true);
   assertEquals(isPlatformAllowlisted("autofix", "IAM", "CreateAccessKey", {}), false);
+});
+
+Deno.test("executor rejects caller identity that does not match the pending account", () => {
+  assertEquals(callerAccountMatchesPending("123456789012", "123456789012"), true);
+  assertEquals(callerAccountMatchesPending("123456789012", "999999999999"), false);
+  assertEquals(callerAccountMatchesPending("123456789012", null), false);
+  assertEquals(callerAccountMatchesPending("not-an-account", "123456789012"), false);
 });
 
 Deno.test("C3: AWS tool results are always wrapped with a nonce fence and escaped payload", () => {

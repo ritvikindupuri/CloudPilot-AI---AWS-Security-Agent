@@ -45,6 +45,9 @@ jobs:
           echo "Type checking aws-credential-vault..."
           deno check supabase/functions/aws-credential-vault/index.ts
 
+          echo "Type checking guardian-event-processor..."
+          deno check supabase/functions/guardian-event-processor/index.ts
+
           echo "All type checks passed!"
 
       - name: Run classifier and security tests
