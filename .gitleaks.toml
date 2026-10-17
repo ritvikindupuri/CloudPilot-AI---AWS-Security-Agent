@@ -1,0 +1,24 @@
+title = "CloudPilot"
+
+[extend]
+useDefault = true
+
+# Current-tree scan: placeholders and documentation examples only.
+# Git history still contains a committed .env with the public anon JWT
+# (commits a78ecea / 925032a). Rotate nothing; that key is the publishable anon key.
+# Do not add real secrets to allowlists.
+
+[[rules]]
+id = "placeholder-supabase-publishable"
+description = "Documentation placeholders"
+regex = '''sb_publishable_\.\.\.'''
+[rules.allowlist]
+regexTarget = "match"
+regexes = ['''sb_publishable_\.\.\.''']
+
+[allowlist]
+paths = [
+  '''BUGFIX-VERIFICATION\.md''',
+  '''THREAT_MODEL\.md''',
+  '''SECURITY_DEPLOYMENT\.md''',
+]

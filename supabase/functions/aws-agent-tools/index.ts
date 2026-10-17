@@ -2,30 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getVersionMeta } from "../_shared/version.ts";
 import { requireServiceRole } from "../_shared/internal-auth.ts";
 
-// SECURITY HARDENING: Strict CORS origin validation with allowlist
-const ALLOWED_ORIGINS = [
-  "http://localhost:8080",
-  "http://localhost:5173",
-  ...(Deno.env.get("ALLOWED_ORIGINS") || "").split(",").filter(Boolean),
-];
-
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) 
-    ? origin 
-    : (Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080");
-  
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-    "Access-Control-Max-Age": "86400",
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-  };
-}
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -62,8 +39,7 @@ async function dispatch(calls: any[], functionName: string, rest: Record<string,
     return calls.map((tc: any) => ({
       toolCallId: tc.id,
       content: JSON.stringify({
-        error: `Tool dispatch error from ${functionName} (${resp.status})`,
-        message: errText || "No additional error details were returned.",
+        error: "An internal error occurred. Please try again.",
         errorClass: "PLATFORM_DISPATCH",
         service: functionName,
       }),
@@ -132,7 +108,7 @@ export const handler = async (req: Request): Promise<Response> => {
   } catch (e: any) {
     console.error("[CloudPilot Router] Fatal error:", e);
     return new Response(
-      JSON.stringify({ error: e.message || "Internal error" }),
+      JSON.stringify({ error: "An internal error occurred. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

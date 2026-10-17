@@ -2,30 +2,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { requireServiceRole } from "../_shared/internal-auth.ts";
-
-// SECURITY HARDENING: Strict CORS origin validation with allowlist
-const ALLOWED_ORIGINS = [
-  "http://localhost:8080",
-  "http://localhost:5173",
-  ...(Deno.env.get("ALLOWED_ORIGINS") || "").split(",").filter(Boolean),
-];
-
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) 
-    ? origin 
-    : (Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080");
-  
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Max-Age": "86400",
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-  };
-}
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { checkDbRateLimit } from "../_shared/rate-limit-db.ts";
+import { GENERIC_ERRORS, logInternalError } from "../_shared/generic-error.ts";
+import { wrapUntrustedAwsData } from "../_shared/untrusted-content.ts";
 
 function requireEnv(name: string): string {
   const value = Deno.env.get(name);
@@ -3447,24 +3427,6 @@ function sanitizeString(val: unknown, maxLen: number): string {
 }
 
 
-const ipRequestCounts = new Map<string, { count: number; expiresAt: number }>();
-const RATE_LIMIT_WINDOW_MS = 60000;
-const MAX_REQUESTS_PER_WINDOW = 20;
-
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const record = ipRequestCounts.get(ip);
-  if (!record || record.expiresAt < now) {
-    ipRequestCounts.set(ip, { count: 1, expiresAt: now + RATE_LIMIT_WINDOW_MS });
-    return true;
-  }
-  if (record.count >= MAX_REQUESTS_PER_WINDOW) {
-    return false;
-  }
-  record.count++;
-  return true;
-}
-
 export const handler = async (req: Request): Promise<Response> => {
   const corsHeaders = getCorsHeaders(req);
   
@@ -3479,18 +3441,19 @@ export const handler = async (req: Request): Promise<Response> => {
     return authError;
   }
 
-  const clientIp = req.headers.get("x-forwarded-for") || "unknown";
-  if (!checkRateLimit(clientIp)) {
-    return new Response(
-      JSON.stringify({ error: "Rate limit exceeded. Try again later." }),
-      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-
   try {
     const body = await req.json();
-    const { toolCalls, awsConfig, userId, conversationId, notificationEmail, userHasConfirmedMutation, latestUserMessage } = body;
+    const { toolCalls, awsConfig, userId, conversationId, notificationEmail, latestUserMessage } = body;
+    // Chat-text confirmation is not a security boundary. Writes require a stored UI approval.
+    const userHasConfirmedMutation = false;
     const supabaseAdmin = createClient(ENV.supabaseUrl, ENV.supabaseServiceRoleKey);
+    const rate = await checkDbRateLimit(supabaseAdmin, `aws-agent-ops:${userId || "internal"}`, 40, 1);
+    if (!rate.allowed) {
+      return new Response(
+        JSON.stringify({ error: GENERIC_ERRORS.rateLimited }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     const apiMessages: any[] = [];
 
     for (const toolCall of toolCalls) {
@@ -5167,10 +5130,11 @@ export const handler = async (req: Request): Promise<Response> => {
                 content: JSON.stringify(simulationResult),
               } as any);
             } catch (err: any) {
+              logInternalError("ops-runAttackSimulation", err);
               apiMessages.push({
                 role: "tool",
                 tool_call_id: toolCall.id,
-                content: JSON.stringify({ error: err.message || "Simulation failed." }),
+                content: wrapUntrustedAwsData({ error: GENERIC_ERRORS.internal }),
               } as any);
             }
           }
@@ -5218,10 +5182,11 @@ export const handler = async (req: Request): Promise<Response> => {
                 content: JSON.stringify(evasionResult),
               } as any);
             } catch (err: any) {
+              logInternalError("ops-runEvasionTest", err);
               apiMessages.push({
                 role: "tool",
                 tool_call_id: toolCall.id,
-                content: JSON.stringify({ error: err.message || "Evasion test failed." }),
+                content: wrapUntrustedAwsData({ error: GENERIC_ERRORS.internal }),
               } as any);
             }
           }
@@ -5240,7 +5205,7 @@ export const handler = async (req: Request): Promise<Response> => {
   } catch (e: any) {
     console.error("[Ops] Fatal error:", e);
     return new Response(
-      JSON.stringify({ error: e.message || "Internal error" }),
+      JSON.stringify({ error: GENERIC_ERRORS.internal }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

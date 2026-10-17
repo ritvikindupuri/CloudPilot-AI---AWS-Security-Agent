@@ -302,6 +302,60 @@ export type Database = {
           },
         ]
       }
+      pending_aws_actions: {
+        Row: {
+          action_hash: string
+          approved_at: string | null
+          consumed_at: string | null
+          conversation_id: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          operation: string
+          params: Json
+          rejected_at: string | null
+          service: string
+          status: string
+          summary: string
+          tool_name: string
+          user_id: string
+        }
+        Insert: {
+          action_hash: string
+          approved_at?: string | null
+          consumed_at?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          operation: string
+          params?: Json
+          rejected_at?: string | null
+          service: string
+          status?: string
+          summary: string
+          tool_name?: string
+          user_id: string
+        }
+        Update: {
+          action_hash?: string
+          approved_at?: string | null
+          consumed_at?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          operation?: string
+          params?: Json
+          rejected_at?: string | null
+          service?: string
+          status?: string
+          summary?: string
+          tool_name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       rate_limit_entries: {
         Row: {
           id: string
@@ -328,9 +382,11 @@ export type Database = {
           account_id: string | null
           created_at: string
           credential_method: string
-          encrypted_access_key_id: string
-          encrypted_secret_access_key: string
+          encrypted_access_key_id: string | null
+          encrypted_external_id: string | null
+          encrypted_secret_access_key: string | null
           encrypted_session_token: string | null
+          encryption_key_version: string
           guardian_enabled: boolean
           id: string
           label: string
@@ -348,9 +404,11 @@ export type Database = {
           account_id?: string | null
           created_at?: string
           credential_method?: string
-          encrypted_access_key_id: string
-          encrypted_secret_access_key: string
+          encrypted_access_key_id?: string | null
+          encrypted_external_id?: string | null
+          encrypted_secret_access_key?: string | null
           encrypted_session_token?: string | null
+          encryption_key_version?: string
           guardian_enabled?: boolean
           id?: string
           label?: string
@@ -368,9 +426,11 @@ export type Database = {
           account_id?: string | null
           created_at?: string
           credential_method?: string
-          encrypted_access_key_id?: string
-          encrypted_secret_access_key?: string
+          encrypted_access_key_id?: string | null
+          encrypted_external_id?: string | null
+          encrypted_secret_access_key?: string | null
           encrypted_session_token?: string | null
+          encryption_key_version?: string
           guardian_enabled?: boolean
           id?: string
           label?: string

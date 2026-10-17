@@ -2,30 +2,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { requireServiceRole } from "../_shared/internal-auth.ts";
-
-// SECURITY HARDENING: Strict CORS origin validation with allowlist
-const ALLOWED_ORIGINS = [
-  "http://localhost:8080",
-  "http://localhost:5173",
-  ...(Deno.env.get("ALLOWED_ORIGINS") || "").split(",").filter(Boolean),
-];
-
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) 
-    ? origin 
-    : (Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080");
-  
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Max-Age": "86400",
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-  };
-}
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { classifyAwsOperation } from "../_shared/aws-command-policy.ts";
+import { createPendingAction } from "../_shared/pending-aws-actions.ts";
+import { wrapUntrustedAwsData } from "../_shared/untrusted-content.ts";
+import { checkDbRateLimit } from "../_shared/rate-limit-db.ts";
+import { GENERIC_ERRORS, logInternalError } from "../_shared/generic-error.ts";
 
 function requireEnv(name: string): string {
   const value = Deno.env.get(name);
@@ -43,7 +25,7 @@ const ENV = {
 // bundling 40+ @aws-sdk/client-* packages in this function.
 const EXECUTOR_URL = `${ENV.supabaseUrl}/functions/v1/aws-executor`;
 
-async function awsExec(service: string, commandName: string, config: any, params: any): Promise<any> {
+async function awsExec(service: string, commandName: string, config: any, params: any, extra: Record<string, unknown> = {}): Promise<any> {
   let resp: Response;
   try {
     resp = await fetch(EXECUTOR_URL, {
@@ -53,7 +35,7 @@ async function awsExec(service: string, commandName: string, config: any, params
         Authorization: `Bearer ${ENV.supabaseServiceRoleKey}`,
         apikey: ENV.supabaseServiceRoleKey,
       },
-      body: JSON.stringify({ service, commandName, config, params }),
+      body: JSON.stringify({ service, commandName, config, params, ...extra }),
     });
   } catch (netErr: any) {
     const err: any = new Error(`Network error reaching aws-executor: ${netErr?.message || netErr}`);
@@ -2397,41 +2379,20 @@ const PRIVILEGE_ESCALATION_PATTERNS: Array<{ service: string; operations: Set<st
 interface ValidatorResult {
   allowed: boolean;
   reason?: string;
-  riskLevel?: "BLOCKED" | "HIGH_RISK" | "ALLOWED";
+  riskLevel?: "BLOCKED" | "HIGH_RISK" | "ALLOWED" | "REQUIRES_APPROVAL";
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function validatePrivilegeEscalation(service: string, operation: string, params: any): ValidatorResult {
-  // Check blocked operations first
-  if (BLOCKED_OPERATIONS.has(operation)) {
-    return {
-      allowed: false,
-      reason: `Operation '${operation}' is permanently blocked. This operation could cause irreversible account-level damage.`,
-      riskLevel: "BLOCKED",
-    };
+function validatePrivilegeEscalation(service: string, operation: string, _params: any): ValidatorResult {
+  const decision = classifyAwsOperation(service, operation);
+  if (decision.riskLevel === "ALLOWED") {
+    return { allowed: true, riskLevel: "ALLOWED" };
   }
-
-  // Check privilege escalation patterns
-  for (const pattern of PRIVILEGE_ESCALATION_PATTERNS) {
-    if (pattern.service === service && pattern.operations.has(operation)) {
-      // Allow read-like operations that contain these words but are actually safe
-      // e.g., "getPolicy" vs "putPolicy"
-      const isReadOnly = /^(get|list|describe|head)/.test(operation);
-      if (isReadOnly) {
-        return { allowed: true, riskLevel: "ALLOWED" };
-      }
-
-      // For attack simulations, we allow but flag as HIGH_RISK and log extensively
-      // The agent's system prompt mandates cleanup of simulation resources
-      return {
-        allowed: true,
-        reason: `HIGH-RISK OPERATION: ${service}.${operation} — ${pattern.reason} This call is permitted for authorized security assessments but will be logged to the audit trail.`,
-        riskLevel: "HIGH_RISK",
-      };
-    }
-  }
-
-  return { allowed: true, riskLevel: "ALLOWED" };
+  return {
+    allowed: false,
+    reason: decision.reason,
+    riskLevel: decision.riskLevel,
+  };
 }
 
 const MAX_MESSAGE_LENGTH = 50000;
@@ -2450,24 +2411,6 @@ function sanitizeString(val: unknown, maxLen: number): string {
 }
 
 
-const ipRequestCounts = new Map<string, { count: number; expiresAt: number }>();
-const RATE_LIMIT_WINDOW_MS = 60000;
-const MAX_REQUESTS_PER_WINDOW = 20;
-
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const record = ipRequestCounts.get(ip);
-  if (!record || record.expiresAt < now) {
-    ipRequestCounts.set(ip, { count: 1, expiresAt: now + RATE_LIMIT_WINDOW_MS });
-    return true;
-  }
-  if (record.count >= MAX_REQUESTS_PER_WINDOW) {
-    return false;
-  }
-  record.count++;
-  return true;
-}
-
 export const handler = async (req: Request): Promise<Response> => {
   const corsHeaders = getCorsHeaders(req);
   
@@ -2482,18 +2425,18 @@ export const handler = async (req: Request): Promise<Response> => {
     return authError;
   }
 
-  const clientIp = req.headers.get("x-forwarded-for") || "unknown";
-  if (!checkRateLimit(clientIp)) {
-    return new Response(
-      JSON.stringify({ error: "Rate limit exceeded. Try again later." }),
-      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-
   try {
     const body = await req.json();
-    const { toolCalls, awsConfig, userId, conversationId, notificationEmail, userHasConfirmedMutation, latestUserMessage } = body;
+    const { toolCalls, awsConfig, userId, conversationId, notificationEmail, latestUserMessage } = body;
+    const userHasConfirmedMutation = false;
     const supabaseAdmin = createClient(ENV.supabaseUrl, ENV.supabaseServiceRoleKey);
+    const rate = await checkDbRateLimit(supabaseAdmin, `aws-agent-scanner:${userId || "internal"}`, 40, 1);
+    if (!rate.allowed) {
+      return new Response(
+        JSON.stringify({ error: GENERIC_ERRORS.rateLimited }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     const resultsList = await Promise.all(toolCalls.map(async (toolCall) => {
       const apiMessages: any[] = [];
       let latestUnifiedAuditSummary: Record<string, any> | null = null;
@@ -2974,7 +2917,6 @@ export const handler = async (req: Request): Promise<Response> => {
               // ── Privilege Escalation Validator ──────────────────────────────
               validatorResult = validatePrivilegeEscalation(service, operation, args.params);
               if (!validatorResult.allowed) {
-                // Log blocked call to audit
                 if (userId) {
                   supabaseAdmin.from("agent_audit_log").insert({
                     user_id: userId,
@@ -2987,6 +2929,28 @@ export const handler = async (req: Request): Promise<Response> => {
                     validator_result: validatorResult.riskLevel,
                     execution_time_ms: Date.now() - startTime,
                   }).then();
+                }
+                if (validatorResult.riskLevel === "REQUIRES_APPROVAL" && userId) {
+                  const pending = await createPendingAction(supabaseAdmin, {
+                    userId,
+                    service,
+                    operation,
+                    params: args.params || {},
+                    conversationId,
+                    toolName: "execute_aws_api",
+                  });
+                  apiMessages.push({
+                    role: "tool",
+                    tool_call_id: toolCall.id,
+                    content: wrapUntrustedAwsData({
+                      pendingApproval: true,
+                      approvalId: pending.id,
+                      summary: pending.summary,
+                      expiresAt: pending.expiresAt,
+                      message: "This mutating AWS call was not executed. The user must click Approve in the CloudPilot UI.",
+                    }),
+                  } as any);
+                  return { apiMessages, latestUnifiedAuditSummary };
                 }
                 throw new Error(validatorResult.reason);
               }
@@ -3048,7 +3012,7 @@ export const handler = async (req: Request): Promise<Response> => {
               apiMessages.push({
                 role: "tool",
                 tool_call_id: toolCall.id,
-                content: prefix + resultStr,
+                content: wrapUntrustedAwsData(prefix + resultStr),
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               } as any);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -3099,12 +3063,11 @@ export const handler = async (req: Request): Promise<Response> => {
               apiMessages.push({
                 role: "tool",
                 tool_call_id: toolCall.id,
-                content: JSON.stringify({
-                  error: errorDetail,
+                content: wrapUntrustedAwsData({
+                  error: GENERIC_ERRORS.awsFailed,
                   code: typedError.code,
                   category: typedError.category,
                   retryable: typedError.retryable,
-                  statusCode: err.$metadata?.httpStatusCode || err.statusCode || typedError.status,
                 }),
               } as any);
             }
@@ -3129,9 +3092,9 @@ export const handler = async (req: Request): Promise<Response> => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {
-    console.error("[Scanner] Fatal error:", e);
+    logInternalError("aws-agent-scanner", e);
     return new Response(
-      JSON.stringify({ error: e.message || "Internal error" }),
+      JSON.stringify({ error: GENERIC_ERRORS.internal }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

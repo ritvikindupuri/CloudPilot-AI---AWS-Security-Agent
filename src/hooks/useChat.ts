@@ -370,10 +370,8 @@ export const useChat = (
         setAuditSummary(null);
         setExecutionLogs([]);
 
-        // Only send session credentials — never raw keys
-        const sessionCreds = credentials.session;
-        if (!sessionCreds) {
-          throw new Error("No valid session credentials. Please re-authenticate your AWS credentials.");
+        if (!credentials.connected && !credentials.credentialId && !credentials.identity) {
+          throw new Error("Connect an AWS account before chatting.");
         }
 
         const { data: { session } } = await supabase.auth.getSession();
@@ -381,8 +379,6 @@ export const useChat = (
         if (!token) {
           throw new Error("No active session. Please sign in again.");
         }
-
-        const customGeminiKey = localStorage.getItem("cloudpilot-gemini-api-key");
 
         // Fetch active custom skills for the current user to support custom specialist personas
         let customSkillsList: any[] = [];
@@ -406,10 +402,9 @@ export const useChat = (
             },
             body: JSON.stringify({
               messages: historyForApi,
-              credentials: sessionCreds,
+              credentialId: credentials.credentialId || null,
               notificationEmail: notificationEmail || null,
               conversationId: targetConvId || null,
-              geminiApiKey: customGeminiKey || null,
               assistantId: assistantId,
               scanMode: scanMode || "fast",
               customSkills: customSkillsList,

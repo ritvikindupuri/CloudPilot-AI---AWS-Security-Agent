@@ -6,6 +6,8 @@ import ChatMessage from "@/components/ChatMessage";
 import ThinkingIndicator from "@/components/ThinkingIndicator";
 import QuickActions from "@/components/QuickActions";
 import AwsCredentialsPanel, { type AwsCredentials } from "@/components/AwsCredentialsPanel";
+import PendingAwsActions from "@/components/PendingAwsActions";
+import { loadStoredAwsConnection, stripAwsSecrets } from "@/lib/aws-connection";
 import VpcRoutingDialog from "@/components/VpcRoutingDialog";
 import FindingsPanel, { type Finding } from "@/components/FindingsPanel";
 import StatusBar from "@/components/StatusBar";
@@ -27,15 +29,7 @@ import { supabase, supabaseUrl, supabaseAnonKey } from "@/integrations/supabase/
 const ChatInterface = () => {
   const navigate = useNavigate();
   const [input, setInput] = useState("");
-  const [credentials, setCredentials] = useState<AwsCredentials | null>(() => {
-    try {
-      const saved = localStorage.getItem("cloudpilot-aws-credentials");
-      return saved && saved !== "undefined" ? JSON.parse(saved) : null;
-    } catch (e) {
-      console.error("Failed to parse credentials from local storage", e);
-      return null;
-    }
-  });
+  const [credentials, setCredentials] = useState<AwsCredentials | null>(() => loadStoredAwsConnection());
   const [showSidebar, setShowSidebar] = useState(true);
   const [currentConvId, setCurrentConvId] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
@@ -131,8 +125,9 @@ const ChatInterface = () => {
   };
 
   const handleCredentialsSave = (creds: AwsCredentials) => {
-    setCredentials(creds);
-    localStorage.setItem("cloudpilot-aws-credentials", JSON.stringify(creds));
+    const cleaned = stripAwsSecrets(creds as unknown as Record<string, unknown>) as unknown as AwsCredentials;
+    setCredentials(cleaned);
+    localStorage.setItem("cloudpilot-aws-credentials", JSON.stringify(cleaned));
     if (vpcRoutingStatus === "inactive") {
       setShowVpcDialog(true);
     }
@@ -196,7 +191,7 @@ const ChatInterface = () => {
 
   const handleSend = async () => {
     const trimmed = input.trim();
-    if (!trimmed || isLoading || !credentials?.session) return;
+    if (!trimmed || isLoading || !credentials) return;
     setInput("");
 
     await sendMessage(trimmed, credentials, currentConvId, scanMode);
@@ -231,8 +226,8 @@ const ChatInterface = () => {
   };
 
   const handleAddToS3 = useCallback(async (content: string, messageId: string) => {
-    if (!credentials?.session) {
-      toast.error("AWS session credentials required. Please re-authenticate.");
+    if (!credentials) {
+      toast.error("Connect an AWS account first.");
       return;
     }
 
@@ -242,8 +237,6 @@ const ChatInterface = () => {
       if (!token) {
         throw new Error("No active session. Please sign in again.");
       }
-
-      const customGeminiKey = localStorage.getItem("cloudpilot-gemini-api-key");
 
       const resp = await fetch(
         `${supabaseUrl}/functions/v1/aws-agent`,
@@ -261,9 +254,8 @@ const ChatInterface = () => {
                 content: `Archive the following report to the centralized S3 bucket (cloudpilot-reports-<account-id>). Create the bucket if it doesn't exist. Upload as markdown with key "reports/${new Date().toISOString().slice(0, 10)}/${messageId}.md". Only perform the S3 archival — do NOT regenerate the report. Respond with a brief confirmation of the S3 upload location.\n\n---\n\n${content}`,
               },
             ],
-            credentials: credentials.session,
+            credentialId: credentials.credentialId || null,
             notificationEmail: null,
-            geminiApiKey: customGeminiKey || null,
           }),
         }
       );
@@ -463,8 +455,8 @@ const ChatInterface = () => {
                           </h3>
                           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                             {credentials 
-                              ? `Active session using Access Key ID ${credentials.displayKeyPrefix || "role"}... in region ${credentials.region}.`
-                              : "Enter temporary session tokens or an IAM role. Raw credentials are never stored or exposed."}
+                              ? `Connected to account ${credentials.identity?.account || "AWS"} in region ${credentials.region} via a server-side IAM role.`
+                              : "Deploy the CloudPilot read-only CloudFormation role with your ExternalId, then paste the role ARN."}
                           </p>
                         </div>
                       </div>
@@ -821,6 +813,12 @@ const ChatInterface = () => {
             >
               <Sparkles className="w-3 h-3" /> Quick Actions
             </Button>
+          </div>
+
+          <div className="px-4 pt-3">
+            <div className="max-w-3xl mx-auto">
+              <PendingAwsActions enabled={!!credentials} />
+            </div>
           </div>
 
           {/* Input area */}

@@ -2,29 +2,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import AWS from "https://esm.sh/aws-sdk@2.1693.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
-// SECURITY HARDENING: Strict CORS origin validation with allowlist
-const ALLOWED_ORIGINS = [
-  "http://localhost:8080",
-  "http://localhost:5173",
-  ...(Deno.env.get("ALLOWED_ORIGINS") || "").split(",").filter(Boolean),
-];
-
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) 
-    ? origin 
-    : (Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080");
-  
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-guardian-secret",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Max-Age": "86400",
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-  };
-}
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { constantTimeCompare } from "../_shared/internal-auth.ts";
 
 function requireEnv(name: string): string {
   const value = Deno.env.get(name);
@@ -156,7 +135,7 @@ async function resolveUserId(req: Request, body: any, supabaseAdmin: any): Promi
   }
 
   const secret = req.headers.get("x-guardian-secret");
-  if (AUTOMATION_SECRET && secret === AUTOMATION_SECRET) {
+  if (AUTOMATION_SECRET && secret && constantTimeCompare(secret, AUTOMATION_SECRET)) {
     const userId = sanitizeString(body.userId, 64);
     if (!userId) throw new Error("userId is required when authenticating with the automation secret.");
     return userId;
