@@ -31,4 +31,5 @@ Status values: **fixed** (code prevent), **mitigated** (reduced, residual risk r
 - Platform AWS keys (`CLOUDPILOT_AWS_*`) can AssumeRole into every onboarded customer role. Protect those keys and rotate ExternalIds if they leak.
 - Typed preview tools (`manage_security_group_rule`, `manage_iam_access`, `manage_cost_rule`) stay preview-only; they do not apply writes from chat. Generic `execute_aws_api` mutations require a stored UI approval. Runbook steps marked `risk=confirm` still pause for an in-product continue, which is a separate workflow from the generic AWS call tool.
 - When `ALLOWED_ORIGINS` is unset, local dev origins are allowed. Production must set `ALLOWED_ORIGINS` to the real app origin(s); localhost is then excluded.
+- Webhook SSRF checks resolve DNS then fetch by hostname (DNS-rebinding TOCTOU). Private/link-local/metadata IPs and dword/hex forms are blocked; residual rebinding risk is accepted.
 - npm audit may still report transitive issues in build tooling after upgrades.

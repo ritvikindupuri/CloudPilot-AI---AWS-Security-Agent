@@ -141,6 +141,14 @@ Deno.test("H2: vault uses dedicated key and fails closed when missing", async ()
   );
 });
 
+Deno.test("H2: decrypt fails closed when dedicated vault key is missing", async () => {
+  await assertRejects(
+    () => decryptValue("v2:AAAA", "user-1", envMap({ SUPABASE_SERVICE_ROLE_KEY: "legacy-service-role-key-material-ok" })),
+    Error,
+    "CREDENTIAL_VAULT_KEY",
+  );
+});
+
 Deno.test("H2: decrypt-with-old service-role key then re-encrypt with dedicated key", async () => {
   const legacy = envMap({
     CREDENTIAL_VAULT_KEY: "legacy-service-role-key-material-ok",
@@ -177,6 +185,8 @@ Deno.test("M5: webhook URLs must be https and not private/link-local/metadata", 
   assertThrows(() => parseHttpsUrl("http://hooks.slack.com/x"), Error, "https");
   assertThrows(() => parseHttpsUrl("https://127.0.0.1/hook"), Error, "not allowed");
   assertThrows(() => parseHttpsUrl("https://169.254.169.254/latest/meta-data"), Error, "not allowed");
+  assertThrows(() => parseHttpsUrl("https://2130706433/hook"), Error, "not allowed");
+  assertThrows(() => parseHttpsUrl("https://0x7f000001/hook"), Error, "not allowed");
 
   await assertRejects(
     () => resolveAndAssertPublicHttps("https://evil.example/hook", async () => ["169.254.169.254"]),

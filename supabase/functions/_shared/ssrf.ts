@@ -72,11 +72,13 @@ export function isPrivateOrReservedIPv6(ip: string): boolean {
 }
 
 export function isBlockedHostname(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/\.$/, "");
+  const host = hostname.toLowerCase().replace(/\.$/, "").replace(/^\[|\]$/g, "");
   if (BLOCKED_HOSTS.has(host)) return true;
   if (host.endsWith(".internal") || host.endsWith(".localhost") || host.endsWith(".local")) return true;
   if (host === "169.254.169.254") return true;
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) && isPrivateOrReservedIPv4(host)) return true;
+  // Dword / hex / octal IPv4 forms (e.g. 2130706433, 0x7f000001)
+  if (/^\d+$/.test(host) || /^0x[0-9a-f]+$/i.test(host)) return true;
   if (host.includes(":") && isPrivateOrReservedIPv6(host)) return true;
   return false;
 }

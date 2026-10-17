@@ -5,6 +5,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { constantTimeCompare } from "../_shared/internal-auth.ts";
 import { resolveAwsConfigForUser } from "../_shared/customer-aws.ts";
+import { sanitizeAwsClientConfig } from "../_shared/aws-command-policy.ts";
+import { isLegacyKeysEnabled } from "../_shared/vault-crypto.ts";
 import { GENERIC_ERRORS, logInternalError } from "../_shared/generic-error.ts";
 import { checkDbRateLimit } from "../_shared/rate-limit-db.ts";
 
@@ -704,7 +706,21 @@ serve(async (req) => {
 
     // ── Manual mode: existing single-user credential flow ──
     const userId = await resolveUserId(req, body, supabaseAdmin);
-    const awsConfig = buildAwsConfig(body.credentials || {});
+    let awsConfig: Record<string, unknown>;
+    if (isLegacyKeysEnabled() && body.credentials?.accessKeyId) {
+      awsConfig = buildAwsConfig(body.credentials);
+    } else {
+      const resolved = await resolveAwsConfigForUser({
+        userId,
+        credentialId: body.credentialId,
+        bodyCredentials: null,
+      });
+      awsConfig = {
+        ...sanitizeAwsClientConfig(resolved.awsConfig),
+        maxRetries: 4,
+        retryDelayOptions: { base: 250 },
+      };
+    }
     const mode = sanitizeString(body.mode || "all", 32).toLowerCase();
     const notificationEmail = sanitizeString(body.notificationEmail || "", 320) || null;
     const results: Record<string, any> = {
@@ -801,10 +817,13 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {
-    const status = String(error?.message || "").startsWith("Missing required environment variable") ? 500 : 400;
+    logInternalError("guardian-scheduler", error);
+    const msg = String(error?.message || "");
+    const status = msg.startsWith("Missing required environment variable") || msg.includes("Unauthorized")
+      ? (msg.includes("Unauthorized") ? 401 : 500)
+      : 400;
     return new Response(JSON.stringify({
-      error: error?.message || "Scheduler execution failed.",
-      category: status === 500 ? "configuration" : "validation",
+      error: status === 401 ? GENERIC_ERRORS.unauthorized : (status === 500 ? GENERIC_ERRORS.misconfigured : GENERIC_ERRORS.badRequest),
     }), {
       status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

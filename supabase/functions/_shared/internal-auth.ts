@@ -37,8 +37,7 @@ export function requireServiceRole(
   if (!serviceRoleKey || serviceRoleKey.trim().length === 0) {
     return new Response(
       JSON.stringify({
-        error: "Server misconfigured",
-        message: `${serviceName} requires SUPABASE_SERVICE_ROLE_KEY to be configured.`,
+        error: "An internal error occurred. Please try again.",
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -52,7 +51,6 @@ export function requireServiceRole(
     return new Response(
       JSON.stringify({
         error: "Unauthorized",
-        message: `${serviceName} requires service role authentication.`,
       }),
       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

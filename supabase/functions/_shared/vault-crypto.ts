@@ -92,7 +92,7 @@ export async function decryptValue(
   env: { get(key: string): string | undefined } = Deno.env,
 ): Promise<DecryptResult> {
   const { version, payload } = parseVersioned(encrypted);
-  const current = env.get(VAULT_KEY_ENV);
+  const current = requireVaultKey(env);
   const previous = env.get(VAULT_KEY_PREV_ENV);
   const legacy = env.get("SUPABASE_SERVICE_ROLE_KEY");
 
