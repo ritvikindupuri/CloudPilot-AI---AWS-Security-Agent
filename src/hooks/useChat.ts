@@ -153,7 +153,9 @@ export const useChat = (
     if (justCreatedConvRef.current === conversationId) {
       justCreatedConvRef.current = null;
       currentMessagesConvIdRef.current = conversationId;
-    
+      return;
+    }
+
     // Clear transient states and previous conversation messages immediately to avoid flicker
     setMessages([]);
     setAuditSummary(null);

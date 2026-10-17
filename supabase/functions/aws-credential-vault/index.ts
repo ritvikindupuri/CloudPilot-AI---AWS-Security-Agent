@@ -26,7 +26,7 @@ export const handler = async (req: Request): Promise<Response> => {
     const action = body.action;
 
     let user: { id: string } | null = null;
-    if (action === "decrypt") {
+    if (action === "decrypt" || action === "reencrypt_all_v2") {
       const serviceAuth = requireServiceRole(req, SERVICE_ROLE_KEY, corsHeaders, "aws-credential-vault");
       if (serviceAuth) return serviceAuth;
     } else {
@@ -102,6 +102,51 @@ export const handler = async (req: Request): Promise<Response> => {
       }
 
       return new Response(JSON.stringify({ success: true, encryption: "AES-256-GCM" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "reencrypt_all_v2") {
+      const { data: rows, error: listErr } = await supabaseAdmin
+        .from("stored_aws_credentials")
+        .select("id, user_id, encrypted_access_key_id, encrypted_secret_access_key, encrypted_session_token, encrypted_external_id, encryption_key_version");
+      if (listErr) {
+        logInternalError("aws-credential-vault-migrate", listErr);
+        return new Response(JSON.stringify({ error: GENERIC_ERRORS.internal }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      let migrated = 0;
+      let skipped = 0;
+      let failed = 0;
+      for (const row of rows || []) {
+        try {
+          const updates: Record<string, unknown> = { encryption_key_version: "v2", updated_at: new Date().toISOString() };
+          let changed = false;
+          for (const col of ["encrypted_access_key_id", "encrypted_secret_access_key", "encrypted_session_token", "encrypted_external_id"] as const) {
+            const current = row[col];
+            if (!current) continue;
+            const rotated = await decryptAndMaybeReencrypt(current, row.user_id);
+            if (rotated.rotated) {
+              updates[col] = rotated.ciphertext;
+              changed = true;
+            }
+          }
+          if (!changed && row.encryption_key_version === "v2") {
+            skipped++;
+            continue;
+          }
+          const { error: updErr } = await supabaseAdmin.from("stored_aws_credentials").update(updates).eq("id", row.id);
+          if (updErr) throw updErr;
+          migrated++;
+        } catch (err) {
+          failed++;
+          logInternalError("aws-credential-vault-migrate-row", err);
+        }
+      }
+      return new Response(JSON.stringify({ success: true, migrated, skipped, failed }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

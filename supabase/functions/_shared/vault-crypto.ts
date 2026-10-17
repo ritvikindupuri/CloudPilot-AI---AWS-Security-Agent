@@ -6,6 +6,9 @@
  * Format: v2:<base64(iv+ciphertext)>  (dedicated key)
  *         v1:<base64(iv+ciphertext)>  (legacy service-role key — decrypt only)
  *         <base64>                    (unversioned legacy)
+ *
+ * Legacy service-role material is tried only for v1/unversioned ciphertext and
+ * only when VAULT_ALLOW_LEGACY_DECRYPT=true.
  */
 
 const encoder = new TextEncoder();
@@ -13,6 +16,7 @@ const decoder = new TextDecoder();
 
 export const VAULT_KEY_ENV = "CREDENTIAL_VAULT_KEY";
 export const VAULT_KEY_PREV_ENV = "CREDENTIAL_VAULT_KEY_PREVIOUS";
+export const VAULT_ALLOW_LEGACY_DECRYPT_ENV = "VAULT_ALLOW_LEGACY_DECRYPT";
 export const CURRENT_VAULT_VERSION = "v2";
 
 function requireVaultKey(env: { get(key: string): string | undefined } = Deno.env): string {
@@ -21,6 +25,15 @@ function requireVaultKey(env: { get(key: string): string | undefined } = Deno.en
     throw new Error("CREDENTIAL_VAULT_KEY is missing or too short (need >= 32 characters). Vault is fail-closed.");
   }
   return key;
+}
+
+function flagEnabled(value: string | undefined): boolean {
+  const flag = (value || "").toLowerCase();
+  return flag === "1" || flag === "true" || flag === "yes";
+}
+
+export function isLegacyVaultDecryptEnabled(env: { get(key: string): string | undefined } = Deno.env): boolean {
+  return flagEnabled(env.get(VAULT_ALLOW_LEGACY_DECRYPT_ENV));
 }
 
 async function deriveKey(keyMaterial: string, userId: string): Promise<CryptoKey> {
@@ -60,12 +73,7 @@ async function decryptWithMaterial(encryptedB64: string, userId: string, materia
   return decoder.decode(decrypted);
 }
 
-export async function encryptValue(
-  plaintext: string,
-  userId: string,
-  env: { get(key: string): string | undefined } = Deno.env,
-): Promise<string> {
-  const material = requireVaultKey(env);
+async function encryptWithMaterial(plaintext: string, userId: string, material: string): Promise<string> {
   const key = await deriveKey(material, userId);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
@@ -76,7 +84,25 @@ export async function encryptValue(
   const combined = new Uint8Array(iv.length + new Uint8Array(ciphertext).length);
   combined.set(iv);
   combined.set(new Uint8Array(ciphertext), iv.length);
-  const b64 = btoa(String.fromCharCode(...combined));
+  return btoa(String.fromCharCode(...combined));
+}
+
+/** Test/migration helper: produce unversioned (v1) ciphertext with arbitrary material. */
+export async function encryptLegacyUnversioned(
+  plaintext: string,
+  userId: string,
+  material: string,
+): Promise<string> {
+  return await encryptWithMaterial(plaintext, userId, material);
+}
+
+export async function encryptValue(
+  plaintext: string,
+  userId: string,
+  env: { get(key: string): string | undefined } = Deno.env,
+): Promise<string> {
+  const material = requireVaultKey(env);
+  const b64 = await encryptWithMaterial(plaintext, userId, material);
   return `${CURRENT_VAULT_VERSION}:${b64}`;
 }
 
@@ -94,12 +120,19 @@ export async function decryptValue(
   const { version, payload } = parseVersioned(encrypted);
   const current = requireVaultKey(env);
   const previous = env.get(VAULT_KEY_PREV_ENV);
-  const legacy = env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const isV1 = version === "v1";
 
   const attempts: Array<{ material: string; label: string }> = [];
   if (current && current.trim().length >= 32) attempts.push({ material: current, label: "v2" });
   if (previous && previous.trim().length >= 32) attempts.push({ material: previous, label: "v2-prev" });
-  if (legacy) attempts.push({ material: legacy, label: "v1" });
+
+  // Legacy service-role KEK: v1/unversioned only, and only with an explicit flag.
+  if (isV1 && isLegacyVaultDecryptEnabled(env)) {
+    const legacy = env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (legacy && legacy.trim().length >= 32) {
+      attempts.push({ material: legacy, label: "v1" });
+    }
+  }
 
   if (attempts.length === 0) {
     throw new Error("CREDENTIAL_VAULT_KEY is missing. Vault is fail-closed.");
@@ -132,6 +165,5 @@ export async function decryptAndMaybeReencrypt(
 }
 
 export function isLegacyKeysEnabled(env: { get(key: string): string | undefined } = Deno.env): boolean {
-  const flag = (env.get("ENABLE_LEGACY_ACCESS_KEYS") || "").toLowerCase();
-  return flag === "1" || flag === "true" || flag === "yes";
+  return flagEnabled(env.get("ENABLE_LEGACY_ACCESS_KEYS"));
 }

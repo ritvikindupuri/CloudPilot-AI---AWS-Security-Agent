@@ -58,16 +58,85 @@ export function isPrivateOrReservedIPv4(ip: string): boolean {
   return cidrs.some((c) => inCidr(n, c));
 }
 
+function expandIPv6(ip: string): bigint | null {
+  let raw = ip.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!raw.includes(":")) return null;
+
+  const dotted = raw.match(/^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (dotted) {
+    const v4 = ipv4ToInt(dotted[2]);
+    if (v4 === null) return null;
+    const hi = ((v4 >>> 16) & 0xffff).toString(16);
+    const lo = (v4 & 0xffff).toString(16);
+    raw = `${dotted[1]}${hi}:${lo}`;
+  }
+
+  const sides = raw.split("::");
+  if (sides.length > 2) return null;
+  let groups: string[];
+  if (sides.length === 2) {
+    const left = sides[0] ? sides[0].split(":") : [];
+    const right = sides[1] ? sides[1].split(":") : [];
+    const fill = 8 - left.length - right.length;
+    if (fill < 0) return null;
+    groups = [...left, ...Array(fill).fill("0"), ...right];
+  } else {
+    groups = raw.split(":");
+  }
+  if (groups.length !== 8) return null;
+  let n = 0n;
+  for (const g of groups) {
+    if (!g) return null;
+    if (!/^[0-9a-f]{1,4}$/.test(g)) return null;
+    n = (n << 16n) + BigInt(parseInt(g, 16));
+  }
+  return n;
+}
+
+function ipv6InPrefix(ip: bigint, prefixHex: string, bits: number): boolean {
+  const prefix = BigInt("0x" + prefixHex.padEnd(32, "0"));
+  const shift = BigInt(128 - bits);
+  return (ip >> shift) === (prefix >> shift);
+}
+
+function embeddedIPv4(ip: bigint, bitsFromRight = 32): string {
+  const mask = (1n << BigInt(bitsFromRight)) - 1n;
+  const v = Number(ip & mask);
+  return [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255].join(".");
+}
+
 export function isPrivateOrReservedIPv6(ip: string): boolean {
-  const lower = ip.toLowerCase().replace(/^\[|\]$/g, "");
-  if (lower === "::" || lower === "::1") return true;
-  if (lower.startsWith("fe80:") || lower.startsWith("fec0:")) return true;
-  if (lower.startsWith("fc") || lower.startsWith("fd")) return true;
-  if (lower.startsWith("ff")) return true;
-  const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (mapped) return isPrivateOrReservedIPv4(mapped[1]);
-  const mappedHex = lower.match(/^::ffff:([0-9a-f:]+)$/);
-  if (mappedHex) return true;
+  const n = expandIPv6(ip);
+  if (n === null) {
+    const lower = ip.toLowerCase().replace(/^\[|\]$/g, "");
+    if (lower === "::" || lower === "::1") return true;
+    return false;
+  }
+
+  // ::/128 unspecified, ::1/128 loopback
+  if (n === 0n || n === 1n) return true;
+  // fe80::/10 link-local
+  if (ipv6InPrefix(n, "fe80", 10)) return true;
+  // fec0::/10 site-local (deprecated)
+  if (ipv6InPrefix(n, "fec0", 10)) return true;
+  // fc00::/7 unique local
+  if (ipv6InPrefix(n, "fc00", 7)) return true;
+  // ff00::/8 multicast
+  if (ipv6InPrefix(n, "ff00", 8)) return true;
+  // 2001:db8::/32 documentation
+  if (ipv6InPrefix(n, "20010db8", 32)) return true;
+  // 2002::/16 6to4 (embeds IPv4)
+  if (ipv6InPrefix(n, "2002", 16)) return true;
+  // 64:ff9b::/96 NAT64 well-known prefix
+  if (ipv6InPrefix(n, "0064ff9b", 96)) return true;
+  // ::ffff:0:0/96 IPv4-mapped
+  if (ipv6InPrefix(n, "00000000000000000000ffff", 96)) {
+    return isPrivateOrReservedIPv4(embeddedIPv4(n));
+  }
+  // ::/96 IPv4-compatible (deprecated) — ::a.b.c.d
+  if (ipv6InPrefix(n, "000000000000000000000000", 96) && n > 1n) {
+    return isPrivateOrReservedIPv4(embeddedIPv4(n));
+  }
   return false;
 }
 
@@ -112,7 +181,7 @@ export async function resolveAndAssertPublicHttps(
     throw new Error("Webhook URL could not be resolved");
   }
   for (const addr of records) {
-    if (addr.includes(":")) {
+    if (addr.includes(":") || addr.includes("::")) {
       if (isPrivateOrReservedIPv6(addr)) {
         throw new Error("Webhook URL resolves to a private address");
       }

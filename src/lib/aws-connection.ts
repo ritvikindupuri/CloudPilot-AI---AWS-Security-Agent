@@ -53,11 +53,6 @@ export function toPublicAwsConnection(value: unknown): AwsConnection | null {
   return connection;
 }
 
-/** @deprecated Use toPublicAwsConnection. Kept for tests of the denylist path. */
-export function stripAwsSecrets<T extends Record<string, unknown>>(value: T | null | undefined): T | null {
-  return toPublicAwsConnection(value) as T | null;
-}
-
 export function persistPublicAwsConnection(value: unknown): AwsConnection | null {
   const publicConnection = toPublicAwsConnection(value);
   localStorage.removeItem(LEGACY_STORAGE_KEY);

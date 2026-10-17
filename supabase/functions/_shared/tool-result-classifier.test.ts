@@ -259,6 +259,19 @@ Deno.test("analyzeToolResults - All failed", () => {
   assertEquals(analysis.successes, 0);
 });
 
+Deno.test("analyzeToolResults - unwraps nonce-fenced scanner output", async () => {
+  const { wrapUntrustedAwsData } = await import("./untrusted-content.ts");
+  const wrappedError = wrapUntrustedAwsData({ error: "AccessDenied", errorClass: "AWS_ACCESS_DENIED" });
+  const wrappedOk = wrapUntrustedAwsData({ Buckets: [] });
+  const analysis = analyzeToolResults([
+    { content: wrappedError },
+    { content: wrappedOk },
+  ]);
+  assertEquals(analysis.errors, 1);
+  assertEquals(analysis.successes, 1);
+  assertEquals(analysis.errorClass, "AWS_ACCESS_DENIED");
+});
+
 Deno.test("analyzeToolResults - All success", () => {
   const results = [
     { content: JSON.stringify({ Buckets: [] }) },

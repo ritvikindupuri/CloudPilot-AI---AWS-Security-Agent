@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { requireServiceRole } from "../_shared/internal-auth.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { classifyAwsOperation } from "../_shared/aws-command-policy.ts";
-import { createPendingAction } from "../_shared/pending-aws-actions.ts";
+import { createPendingAction, pendingToolResult } from "../_shared/pending-aws-actions.ts";
 import { wrapUntrustedAwsData } from "../_shared/untrusted-content.ts";
 import { checkDbRateLimit } from "../_shared/rate-limit-db.ts";
 import { GENERIC_ERRORS, logInternalError } from "../_shared/generic-error.ts";
@@ -76,8 +76,8 @@ function v2Client(service: string, config: any): any {
 }
 
 // Direct v3 send helper
-async function v3Send(service: string, commandName: string, config: any, params: any): Promise<any> {
-  return awsExec(service, commandName, config, params);
+async function v3Send(service: string, commandName: string, config: any, params: any, extra: Record<string, unknown> = {}): Promise<any> {
+  return awsExec(service, commandName, config, params, extra);
 }
 
 
@@ -2163,7 +2163,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
 
     // Ensure log group exists (idempotent)
     try {
-      await v3Send("CloudWatchLogs", "CreateLogGroupCommand", awsConfig, { logGroupName: groupName });
+      await v3Send("CloudWatchLogs", "CreateLogGroupCommand", awsConfig, { logGroupName: groupName }, { platformPurpose: "audit" });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       if (e.name !== "ResourceAlreadyExistsException" && e.code !== "ResourceAlreadyExistsException") throw e;
@@ -2171,7 +2171,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
 
     // Ensure log stream exists (idempotent)
     try {
-      await v3Send("CloudWatchLogs", "CreateLogStreamCommand", awsConfig, { logGroupName: groupName, logStreamName: streamName });
+      await v3Send("CloudWatchLogs", "CreateLogStreamCommand", awsConfig, { logGroupName: groupName, logStreamName: streamName }, { platformPurpose: "audit" });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       if (e.name !== "ResourceAlreadyExistsException" && e.code !== "ResourceAlreadyExistsException") throw e;
@@ -2182,7 +2182,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
       logGroupName: groupName,
       logStreamNamePrefix: streamName,
       limit: 1,
-    });
+    }, { platformPurpose: "audit" });
     const seqToken = desc.logStreams?.[0]?.uploadSequenceToken;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2196,10 +2196,10 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
     };
     if (seqToken) cwParams.sequenceToken = seqToken;
 
-    await v3Send("CloudWatchLogs", "PutLogEventsCommand", awsConfig, cwParams);
+    await v3Send("CloudWatchLogs", "PutLogEventsCommand", awsConfig, cwParams, { platformPurpose: "audit" });
 
     // ── 2. WORM S3 (Object Lock — Compliance Mode) ──────────────────────────
-    const identity = await v3Send("STS", "GetCallerIdentityCommand", awsConfig, {});
+    const identity = await v3Send("STS", "GetCallerIdentityCommand", awsConfig, {}, { platformPurpose: "audit" });
     const accountId = identity.Account;
     const wormBucket = `${WORM_BUCKET_PREFIX}${accountId}`;
 
@@ -2208,7 +2208,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
       await v3Send("S3", "CreateBucketCommand", awsConfig, {
         Bucket: wormBucket,
         ObjectLockEnabledForBucket: true,
-      });
+      }, { platformPurpose: "audit" });
 
       // Set default retention — 1 year Compliance mode (immutable)
       await v3Send("S3", "PutObjectLockConfigurationCommand", awsConfig, {
@@ -2222,7 +2222,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
             },
           },
         },
-      });
+      }, { platformPurpose: "audit" });
 
       // Block all public access
       await v3Send("S3", "PutPublicAccessBlockCommand", awsConfig, {
@@ -2233,7 +2233,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
           BlockPublicPolicy: true,
           RestrictPublicBuckets: true,
         },
-      });
+      }, { platformPurpose: "audit" });
 
       // Enable AES-256 encryption
       await v3Send("S3", "PutBucketEncryptionCommand", awsConfig, {
@@ -2241,7 +2241,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
         ServerSideEncryptionConfiguration: {
           Rules: [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } }],
         },
-      });
+      }, { platformPurpose: "audit" });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       // BucketAlreadyOwnedByYou or BucketAlreadyExists means it's already set up
@@ -2260,7 +2260,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
       Body: new TextEncoder().encode(JSON.stringify(payload, null, 2)),
       ContentType: "application/json",
       ServerSideEncryption: "AES256",
-    });
+    }, { platformPurpose: "audit" });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (e: any) {
     // Audit failures are non-fatal — log but don't break the agent flow
@@ -2324,75 +2324,10 @@ const AWS_V3_SERVICE_MAP: Record<string, string> = {
 
 const ALLOWED_AWS_SERVICES = new Set(Object.keys(AWS_V3_SERVICE_MAP));
 
-const BLOCKED_OPERATIONS = new Set([
-  // Prevent destructive billing/account-level operations
-  "closeAccount", "leaveOrganization", "deleteOrganization",
-  "createAccount", "inviteAccountToOrganization",
-
-  // Prevent AI from accidentally executing destructive resource deletions
-  "terminateInstances", "deleteBucket", "deleteDbInstance",
-  "deleteTable", "deleteCluster", "deleteFunction",
-  "deleteVpc", "deleteSubnet", "deleteNatGateway",
-  "deleteInternetGateway", "deleteRouteTable", "deleteSecurityGroup",
-  "deleteKey", "scheduleKeyDeletion", "deleteSecret"
-]);
-
-// ── Privilege Escalation Validator ──────────────────────────────────────────
-// Blocks operations that could escalate IAM privileges or compromise account security
-const PRIVILEGE_ESCALATION_PATTERNS: Array<{ service: string; operations: Set<string>; reason: string }> = [
-  {
-    service: "IAM",
-    operations: new Set([
-      "createUser", "createLoginProfile", "updateLoginProfile",
-      "createAccessKey", "putUserPolicy", "attachUserPolicy",
-      "putGroupPolicy", "attachGroupPolicy",
-      "putRolePolicy", "attachRolePolicy",
-      "createPolicyVersion", "setDefaultPolicyVersion",
-      "addUserToGroup", "updateAssumeRolePolicy",
-      "createServiceLinkedRole",
-    ]),
-    reason: "This operation can escalate IAM privileges. It could grant broader access than the original credentials possess.",
-  },
-  {
-    service: "STS",
-    operations: new Set([
-      "assumeRole",
-    ]),
-    reason: "Assuming a different role could escalate privileges beyond the current session scope.",
-  },
-  {
-    service: "Organizations",
-    operations: new Set([
-      "createPolicy", "attachPolicy", "updatePolicy",
-    ]),
-    reason: "Organization-level policy changes can affect all accounts in the organization.",
-  },
-  {
-    service: "Lambda",
-    operations: new Set([
-      "createFunction", "updateFunctionCode", "addPermission",
-    ]),
-    reason: "Lambda function creation/modification with an execution role could be used for privilege escalation.",
-  },
-];
-
 interface ValidatorResult {
   allowed: boolean;
   reason?: string;
   riskLevel?: "BLOCKED" | "HIGH_RISK" | "ALLOWED" | "REQUIRES_APPROVAL";
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function validatePrivilegeEscalation(service: string, operation: string, _params: any): ValidatorResult {
-  const decision = classifyAwsOperation(service, operation);
-  if (decision.riskLevel === "ALLOWED") {
-    return { allowed: true, riskLevel: "ALLOWED" };
-  }
-  return {
-    allowed: false,
-    reason: decision.reason,
-    riskLevel: decision.riskLevel,
-  };
 }
 
 const MAX_MESSAGE_LENGTH = 50000;
@@ -2427,7 +2362,7 @@ export const handler = async (req: Request): Promise<Response> => {
 
   try {
     const body = await req.json();
-    const { toolCalls, awsConfig, userId, conversationId, notificationEmail, latestUserMessage } = body;
+    const { toolCalls, awsConfig, userId, conversationId, notificationEmail, latestUserMessage, credentialId, accountId } = body;
     const userHasConfirmedMutation = false;
     const supabaseAdmin = createClient(ENV.supabaseUrl, ENV.supabaseServiceRoleKey);
     const rate = await checkDbRateLimit(supabaseAdmin, `aws-agent-scanner:${userId || "internal"}`, 40, 1);
@@ -2460,17 +2395,12 @@ export const handler = async (req: Request): Promise<Response> => {
               
               // Preview-only mode (safe without user confirmation)
               // Strict: only apply when mode === "apply" AND userHasConfirmedMutation === true AND userId
-              const shouldApply = mode === "apply" && userHasConfirmedMutation === true && userId;
+              const shouldApply = mode === "apply" && !!userId;
               
-              if (!shouldApply || (isAutoStop && !hasAutoStopConfirmation)) {
+              if (!shouldApply) {
                 const execTime = Date.now() - startTime;
                 let previewMessage = "Cost rule preview generated. This rule has NOT been saved.";
-                
-                if (isAutoStop && !hasAutoStopConfirmation) {
-                  previewMessage += " To save this auto-stop rule, send an explicit confirmation that includes 'confirm auto-stop' or 'confirm auto stop'.";
-                } else {
-                  previewMessage += " To save this rule, send an explicit confirmation message with mode=apply.";
-                }
+                previewMessage += " To save this rule, call again with mode=apply. The user must then click Approve in the CloudPilot UI.";
                 
                 apiMessages.push({
                   role: "tool",
@@ -2487,12 +2417,22 @@ export const handler = async (req: Request): Promise<Response> => {
                 continue;
               }
               
-              // Apply mode (requires authentication and confirmation)
+              // Apply mode is queued for UI approval (chat confirmation is not an authorization).
               if (!userId) {
                 throw new Error("Authentication is required to store cost automation rules. Please sign in to CloudPilot.");
               }
 
-              await saveCostRule(supabaseAdmin, userId, rule);
+              const pending = await createPendingAction(supabaseAdmin, {
+                userId,
+                service: "CloudPilot",
+                operation: "SaveCostRule",
+                params: rule,
+                conversationId,
+                toolName: "manage_cost_rule",
+                credentialId,
+                accountId,
+                region: awsConfig?.region,
+              });
               const execTime = Date.now() - startTime;
 
               if (userId) {
@@ -2510,12 +2450,11 @@ export const handler = async (req: Request): Promise<Response> => {
               apiMessages.push({
                 role: "tool",
                 tool_call_id: toolCall.id,
-                content: JSON.stringify({
-                  status: "stored",
-                  message: "Cost rule has been saved and is now active.",
+                content: wrapUntrustedAwsData(pendingToolResult(pending, {
+                  status: "pending_approval",
+                  applied: false,
                   rule,
-                  applied: true,
-                }),
+                })),
               } as any);
             } catch (err: any) {
               apiMessages.push({
@@ -2914,8 +2853,12 @@ export const handler = async (req: Request): Promise<Response> => {
                 throw new Error(`AWS service '${service}' is not allowed. Permitted services: ${[...ALLOWED_AWS_SERVICES].join(", ")}`);
               }
 
-              // ── Privilege Escalation Validator ──────────────────────────────
-              validatorResult = validatePrivilegeEscalation(service, operation, args.params);
+              const decision = classifyAwsOperation(service, operation, args.params);
+              validatorResult = {
+                allowed: decision.allowed,
+                reason: decision.reason,
+                riskLevel: decision.riskLevel,
+              };
               if (!validatorResult.allowed) {
                 if (userId) {
                   supabaseAdmin.from("agent_audit_log").insert({
@@ -2938,17 +2881,18 @@ export const handler = async (req: Request): Promise<Response> => {
                     params: args.params || {},
                     conversationId,
                     toolName: "execute_aws_api",
+                    credentialId,
+                    accountId,
+                    region: awsConfig?.region,
                   });
                   apiMessages.push({
                     role: "tool",
                     tool_call_id: toolCall.id,
-                    content: wrapUntrustedAwsData({
-                      pendingApproval: true,
-                      approvalId: pending.id,
-                      summary: pending.summary,
-                      expiresAt: pending.expiresAt,
-                      message: "This mutating AWS call was not executed. The user must click Approve in the CloudPilot UI.",
-                    }),
+                    content: wrapUntrustedAwsData(pendingToolResult(pending, {
+                      params: args.params || {},
+                      accountId: accountId || null,
+                      region: awsConfig?.region || null,
+                    })),
                   } as any);
                   return { apiMessages, latestUnifiedAuditSummary };
                 }
@@ -2973,8 +2917,8 @@ export const handler = async (req: Request): Promise<Response> => {
               } catch {
                 resultStr = "{}";
               }
-              if (resultStr && resultStr.length > 8000) {
-                resultStr = resultStr.slice(0, 8000) + '... [TRUNCATED — response too large, narrow your query]';
+              if (resultStr && resultStr.length > 100000) {
+                resultStr = resultStr.slice(0, 100000) + '... [TRUNCATED — response too large, narrow your query]';
               }
 
               // ── Audit log: successful call ──────────────────────────────────

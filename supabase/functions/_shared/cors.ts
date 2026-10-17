@@ -1,7 +1,8 @@
 /**
  * Fail-closed CORS helper.
  * Only echoes Access-Control-Allow-Origin when the request Origin is on the allowlist.
- * Never falls back to localhost for unknown origins.
+ * Production must set ALLOWED_ORIGINS. Localhost is never mixed in when it is set.
+ * When ALLOWED_ORIGINS is empty, origins are allowed only if CLOUDPILOT_DEV is true.
  */
 
 const DEFAULT_DEV_ORIGINS = [
@@ -22,14 +23,23 @@ const DEFAULT_ALLOW_HEADERS = [
   "stripe-signature",
 ].join(", ");
 
+function flagEnabled(value: string | undefined): boolean {
+  const flag = (value || "").toLowerCase();
+  return flag === "1" || flag === "true" || flag === "yes";
+}
+
+export function isDevCors(env: { get(key: string): string | undefined } = Deno.env): boolean {
+  return flagEnabled(env.get("CLOUDPILOT_DEV"));
+}
+
 export function getAllowedOrigins(env: { get(key: string): string | undefined } = Deno.env): string[] {
   const extra = (env.get("ALLOWED_ORIGINS") || "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  // Production must set ALLOWED_ORIGINS. Localhost is never mixed in when it is set.
   if (extra.length > 0) return extra;
-  return DEFAULT_DEV_ORIGINS;
+  if (isDevCors(env)) return DEFAULT_DEV_ORIGINS;
+  return [];
 }
 
 export function isOriginAllowed(origin: string, env: { get(key: string): string | undefined } = Deno.env): boolean {

@@ -670,9 +670,44 @@ serve(async (req) => {
       REQUIRED_SCHEDULER_ENVS.supabaseServiceRoleKey,
     );
 
+    const forwarded = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+    const ip = forwarded || req.headers.get("cf-connecting-ip") || "unknown";
+    const preAuth = await checkDbRateLimit(
+      supabaseAdmin,
+      `guardian-scheduler-preauth:${ip}`,
+      30,
+      5,
+    );
+    if (!preAuth.allowed) {
+      return new Response(JSON.stringify({
+        error: GENERIC_ERRORS.rateLimited,
+        retryAfter: preAuth.retryAfterSeconds,
+      }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(preAuth.retryAfterSeconds) },
+      });
+    }
+
+    // Authenticate before using any caller-chosen identity as a rate-limit key.
+    const guardianSecret = req.headers.get("x-guardian-secret") || "";
+    const isAutonomous = !body.credentials && !!AUTOMATION_SECRET && constantTimeCompare(guardianSecret, AUTOMATION_SECRET);
+
+    let authenticatedUserId: string | null = null;
+    if (!isAutonomous) {
+      try {
+        authenticatedUserId = await resolveUserId(req, body, supabaseAdmin);
+      } catch (err) {
+        logInternalError("guardian-scheduler-auth", err);
+        return new Response(JSON.stringify({ error: GENERIC_ERRORS.unauthorized }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const rate = await checkDbRateLimit(
       supabaseAdmin,
-      `guardian-scheduler:${body.userId || "autonomous"}`,
+      isAutonomous ? "guardian-scheduler:autonomous" : `guardian-scheduler:${authenticatedUserId}`,
       10,
       5,
     );
@@ -685,10 +720,6 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rate.retryAfterSeconds) },
       });
     }
-
-    // ── Autonomous mode: pg_cron invocation with no credentials in body ──
-    const guardianSecret = req.headers.get("x-guardian-secret") || "";
-    const isAutonomous = !body.credentials && !!AUTOMATION_SECRET && constantTimeCompare(guardianSecret, AUTOMATION_SECRET);
 
     if (isAutonomous) {
       console.log("[Guardian] Autonomous scan triggered — processing all stored credentials.");
@@ -705,7 +736,7 @@ serve(async (req) => {
     }
 
     // ── Manual mode: existing single-user credential flow ──
-    const userId = await resolveUserId(req, body, supabaseAdmin);
+    const userId = authenticatedUserId as string;
     let awsConfig: Record<string, unknown>;
     if (isLegacyKeysEnabled() && body.credentials?.accessKeyId) {
       awsConfig = buildAwsConfig(body.credentials);

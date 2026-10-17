@@ -1,7 +1,8 @@
 /**
  * Server-side pending AWS mutation approvals.
  * Approval is a UI click against a stored record (user + action hash + expiry),
- * never chat confirmation text.
+ * never chat confirmation text. The stored credential/account is bound into
+ * the hash so approve cannot be redirected to a different account.
  */
 
 import { hashActionPayload, normalizeOperation } from "./aws-command-policy.ts";
@@ -11,13 +12,31 @@ function canonicalActionParts(input: {
   operation: string;
   params: unknown;
   toolName?: string;
+  credentialId?: string | null;
+  accountId?: string | null;
+  region?: string | null;
 }) {
   return {
     service: String(input.service || "").trim().toUpperCase(),
     operation: normalizeOperation(input.operation).toLowerCase(),
     params: input.params || {},
     toolName: input.toolName || "execute_aws_api",
+    credentialId: input.credentialId || null,
+    accountId: input.accountId || null,
+    region: input.region || null,
   };
+}
+
+function buildSummary(input: {
+  service: string;
+  operation: string;
+  accountId?: string | null;
+  region?: string | null;
+  params: unknown;
+}): string {
+  const account = input.accountId || "unknown-account";
+  const region = input.region || "unknown-region";
+  return `${input.service}.${input.operation} → account ${account} (${region})`;
 }
 
 export const PENDING_ACTION_TTL_MS = 15 * 60 * 1000;
@@ -29,6 +48,9 @@ export interface PendingActionInput {
   params: unknown;
   conversationId?: string | null;
   toolName?: string;
+  credentialId?: string | null;
+  accountId?: string | null;
+  region?: string | null;
 }
 
 export async function createPendingAction(
@@ -40,9 +62,18 @@ export async function createPendingAction(
     operation: input.operation,
     params: input.params || {},
     toolName: input.toolName || "execute_aws_api",
+    credentialId: input.credentialId,
+    accountId: input.accountId,
+    region: input.region,
   }));
   const expiresAt = new Date(Date.now() + PENDING_ACTION_TTL_MS).toISOString();
-  const summary = `${input.service}.${input.operation}`;
+  const summary = buildSummary({
+    service: input.service,
+    operation: input.operation,
+    accountId: input.accountId,
+    region: input.region,
+    params: input.params,
+  });
 
   const { data, error } = await supabaseAdmin
     .from("pending_aws_actions")
@@ -57,6 +88,9 @@ export async function createPendingAction(
       status: "pending",
       expires_at: expiresAt,
       summary,
+      credential_id: input.credentialId || null,
+      account_id: input.accountId || null,
+      region: input.region || null,
     })
     .select("id")
     .single();
@@ -68,17 +102,28 @@ export async function createPendingAction(
   return { id: data.id, actionHash, expiresAt, summary };
 }
 
+export function pendingToolResult(pending: { id: string; summary: string; expiresAt: string }, extra: Record<string, unknown> = {}) {
+  return {
+    pendingApproval: true,
+    approvalId: pending.id,
+    summary: pending.summary,
+    expiresAt: pending.expiresAt,
+    message: "This mutating AWS call was not executed. Approve it in the CloudPilot pending-changes panel. Chat text such as 'confirm' is not an authorization.",
+    ...extra,
+  };
+}
+
 export async function consumeApprovedAction(
   supabaseAdmin: any,
-  opts: { userId: string; approvalId: string; service: string; operation: string; params: unknown; toolName?: string },
+  opts: {
+    userId: string;
+    approvalId: string;
+    service?: string;
+    operation?: string;
+    params?: unknown;
+    toolName?: string;
+  },
 ): Promise<{ ok: true; params: unknown; record: any } | { ok: false; reason: string }> {
-  const expectedHash = await hashActionPayload(canonicalActionParts({
-    service: opts.service,
-    operation: opts.operation,
-    params: opts.params || {},
-    toolName: opts.toolName || "execute_aws_api",
-  }));
-
   const { data, error } = await supabaseAdmin
     .from("pending_aws_actions")
     .select("*")
@@ -95,14 +140,33 @@ export async function consumeApprovedAction(
   if (new Date(data.expires_at).getTime() < Date.now()) {
     return { ok: false, reason: "Approval has expired" };
   }
+
   const storedHash = await hashActionPayload(canonicalActionParts({
     service: data.service,
     operation: data.operation,
     params: data.params || {},
     toolName: data.tool_name || "execute_aws_api",
+    credentialId: data.credential_id,
+    accountId: data.account_id,
+    region: data.region,
   }));
-  if (data.action_hash !== expectedHash || data.action_hash !== storedHash) {
+  if (data.action_hash !== storedHash) {
     return { ok: false, reason: "Approval does not match this action" };
+  }
+
+  if (opts.service || opts.operation) {
+    const expectedHash = await hashActionPayload(canonicalActionParts({
+      service: opts.service || data.service,
+      operation: opts.operation || data.operation,
+      params: opts.params !== undefined ? opts.params : (data.params || {}),
+      toolName: opts.toolName || data.tool_name || "execute_aws_api",
+      credentialId: data.credential_id,
+      accountId: data.account_id,
+      region: data.region,
+    }));
+    if (data.action_hash !== expectedHash) {
+      return { ok: false, reason: "Approval does not match this action" };
+    }
   }
 
   const { data: consumed, error: updateError } = await supabaseAdmin

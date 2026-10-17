@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { requireServiceRole } from "../_shared/internal-auth.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { classifyAwsOperation, sanitizeAwsClientConfig } from "../_shared/aws-command-policy.ts";
+import { classifyAwsOperation, isPlatformAllowlisted, sanitizeAwsClientConfig, type PlatformPurpose } from "../_shared/aws-command-policy.ts";
 import { GENERIC_ERRORS, logInternalError } from "../_shared/generic-error.ts";
 import { consumeApprovedAction } from "../_shared/pending-aws-actions.ts";
 
@@ -129,7 +129,7 @@ export const handler = async (req: Request): Promise<Response> => {
 
   try {
     const body = await req.json();
-    const { service, commandName, config, params, approvalId, userId } = body;
+    const { service, commandName, config, params, approvalId, userId, platformPurpose } = body;
 
     if (!service || !commandName) {
       return json(req, { error: GENERIC_ERRORS.badRequest }, 400);
@@ -139,11 +139,13 @@ export const handler = async (req: Request): Promise<Response> => {
     let effectiveCommand = commandName;
     let effectiveParams = params;
 
-    let decision = classifyAwsOperation(effectiveService, effectiveCommand);
+    let decision = classifyAwsOperation(effectiveService, effectiveCommand, effectiveParams);
     if (decision.riskLevel === "BLOCKED") {
       return json(req, { error: GENERIC_ERRORS.mutationBlocked }, 403);
     }
-    if (decision.requiresApproval) {
+    const purpose = platformPurpose as PlatformPurpose | undefined;
+    const platformOk = isPlatformAllowlisted(purpose, effectiveService, effectiveCommand, effectiveParams);
+    if (decision.requiresApproval && !platformOk) {
       if (!approvalId || !userId) {
         return json(req, { error: GENERIC_ERRORS.approvalRequired }, 403);
       }
@@ -162,7 +164,7 @@ export const handler = async (req: Request): Promise<Response> => {
       effectiveService = approved.record.service;
       effectiveCommand = approved.record.operation;
       effectiveParams = approved.params;
-      decision = classifyAwsOperation(effectiveService, effectiveCommand);
+      decision = classifyAwsOperation(effectiveService, effectiveCommand, effectiveParams);
       if (decision.riskLevel === "BLOCKED") {
         return json(req, { error: GENERIC_ERRORS.mutationBlocked }, 403);
       }

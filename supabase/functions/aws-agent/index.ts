@@ -11,7 +11,7 @@ import { classifyError, isToolResultError, extractToolResultError, analyzeToolRe
 import { CIS_AWS_V3_CONTROLS, getCISControl } from "../_shared/cis-aws-v3.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { classifyAwsOperation } from "../_shared/aws-command-policy.ts";
-import { wrapToolResultContent, UNTRUSTED_AWS_DATA_INSTRUCTION } from "../_shared/untrusted-content.ts";
+import { wrapToolResultContent, unwrapUntrustedAwsData, UNTRUSTED_AWS_DATA_INSTRUCTION } from "../_shared/untrusted-content.ts";
 import { checkDbRateLimit } from "../_shared/rate-limit-db.ts";
 import { GENERIC_ERRORS, logInternalError } from "../_shared/generic-error.ts";
 import { resolveAwsConfigForUser } from "../_shared/customer-aws.ts";
@@ -248,9 +248,9 @@ CRITICAL CONCURRENCY DIRECTIVE: To avoid platform execution timeouts, if you nee
 
 For IAM access automation requests (example: "give dev-team read-only S3 access"):
   STEP 1 → Use manage_iam_access to build a structured least-privilege preview
-  STEP 2 → Present the preview and explicitly ask for confirmation
-  STEP 3 → DO NOT execute IAM write operations until the user sends an explicit confirmation
-  STEP 4 → After the user confirms, call manage_iam_access again with the same request to execute it
+  STEP 2 → Present the preview. Privilege-escalation IAM APIs are blocked and cannot be executed from chat.
+  STEP 3 → DO NOT tell the user that chat confirmation will apply the change
+  STEP 4 → If a pending approval is returned, tell the user to click Approve in the CloudPilot pending-changes panel
 
 NEVER use execute_aws_api for mutating AWS calls. execute_aws_api is read-only (Get/List/Describe/Head). Mutating calls are stored as pending actions and only run after the user clicks Approve in the CloudPilot UI — never after chat text such as "confirm".
 IAM privilege-escalation APIs (CreateAccessKey, AttachUserPolicy, PutRolePolicy, PassRole, UpdateAssumeRolePolicy, login-profile changes, etc.) are permanently blocked.
@@ -261,7 +261,7 @@ NEVER generate wildcard IAM actions like iam:* or service:* inside IAM automatio
 For security group automation requests (example: "open port 443 to 0.0.0.0/0 on prod-web-sg"):
   STEP 1 → Use manage_security_group_rule to build a preview with risk classification
   STEP 2 → Present the exact rule diff, exposure summary, and risk level
-  STEP 3 → DO NOT execute EC2 security group mutations until the user explicitly confirms
+  STEP 3 → DO NOT claim chat confirmation will apply the change. The user must click Approve in the pending-changes panel.
   STEP 4 → If the validator marks the request as BLOCKED, reject it and explain why
 
 NEVER use execute_aws_api directly for authorizeSecurityGroupIngress, revokeSecurityGroupIngress,
@@ -6393,75 +6393,6 @@ const AWS_V3_SERVICE_MAP: Record<string, string> = {
 
 const ALLOWED_AWS_SERVICES = new Set(Object.keys(AWS_V3_SERVICE_MAP));
 
-const BLOCKED_OPERATIONS = new Set([
-  // Prevent destructive billing/account-level operations
-  "closeAccount", "leaveOrganization", "deleteOrganization",
-  "createAccount", "inviteAccountToOrganization",
-
-  // Prevent AI from accidentally executing destructive resource deletions
-  "terminateInstances", "deleteBucket", "deleteDbInstance",
-  "deleteTable", "deleteCluster", "deleteFunction",
-  "deleteKey", "scheduleKeyDeletion", "deleteSecret"
-]);
-
-// ── Privilege Escalation Validator ──────────────────────────────────────────
-// Blocks operations that could escalate IAM privileges or compromise account security
-const PRIVILEGE_ESCALATION_PATTERNS: Array<{ service: string; operations: Set<string>; reason: string }> = [
-  {
-    service: "IAM",
-    operations: new Set([
-      "createUser", "createLoginProfile", "updateLoginProfile",
-      "createAccessKey", "putUserPolicy", "attachUserPolicy",
-      "putGroupPolicy", "attachGroupPolicy",
-      "putRolePolicy", "attachRolePolicy",
-      "createPolicyVersion", "setDefaultPolicyVersion",
-      "addUserToGroup", "updateAssumeRolePolicy",
-      "createServiceLinkedRole",
-    ]),
-    reason: "This operation can escalate IAM privileges. It could grant broader access than the original credentials possess.",
-  },
-  {
-    service: "STS",
-    operations: new Set([
-      "assumeRole",
-    ]),
-    reason: "Assuming a different role could escalate privileges beyond the current session scope.",
-  },
-  {
-    service: "Organizations",
-    operations: new Set([
-      "createPolicy", "attachPolicy", "updatePolicy",
-    ]),
-    reason: "Organization-level policy changes can affect all accounts in the organization.",
-  },
-  {
-    service: "Lambda",
-    operations: new Set([
-      "createFunction", "updateFunctionCode", "addPermission",
-    ]),
-    reason: "Lambda function creation/modification with an execution role could be used for privilege escalation.",
-  },
-];
-
-interface ValidatorResult {
-  allowed: boolean;
-  reason?: string;
-  riskLevel?: "BLOCKED" | "HIGH_RISK" | "ALLOWED" | "REQUIRES_APPROVAL";
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function validatePrivilegeEscalation(service: string, operation: string, _params: any): ValidatorResult {
-  const decision = classifyAwsOperation(service, operation);
-  if (decision.riskLevel === "ALLOWED") {
-    return { allowed: true, riskLevel: "ALLOWED" };
-  }
-  return {
-    allowed: false,
-    reason: decision.reason,
-    riskLevel: decision.riskLevel,
-  };
-}
-
 const MAX_MESSAGE_LENGTH = 50000;
 const MAX_MESSAGES = 100;
 
@@ -6536,7 +6467,7 @@ export const handler = async (req: Request): Promise<Response> => {
     if (body?.action === "list_pending_actions") {
       const { data } = await supabaseAdmin
         .from("pending_aws_actions")
-        .select("id, service, operation, summary, expires_at, status")
+        .select("id, service, operation, summary, expires_at, status, params, credential_id, account_id, region, tool_name")
         .eq("user_id", userId)
         .eq("status", "pending")
         .gt("expires_at", new Date().toISOString())
@@ -6551,7 +6482,34 @@ export const handler = async (req: Request): Promise<Response> => {
       const result = await approvePendingAction(supabaseAdmin, { userId, approvalId });
       if (!result.ok) return jsonErr(req, GENERIC_ERRORS.approvalInvalid, 400);
       try {
-        const resolved = await resolveAwsConfigForUser({ userId, credentialId: body.credentialId });
+        if (result.record.service === "CloudPilot" && result.record.operation === "SaveCostRule") {
+          const rule = result.record.params || {};
+          const { error: saveErr } = await supabaseAdmin.from("cost_automation_rules").insert({
+            user_id: userId,
+            rule_id: rule.rule_id,
+            rule_type: rule.type,
+            threshold: rule.threshold ?? null,
+            multiplier: rule.multiplier ?? null,
+            scope: rule.scope,
+            action: rule.action,
+            requires_confirm: rule.requires_confirm,
+            channels: rule.channels,
+            raw_query: rule.raw_query,
+          });
+          if (saveErr) {
+            logInternalError("aws-agent-approve-cost-rule", saveErr);
+            return jsonErr(req, GENERIC_ERRORS.internal, 500);
+          }
+          await supabaseAdmin.from("pending_aws_actions").update({
+            status: "consumed",
+            consumed_at: new Date().toISOString(),
+          }).eq("id", approvalId);
+          return new Response(JSON.stringify({ success: true, result: { stored: true } }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const storedCredentialId = result.record.credential_id || undefined;
+        const resolved = await resolveAwsConfigForUser({ userId, credentialId: storedCredentialId });
         const awsConfig = sanitizeAwsClientConfig(resolved.awsConfig);
         const execResp = await fetch(`${RUNTIME_CONFIG.supabaseUrl}/functions/v1/aws-executor`, {
           method: "POST",
@@ -7066,6 +7024,8 @@ export const handler = async (req: Request): Promise<Response> => {
                   notificationEmail: notificationEmail || null,
                   userHasConfirmedMutation,
                   latestUserMessage,
+                  credentialId: resolved.connectionId || credentialId || null,
+                  accountId: resolved.accountId || null,
                 }),
               });
 
@@ -7120,7 +7080,7 @@ export const handler = async (req: Request): Promise<Response> => {
                     apiMessages.push({
                       role: "tool",
                       tool_call_id: result.toolCallId,
-                      content: wrapToolResultContent(result.content),
+                      content: wrapToolResultContent(unwrapUntrustedAwsData(result.content)),
                     });
                   }
                   
@@ -7142,7 +7102,7 @@ export const handler = async (req: Request): Promise<Response> => {
                 apiMessages.push({
                   role: "tool",
                   tool_call_id: result.toolCallId,
-                  content: wrapToolResultContent(result.content),
+                  content: wrapToolResultContent(unwrapUntrustedAwsData(result.content)),
                 });
                 if (result.auditSummary) {
                   latestUnifiedAuditSummary = result.auditSummary;
