@@ -1,29 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
-// SECURITY HARDENING: Strict CORS origin validation with allowlist
-const ALLOWED_ORIGINS = [
-  "http://localhost:8080",
-  "http://localhost:5173",
-  ...(Deno.env.get("ALLOWED_ORIGINS") || "").split(",").filter(Boolean),
-];
-
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) 
-    ? origin 
-    : (Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080");
-  
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-guardian-secret",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Max-Age": "86400",
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-  };
-}
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { parseHttpsUrl, safeWebhookFetch } from "../_shared/ssrf.ts";
+import { constantTimeCompare } from "../_shared/internal-auth.ts";
+import { GENERIC_ERRORS, logInternalError } from "../_shared/generic-error.ts";
 
 /**
  * Webhook Notification Service
@@ -89,7 +70,7 @@ async function sendSlackWebhook(url: string, payload: WebhookPayload): Promise<b
     }],
   };
 
-  const resp = await fetch(url, {
+  const resp = await safeWebhookFetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(slackBody),
@@ -132,7 +113,7 @@ async function sendPagerDutyEvent(routingKey: string, payload: WebhookPayload): 
 }
 
 async function sendGenericWebhook(url: string, payload: WebhookPayload): Promise<boolean> {
-  const resp = await fetch(url, {
+  const resp = await safeWebhookFetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -161,7 +142,7 @@ export const handler = async (req: Request): Promise<Response> => {
       userId = user?.id || null;
     }
     const guardianSecret = req.headers.get("x-guardian-secret");
-    if (!userId && guardianSecret === AUTOMATION_SECRET) {
+    if (!userId && AUTOMATION_SECRET && guardianSecret && constantTimeCompare(guardianSecret, AUTOMATION_SECRET)) {
       userId = body.userId;
     }
     if (!userId) {
@@ -177,7 +158,15 @@ export const handler = async (req: Request): Promise<Response> => {
     if (action === "register") {
       const { channel_type, webhook_url, label, events } = body;
       if (!channel_type || !webhook_url) {
-        return new Response(JSON.stringify({ error: "channel_type and webhook_url are required" }), {
+        return new Response(JSON.stringify({ error: GENERIC_ERRORS.badRequest }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      try {
+        parseHttpsUrl(webhook_url);
+      } catch {
+        return new Response(JSON.stringify({ error: "Webhook URL must be https and must not target a private address." }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -195,7 +184,8 @@ export const handler = async (req: Request): Promise<Response> => {
         });
 
       if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
+        logInternalError("webhook-notify-register", error);
+        return new Response(JSON.stringify({ error: GENERIC_ERRORS.internal }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -299,7 +289,8 @@ export const handler = async (req: Request): Promise<Response> => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
+    logInternalError("webhook-notify", err);
+    return new Response(JSON.stringify({ error: GENERIC_ERRORS.internal }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

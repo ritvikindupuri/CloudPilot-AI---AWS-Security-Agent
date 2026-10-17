@@ -1,7 +1,7 @@
 project_id = "lomerqywiwxlblpunkdl"
 
 [functions.aws-agent]
-verify_jwt = false
+verify_jwt = true
 
 [functions.aws-agent-tools]
 verify_jwt = true
@@ -12,9 +12,11 @@ verify_jwt = true
 [functions.aws-agent-ops]
 verify_jwt = true
 
+# Cron/internal: authenticates with x-guardian-secret (constant-time compare). JWT would block pg_cron.
 [functions.guardian-scheduler]
 verify_jwt = false
 
+# Event ingest: authenticates with x-guardian-secret (constant-time compare).
 [functions.guardian-event-processor]
 verify_jwt = false
 
@@ -22,10 +24,23 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.stripe-checkout]
-verify_jwt = false
+verify_jwt = true
 
+# Stripe sends no JWT. Signature verification via STRIPE_WEBHOOK_SECRET is required.
 [functions.stripe-webhook]
 verify_jwt = false
+
+[functions.webhook-notify]
+verify_jwt = true
+
+[functions.aws-exchange-credentials]
+verify_jwt = true
+
+[functions.aws-credential-vault]
+verify_jwt = true
+
+[functions.team-invite]
+verify_jwt = true
 
 [auth]
 enable_signup = true

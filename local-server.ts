@@ -28,6 +28,12 @@ const ALLOWED_TABLES = new Set([
   "organizations",
   "organization_members",
   "subscriptions",
+  "pending_aws_actions",
+  "rate_limit_entries",
+  "automation_runs",
+  "guardian_event_activity",
+  "org_members",
+  "user_roles",
 ]);
 
 // ── SECURITY: Column name pattern — alphanumeric + underscore only ──

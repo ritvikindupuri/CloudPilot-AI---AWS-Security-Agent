@@ -1,91 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
-// SECURITY HARDENING: Strict CORS origin validation with allowlist
-const ALLOWED_ORIGINS = [
-  "http://localhost:8080",
-  "http://localhost:5173",
-  ...(Deno.env.get("ALLOWED_ORIGINS") || "").split(",").filter(Boolean),
-];
-
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) 
-    ? origin 
-    : (Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080");
-  
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Max-Age": "86400",
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-  };
-}
-
-/**
- * AES-256-GCM Credential Vault
- * 
- * Replaces client-side XOR encryption with proper AES-256-GCM.
- * Key derivation: PBKDF2 from SUPABASE_SERVICE_ROLE_KEY + user_id salt.
- * All encryption/decryption happens server-side — raw keys never persist client-side.
- */
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { encryptValue, decryptAndMaybeReencrypt, isLegacyKeysEnabled } from "../_shared/vault-crypto.ts";
+import { requireServiceRole } from "../_shared/internal-auth.ts";
+import { GENERIC_ERRORS, logInternalError } from "../_shared/generic-error.ts";
 
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 
-async function deriveKey(userId: string): Promise<CryptoKey> {
-  const encoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(SERVICE_ROLE_KEY),
-    "PBKDF2",
-    false,
-    ["deriveKey"]
-  );
-  return crypto.subtle.deriveKey(
-    {
-      name: "PBKDF2",
-      salt: encoder.encode(`cloudpilot-vault-${userId}`),
-      iterations: 100000,
-      hash: "SHA-256",
-    },
-    keyMaterial,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt", "decrypt"]
-  );
-}
-
-async function encryptValue(plaintext: string, userId: string): Promise<string> {
-  const key = await deriveKey(userId);
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encoded = new TextEncoder().encode(plaintext);
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    encoded
-  );
-  // Format: base64(iv + ciphertext)
-  const combined = new Uint8Array(iv.length + new Uint8Array(ciphertext).length);
-  combined.set(iv);
-  combined.set(new Uint8Array(ciphertext), iv.length);
-  return btoa(String.fromCharCode(...combined));
-}
-
 export async function decryptValue(encryptedB64: string, userId: string): Promise<string> {
-  const key = await deriveKey(userId);
-  const combined = Uint8Array.from(atob(encryptedB64), c => c.charCodeAt(0));
-  const iv = combined.slice(0, 12);
-  const ciphertext = combined.slice(12);
-  const decrypted = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
-    key,
-    ciphertext
-  );
-  return new TextDecoder().decode(decrypted);
+  const result = await decryptAndMaybeReencrypt(encryptedB64, userId);
+  return result.plaintext;
 }
 
 export const handler = async (req: Request): Promise<Response> => {
@@ -96,31 +22,49 @@ export const handler = async (req: Request): Promise<Response> => {
   try {
     const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    // Authenticate the caller
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
-    if (authErr || !user) {
-      return new Response(JSON.stringify({ error: "Invalid session" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const body = await req.json();
     const action = body.action;
 
+    let user: { id: string } | null = null;
+    if (action === "decrypt" || action === "reencrypt_all_v2") {
+      const serviceAuth = requireServiceRole(req, SERVICE_ROLE_KEY, corsHeaders, "aws-credential-vault");
+      if (serviceAuth) return serviceAuth;
+    } else {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader?.startsWith("Bearer ")) {
+        return new Response(JSON.stringify({ error: GENERIC_ERRORS.unauthorized }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const token = authHeader.replace(/^Bearer\s+/i, "");
+      const { data, error: authErr } = await supabaseAdmin.auth.getUser(token);
+      if (authErr || !data.user) {
+        return new Response(JSON.stringify({ error: GENERIC_ERRORS.unauthorized }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      user = data.user;
+    }
+
     if (action === "encrypt_and_store") {
+      if (!user) {
+        return new Response(JSON.stringify({ error: GENERIC_ERRORS.unauthorized }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!isLegacyKeysEnabled()) {
+        return new Response(JSON.stringify({ error: GENERIC_ERRORS.legacyKeysDisabled }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       const { accessKeyId, secretAccessKey, sessionToken, region, label, accountId, notificationEmail, scanMode, credentialMethod, roleArn } = body;
       
       if (!accessKeyId || !secretAccessKey) {
-        return new Response(JSON.stringify({ error: "accessKeyId and secretAccessKey are required" }), {
+        return new Response(JSON.stringify({ error: GENERIC_ERRORS.badRequest }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -145,11 +89,13 @@ export const handler = async (req: Request): Promise<Response> => {
           notification_email: notificationEmail || null,
           guardian_enabled: true,
           scan_mode: scanMode || "all",
+          encryption_key_version: "v2",
           updated_at: new Date().toISOString(),
         }, { onConflict: "user_id,label" });
 
       if (upsertErr) {
-        return new Response(JSON.stringify({ error: `Storage failed: ${upsertErr.message}` }), {
+        logInternalError("aws-credential-vault", upsertErr);
+        return new Response(JSON.stringify({ error: GENERIC_ERRORS.internal }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -161,8 +107,54 @@ export const handler = async (req: Request): Promise<Response> => {
       });
     }
 
+    if (action === "reencrypt_all_v2") {
+      const { data: rows, error: listErr } = await supabaseAdmin
+        .from("stored_aws_credentials")
+        .select("id, user_id, encrypted_access_key_id, encrypted_secret_access_key, encrypted_session_token, encrypted_external_id, encryption_key_version");
+      if (listErr) {
+        logInternalError("aws-credential-vault-migrate", listErr);
+        return new Response(JSON.stringify({ error: GENERIC_ERRORS.internal }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      let migrated = 0;
+      let skipped = 0;
+      let failed = 0;
+      for (const row of rows || []) {
+        try {
+          const updates: Record<string, unknown> = { encryption_key_version: "v2", updated_at: new Date().toISOString() };
+          let changed = false;
+          for (const col of ["encrypted_access_key_id", "encrypted_secret_access_key", "encrypted_session_token", "encrypted_external_id"] as const) {
+            const current = row[col];
+            if (!current) continue;
+            const rotated = await decryptAndMaybeReencrypt(current, row.user_id);
+            if (rotated.rotated) {
+              updates[col] = rotated.ciphertext;
+              changed = true;
+            }
+          }
+          if (!changed && row.encryption_key_version === "v2") {
+            skipped++;
+            continue;
+          }
+          const { error: updErr } = await supabaseAdmin.from("stored_aws_credentials").update(updates).eq("id", row.id);
+          if (updErr) throw updErr;
+          migrated++;
+        } catch (err) {
+          failed++;
+          logInternalError("aws-credential-vault-migrate-row", err);
+        }
+      }
+      return new Response(JSON.stringify({ success: true, migrated, skipped, failed }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (action === "decrypt") {
-      // Internal use only — called by guardian-scheduler with service role
+      const serviceAuth = requireServiceRole(req, SERVICE_ROLE_KEY, corsHeaders, "aws-credential-vault");
+      if (serviceAuth) return serviceAuth;
       const { credentialId } = body;
       const { data: cred, error: fetchErr } = await supabaseAdmin
         .from("stored_aws_credentials")
@@ -173,14 +165,6 @@ export const handler = async (req: Request): Promise<Response> => {
       if (fetchErr || !cred) {
         return new Response(JSON.stringify({ error: "Credential not found" }), {
           status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      // SECURITY: Enforce ownership — users may only decrypt their own credentials
-      if (cred.user_id !== user.id) {
-        return new Response(JSON.stringify({ error: "Forbidden" }), {
-          status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -208,7 +192,8 @@ export const handler = async (req: Request): Promise<Response> => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message || "Vault operation failed" }), {
+    logInternalError("aws-credential-vault", err);
+    return new Response(JSON.stringify({ error: GENERIC_ERRORS.vaultUnavailable }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

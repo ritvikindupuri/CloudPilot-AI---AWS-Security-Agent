@@ -302,24 +302,90 @@ export type Database = {
           },
         ]
       }
+      pending_aws_actions: {
+        Row: {
+          action_hash: string
+          approved_at: string | null
+          consumed_at: string | null
+          conversation_id: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          operation: string
+          params: Json
+          rejected_at: string | null
+          service: string
+          status: string
+          summary: string
+          tool_name: string
+          user_id: string
+          credential_id: string | null
+          account_id: string | null
+          region: string | null
+        }
+        Insert: {
+          action_hash: string
+          approved_at?: string | null
+          consumed_at?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          operation: string
+          params?: Json
+          rejected_at?: string | null
+          service: string
+          status?: string
+          summary: string
+          tool_name?: string
+          user_id: string
+          credential_id?: string | null
+          account_id?: string | null
+          region?: string | null
+        }
+        Update: {
+          action_hash?: string
+          approved_at?: string | null
+          consumed_at?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          operation?: string
+          params?: Json
+          rejected_at?: string | null
+          service?: string
+          status?: string
+          summary?: string
+          tool_name?: string
+          user_id?: string
+          credential_id?: string | null
+          account_id?: string | null
+          region?: string | null
+        }
+        Relationships: []
+      }
       rate_limit_entries: {
         Row: {
           id: string
           key: string
           request_count: number
           window_start: string
+          window_bucket: string | null
         }
         Insert: {
           id?: string
           key: string
           request_count?: number
           window_start?: string
+          window_bucket?: string | null
         }
         Update: {
           id?: string
           key?: string
           request_count?: number
           window_start?: string
+          window_bucket?: string | null
         }
         Relationships: []
       }
@@ -328,9 +394,11 @@ export type Database = {
           account_id: string | null
           created_at: string
           credential_method: string
-          encrypted_access_key_id: string
-          encrypted_secret_access_key: string
+          encrypted_access_key_id: string | null
+          encrypted_external_id: string | null
+          encrypted_secret_access_key: string | null
           encrypted_session_token: string | null
+          encryption_key_version: string
           guardian_enabled: boolean
           id: string
           label: string
@@ -348,9 +416,11 @@ export type Database = {
           account_id?: string | null
           created_at?: string
           credential_method?: string
-          encrypted_access_key_id: string
-          encrypted_secret_access_key: string
+          encrypted_access_key_id?: string | null
+          encrypted_external_id?: string | null
+          encrypted_secret_access_key?: string | null
           encrypted_session_token?: string | null
+          encryption_key_version?: string
           guardian_enabled?: boolean
           id?: string
           label?: string
@@ -368,9 +438,11 @@ export type Database = {
           account_id?: string | null
           created_at?: string
           credential_method?: string
-          encrypted_access_key_id?: string
-          encrypted_secret_access_key?: string
+          encrypted_access_key_id?: string | null
+          encrypted_external_id?: string | null
+          encrypted_secret_access_key?: string | null
           encrypted_session_token?: string | null
+          encryption_key_version?: string
           guardian_enabled?: boolean
           id?: string
           label?: string
@@ -529,6 +601,14 @@ export type Database = {
       is_org_member: {
         Args: { _org_id: string; _user_id: string }
         Returns: boolean
+      }
+      rate_limit_hit: {
+        Args: { p_key: string; p_max: number; p_window_seconds: number }
+        Returns: {
+          allowed: boolean
+          request_count: number
+          retry_after_seconds: number
+        }[]
       }
     }
     Enums: {

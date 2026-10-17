@@ -8,27 +8,17 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { supabase, supabaseUrl, supabaseAnonKey } from "@/integrations/supabase/client";
 
-/** Session credentials returned by the exchange endpoint — these are the ONLY credentials sent to the agent. */
-export interface AwsSessionCredentials {
-  accessKeyId: string;
-  secretAccessKey: string;
-  sessionToken: string;
-  expiration: string;
-  region: string;
-}
-
-/** Full credentials type used by the app. Raw keys stay local; only session creds go to the agent. */
+/** Connection metadata only. AWS secrets are never stored in the browser. */
 export interface AwsCredentials {
   method: "access_key" | "assume_role";
   region: string;
-  /** Populated after successful exchange — ONLY these are sent with requests */
-  session: AwsSessionCredentials | null;
-  /** Display-only metadata */
+  credentialId?: string;
   identity?: { account: string; arn: string };
-  /** Evaluated permissions for the principal */
   permissions?: Record<string, boolean>;
-  /** Original access key ID prefix for display */
   displayKeyPrefix?: string;
+  externalId?: string;
+  connected?: boolean;
+  expiresAt?: string;
 }
 
 const AWS_REGIONS = [
@@ -46,7 +36,8 @@ interface AwsCredentialsPanelProps {
 
 const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCredentialsPanelProps) => {
   const [isOpen, setIsOpen] = useState(!credentials);
-  const [method, setMethod] = useState<"access_key" | "assume_role">(credentials?.method || "access_key");
+  const [method, setMethod] = useState<"access_key" | "assume_role">(credentials?.method || "assume_role");
+  const [externalId, setExternalId] = useState(credentials?.externalId || "");
   const [accessKeyId, setAccessKeyId] = useState("");
   const [secretAccessKey, setSecretAccessKey] = useState("");
   const [roleArn, setRoleArn] = useState("");
@@ -104,24 +95,24 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
         throw new Error(`Unexpected server response format (HTTP ${resp.status})`);
       }
 
-      if (!resp.ok || data?.ok === false || !data?.sessionCredentials) {
+      if (!resp.ok || data?.ok === false || !data?.identity) {
         throw new Error(data?.error || `Validation failed (${resp.status})`);
       }
 
       const creds: AwsCredentials = {
         method,
         region: normalizedRegion,
-        session: data.sessionCredentials,
+        credentialId: data.credentialId,
         identity: data.identity,
         permissions: data.permissions,
-        displayKeyPrefix: method === "access_key" ? normalizedAccessKeyId.slice(0, 10) : undefined,
+        displayKeyPrefix: method === "access_key" ? normalizedAccessKeyId.slice(0, 8) : undefined,
+        connected: true,
+        expiresAt: data.expiresAt,
       };
 
       onSave(creds);
       setIsOpen(false);
       toast.success(`Connected to AWS account ${data.identity?.account || ""}`);
-
-
       localStorage.removeItem("cloudpilot-gemini-api-key");
 
       setAccessKeyId("");
@@ -140,8 +131,8 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
     ? accessKeyId.trim() && secretAccessKey.trim() && region.trim()
     : roleArn.trim() && region.trim();
 
-  const isExpired = credentials?.session?.expiration
-    ? new Date(credentials.session.expiration) < new Date()
+  const isExpired = credentials?.expiresAt
+    ? new Date(credentials.expiresAt) < new Date()
     : false;
 
   return (
@@ -286,9 +277,47 @@ const AwsCredentialsPanel = ({ credentials, onSave, compact = false }: AwsCreden
                 <div className="flex items-center gap-2 px-2.5 py-2 bg-muted rounded border border-border">
                   <Lock className="w-3 h-3 text-primary flex-shrink-0" />
                   <p className="text-[10px] text-muted-foreground leading-tight">
-                    Raw keys are validated and used only for this browser session so IAMFullAccess can attach per-service policies when a prompt needs them. Keys are never stored.
+                    Connect with a cross-account IAM role that requires your unique ExternalId. CloudPilot assumes the role server-side. AWS secrets are not stored in the browser.
+                    Long-lived access keys are disabled unless an administrator sets ENABLE_LEGACY_ACCESS_KEYS.
                   </p>
                 </div>
+                {method === "assume_role" && (
+                  <div className="space-y-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      disabled={exchanging}
+                      onClick={async () => {
+                        try {
+                          const session = (await supabase.auth.getSession()).data.session;
+                          if (!session?.access_token) throw new Error("Sign in required");
+                          const resp = await fetch(`${supabaseUrl}/functions/v1/aws-exchange-credentials`, {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${session.access_token}`,
+                              apikey: supabaseAnonKey,
+                            },
+                            body: JSON.stringify({ action: "start_onboarding", region }),
+                          });
+                          const data = await resp.json();
+                          if (!resp.ok || !data.externalId) throw new Error(data.error || "Could not generate ExternalId");
+                          setExternalId(data.externalId);
+                          toast.success("ExternalId generated. Put it in the CloudFormation template.");
+                        } catch (err: any) {
+                          toast.error("Could not generate ExternalId.");
+                        }
+                      }}
+                    >
+                      Generate ExternalId
+                    </Button>
+                    {externalId && (
+                      <p className="text-[10px] font-mono break-all bg-muted p-2 rounded">sts:ExternalId = {externalId}</p>
+                    )}
+                  </div>
+                )}
 
               <div className="mt-2 p-3 bg-card border border-border rounded-md text-left">
                   <details className="group mb-2" open>

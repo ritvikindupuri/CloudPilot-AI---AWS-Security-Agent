@@ -1,31 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { requireServiceRole } from "../_shared/internal-auth.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import {
+  callerAccountMatchesPending,
+  classifyAwsOperation,
+  isPlatformAllowlisted,
+  sanitizeAwsClientConfig,
+  type PlatformPurpose,
+} from "../_shared/aws-command-policy.ts";
+import { GENERIC_ERRORS, logInternalError } from "../_shared/generic-error.ts";
+import { consumeApprovedAction } from "../_shared/pending-aws-actions.ts";
 
-// SECURITY HARDENING: Strict CORS origin validation with allowlist
-const ALLOWED_ORIGINS = [
-  "http://localhost:8080",
-  "http://localhost:5173",
-  ...(Deno.env.get("ALLOWED_ORIGINS") || "").split(",").filter(Boolean),
-];
-
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin)
-    ? origin
-    : (Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080");
-
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Max-Age": "86400",
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-  };
-}
-
-// ── AWS SDK v3 Dynamic Module Loader ────────────────────────────────────────
 const _awsModuleCache: Record<string, any> = {};
 
 const _awsSvcMap: Record<string, string> = {
@@ -117,90 +103,36 @@ async function loadAwsModule(service: string): Promise<any> {
     case "Budgets":
       mod = await import("https://esm.sh/@aws-sdk/client-budgets@3.744.0");
       break;
-    default:
+    default: {
       const pkg = _awsSvcMap[service];
       if (!pkg) throw new Error(`Unsupported AWS service: ${service}`);
       mod = await import("npm:@aws-sdk/client-" + pkg);
       break;
+    }
   }
 
   _awsModuleCache[service] = mod;
   return mod;
 }
 
-// ── Service-to-Policy Reference: for informational error messages only ───
-// Maps AWS services to the AWS-managed policy ARNs that would grant the
-// required permissions. These are used ONLY to generate helpful error messages;
-// CloudPilot does not attach policies automatically.
-const SERVICE_TO_MANAGED_POLICY_INFO: Record<string, string> = {
-  EC2: "arn:aws:iam::aws:policy/AmazonEC2FullAccess",
-  S3: "arn:aws:iam::aws:policy/AmazonS3FullAccess",
-  IAM: "arn:aws:iam::aws:policy/IAMFullAccess",
-  CloudWatch: "arn:aws:iam::aws:policy/CloudWatchFullAccess",
-  CloudWatchLogs: "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess",
-  CloudTrail: "arn:aws:iam::aws:policy/AWSCloudTrail_FullAccess",
-  GuardDuty: "arn:aws:iam::aws:policy/AmazonGuardDutyFullAccess",
-  SecurityHub: "arn:aws:iam::aws:policy/AWSSecurityHubFullAccess",
-  Config: "arn:aws:iam::aws:policy/AWS_ConfigRole",
-  RDS: "arn:aws:iam::aws:policy/AmazonRDSFullAccess",
-  Lambda: "arn:aws:iam::aws:policy/AWSLambda_FullAccess",
-  ECS: "arn:aws:iam::aws:policy/AmazonECS_FullAccess",
-  EKS: "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
-  KMS: "arn:aws:iam::aws:policy/AWSKeyManagementServicePowerUser",
-  SecretsManager: "arn:aws:iam::aws:policy/SecretsManagerReadWrite",
-  SSM: "arn:aws:iam::aws:policy/AmazonSSMFullAccess",
-  SNS: "arn:aws:iam::aws:policy/AmazonSNSFullAccess",
-  SQS: "arn:aws:iam::aws:policy/AmazonSQSFullAccess",
-  DynamoDB: "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess",
-  Organizations: "arn:aws:iam::aws:policy/AWSOrganizationsFullAccess",
-  CostExplorer: "arn:aws:iam::aws:policy/AWSBillingReadOnlyAccess",
-  WAFv2: "arn:aws:iam::aws:policy/AWSWAFFullAccess",
-  CloudFront: "arn:aws:iam::aws:policy/CloudFrontFullAccess",
-  ECR: "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess",
-  Route53: "arn:aws:iam::aws:policy/AmazonRoute53FullAccess",
-  ELBv2: "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess",
-  ElasticLoadBalancingV2: "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess",
-  ElasticLoadBalancing: "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess",
-  AutoScaling: "arn:aws:iam::aws:policy/AutoScalingFullAccess",
-  EventBridge: "arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess",
-  StepFunctions: "arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess",
-  ElastiCache: "arn:aws:iam::aws:policy/AmazonElastiCacheFullAccess",
-  Redshift: "arn:aws:iam::aws:policy/AmazonRedshiftFullAccess",
-  AccessAnalyzer: "arn:aws:iam::aws:policy/IAMAccessAnalyzerFullAccess",
-  Inspector2: "arn:aws:iam::aws:policy/AmazonInspector2FullAccess",
-  Macie2: "arn:aws:iam::aws:policy/AmazonMacieFullAccess",
-  Athena: "arn:aws:iam::aws:policy/AmazonAthenaFullAccess",
-  ACM: "arn:aws:iam::aws:policy/AWSCertificateManagerFullAccess",
-  APIGateway: "arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator",
-  ApiGateway: "arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator",
-  ConfigService: "arn:aws:iam::aws:policy/AWS_ConfigRole",
-  SES: "arn:aws:iam::aws:policy/AmazonSESFullAccess",
-  WAFV2: "arn:aws:iam::aws:policy/AWSWAFFullAccess",
-  Shield: "arn:aws:iam::aws:policy/AWSShieldDRTAccessPolicy",
-  NetworkFirewall: "arn:aws:iam::aws:policy/AWSNetworkFirewallServiceRolePolicy",
-  CognitoIdentityServiceProvider: "arn:aws:iam::aws:policy/AmazonCognitoPowerUser",
-  Budgets: "arn:aws:iam::aws:policy/AWSBudgetsActionsWithAWSResourceControlAccess",
-};
-
-function isAccessDeniedError(e: any): boolean {
-  const code = String(e?.code || e?.name || "");
-  const status = e?.$metadata?.httpStatusCode || e?.statusCode || 0;
-  return (
-    code === "AccessDenied" ||
-    code === "AccessDeniedException" ||
-    code === "UnauthorizedOperation" ||
-    code === "AuthorizationError" ||
-    code === "UnauthorizedAccess" ||
-    status === 403
-  );
+function json(req: Request, body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+  });
 }
 
-function normalizeAwsConfig(service: string, config: any): any {
-  const globalBillingServices = new Set(["CostExplorer", "Budgets"]);
-  return {
-    ...config,
-    region: globalBillingServices.has(service) ? "us-east-1" : config?.region,
-  };
+async function getCallerAccount(normalizedConfig: {
+  region?: string;
+  credentials?: { accessKeyId: string; secretAccessKey: string; sessionToken?: string };
+}): Promise<string> {
+  const stsMod = await loadAwsModule("STS");
+  const ClientClass = stsMod.STSClient;
+  const CommandClass = stsMod.GetCallerIdentityCommand;
+  if (!ClientClass || !CommandClass) return "";
+  const client = new ClientClass({ ...normalizedConfig, maxAttempts: 4 });
+  const ident = await client.send(new CommandClass({}));
+  return String(ident?.Account || "");
 }
 
 export const handler = async (req: Request): Promise<Response> => {
@@ -210,63 +142,111 @@ export const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const { service, commandName, config, params } = await req.json();
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const authError = requireServiceRole(req, serviceRoleKey, corsHeaders, "aws-executor");
+  if (authError) return authError;
 
-    if (service === "S3" && (commandName === "PutObjectCommand" || commandName === "putObject" || commandName?.toLowerCase()?.includes("putobject")) && params && typeof params.Body === "string") {
-      params.Body = new TextEncoder().encode(params.Body);
-    }
+  try {
+    const body = await req.json();
+    const { service, commandName, config, params, approvalId, userId, platformPurpose } = body;
 
     if (!service || !commandName) {
-      return new Response(JSON.stringify({ error: "service and commandName are required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json(req, { error: GENERIC_ERRORS.badRequest }, 400);
     }
 
-    const mod = await loadAwsModule(service);
-    const normalizedConfig = normalizeAwsConfig(service, config);
-    const clientName = V3_CLIENT_NAMES[service] || `${service}Client`;
-    const ClientClass = mod[clientName];
-    if (!ClientClass) throw new Error(`Client '${clientName}' not found for service '${service}'`);
+    let effectiveService = service;
+    let effectiveCommand = commandName;
+    let effectiveParams = params;
 
-    const CommandClass = mod[commandName];
-    if (!CommandClass) throw new Error(`Command '${commandName}' not found for service '${service}'`);
+    let decision = classifyAwsOperation(effectiveService, effectiveCommand, effectiveParams);
+    if (decision.riskLevel === "BLOCKED") {
+      return json(req, { error: GENERIC_ERRORS.mutationBlocked }, 403);
+    }
+
+    const sanitized = sanitizeAwsClientConfig(config);
+    const globalBillingServices = new Set(["CostExplorer", "Budgets"]);
+    const normalizedConfig = {
+      ...sanitized,
+      region: globalBillingServices.has(decision.normalizedService) ? "us-east-1" : sanitized.region,
+    };
+
+    let callerAccount = "";
+    const ensureCallerAccount = async (): Promise<string> => {
+      if (!callerAccount) callerAccount = await getCallerAccount(normalizedConfig);
+      return callerAccount;
+    };
+
+    const purpose = platformPurpose as PlatformPurpose | undefined;
+    const allowlistCtx = { targetAccountId: undefined as string | undefined };
+    if (purpose === "notify" && String(effectiveService || "").toUpperCase() === "SNS" && decision.requiresApproval) {
+      allowlistCtx.targetAccountId = await ensureCallerAccount();
+    }
+    const platformOk = isPlatformAllowlisted(
+      purpose,
+      effectiveService,
+      effectiveCommand,
+      effectiveParams,
+      allowlistCtx,
+    );
+    if (decision.requiresApproval && !platformOk) {
+      if (!approvalId || !userId) {
+        return json(req, { error: GENERIC_ERRORS.approvalRequired }, 403);
+      }
+      const url = Deno.env.get("SUPABASE_URL");
+      const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!url || !key) return json(req, { error: GENERIC_ERRORS.misconfigured }, 500);
+      const supabase = createClient(url, key);
+      const approved = await consumeApprovedAction(supabase, {
+        userId: String(userId),
+        approvalId: String(approvalId),
+        service: decision.normalizedService,
+        operation: decision.normalizedOperation,
+        params: effectiveParams,
+      });
+      if (!approved.ok) return json(req, { error: GENERIC_ERRORS.approvalInvalid }, 403);
+      effectiveService = approved.record.service;
+      effectiveCommand = approved.record.operation;
+      effectiveParams = approved.params;
+      const pendingAccount = approved.record.account_id;
+      if (pendingAccount) {
+        const account = await ensureCallerAccount();
+        if (!callerAccountMatchesPending(account, pendingAccount)) {
+          return json(req, { error: GENERIC_ERRORS.approvalInvalid }, 403);
+        }
+      }
+      decision = classifyAwsOperation(effectiveService, effectiveCommand, effectiveParams);
+      if (decision.riskLevel === "BLOCKED") {
+        return json(req, { error: GENERIC_ERRORS.mutationBlocked }, 403);
+      }
+    }
+
+    const mod = await loadAwsModule(decision.normalizedService);
+    const clientName = V3_CLIENT_NAMES[decision.normalizedService] || `${decision.normalizedService}Client`;
+    const ClientClass = mod[clientName];
+    if (!ClientClass) {
+      return json(req, { error: GENERIC_ERRORS.badRequest }, 400);
+    }
+
+    const CommandClass = mod[decision.normalizedCommand] || mod[effectiveCommand];
+    if (!CommandClass) {
+      return json(req, { error: GENERIC_ERRORS.badRequest }, 400);
+    }
+
+    if (decision.normalizedService === "S3" && /putobject/i.test(decision.normalizedOperation) && effectiveParams && typeof (effectiveParams as any).Body === "string") {
+      (effectiveParams as any).Body = new TextEncoder().encode((effectiveParams as any).Body);
+    }
 
     const client = new ClientClass({ ...normalizedConfig, maxAttempts: 4 });
-    try {
-      const result = await client.send(new CommandClass(params || {}));
-      const { $metadata, ...data } = result as any;
-      return new Response(JSON.stringify({ result: data }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    } catch (err: any) {
-      if (!isAccessDeniedError(err)) throw err;
-
-      // AccessDenied: provide clear, actionable guidance without attaching policies
-      const policyArn = SERVICE_TO_MANAGED_POLICY_INFO[service];
-      const msg = policyArn
-        ? `Access denied for ${service}. The IAM principal lacks required permissions. To resolve, manually attach ${policyArn} or grant equivalent permissions via a custom IAM policy. Original error: ${err?.message || err?.name || "AccessDenied"}.`
-        : `Access denied for ${service}. The IAM principal lacks required permissions. Review IAM policies and ensure appropriate service access is granted. Original error: ${err?.message || err?.name || "AccessDenied"}.`;
-
-      return new Response(JSON.stringify({
-        error: msg,
-        name: err?.name || "AccessDenied",
-        code: err?.code || err?.name || "AccessDenied",
-        statusCode: 403,
-        suggestedPolicy: policyArn || null,
-      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    const result = await client.send(new CommandClass(effectiveParams || {}));
+    const { $metadata, ...data } = result as any;
+    return json(req, { result: data });
   } catch (e: any) {
-    console.error("[aws-executor] Error:", e.name, e.message);
-    return new Response(JSON.stringify({
-      error: e.message || "Execution failed",
-      name: e.name || "Error",
-      code: e.code || e.name || "UNKNOWN",
-      statusCode: e.$metadata?.httpStatusCode || e.statusCode || 500,
-    }), {
-      status: 200, // Return 200 so caller can parse error details
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    logInternalError("aws-executor", e);
+    const status = e?.$metadata?.httpStatusCode || e?.statusCode;
+    if (status === 403) {
+      return json(req, { error: GENERIC_ERRORS.accessDenied }, 403);
+    }
+    return json(req, { error: GENERIC_ERRORS.awsFailed }, 502);
   }
 };
 

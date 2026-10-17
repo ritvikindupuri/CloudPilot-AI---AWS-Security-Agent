@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, CheckSquare, Clock, Download, FileText, GitCompare, Globe, HelpCircle, Layers3, Lock, PlayCircle, RefreshCcw, Server, Shield, ShieldCheck, SlidersHorizontal, Sparkles, TrendingUp, Workflow } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { loadStoredAwsConnection } from "@/lib/aws-connection";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -232,14 +233,7 @@ const Operations = () => {
   const [runbookExecutions, setRunbookExecutions] = useState<RunbookExecutionRow[]>([]);
   const [runbookSteps, setRunbookSteps] = useState<RunbookStepRow[]>([]);
   const [orgHistory, setOrgHistory] = useState<OrgHistoryRow[]>([]);
-  const [localCreds, setLocalCreds] = useState<any>(() => {
-    try {
-      const saved = localStorage.getItem("cloudpilot-aws-credentials");
-      return saved && saved !== "undefined" ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [localCreds, setLocalCreds] = useState<any>(() => loadStoredAwsConnection());
   const [tourStep, setTourStep] = useState<number | null>(null);
   const [automationRuns, setAutomationRuns] = useState<AutomationRunRow[]>([]);
   const [eventActivity, setEventActivity] = useState<GuardianEventActivityRow[]>([]);
@@ -731,7 +725,7 @@ const Operations = () => {
                       </p>
                     ) : (
                       <p className="text-[10px] font-mono text-muted-foreground">
-                        Access Key: {localCreds.accessKeyId ? `***${localCreds.accessKeyId.slice(-4)}` : "Ephemeral Access Key"}
+                        Access Key: {localCreds.displayKeyPrefix ? `${localCreds.displayKeyPrefix}…` : "IAM role session"}
                       </p>
                     )}
                   </div>

@@ -2,30 +2,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { requireServiceRole } from "../_shared/internal-auth.ts";
-
-// SECURITY HARDENING: Strict CORS origin validation with allowlist
-const ALLOWED_ORIGINS = [
-  "http://localhost:8080",
-  "http://localhost:5173",
-  ...(Deno.env.get("ALLOWED_ORIGINS") || "").split(",").filter(Boolean),
-];
-
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) 
-    ? origin 
-    : (Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080");
-  
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Max-Age": "86400",
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-  };
-}
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { checkDbRateLimit } from "../_shared/rate-limit-db.ts";
+import { GENERIC_ERRORS, logInternalError } from "../_shared/generic-error.ts";
+import { wrapUntrustedAwsData } from "../_shared/untrusted-content.ts";
+import { classifyAwsOperation } from "../_shared/aws-command-policy.ts";
+import { createPendingAction, pendingToolResult } from "../_shared/pending-aws-actions.ts";
 
 function requireEnv(name: string): string {
   const value = Deno.env.get(name);
@@ -43,7 +25,7 @@ const ENV = {
 // bundling 40+ @aws-sdk/client-* packages in this function.
 const EXECUTOR_URL = `${ENV.supabaseUrl}/functions/v1/aws-executor`;
 
-async function awsExec(service: string, commandName: string, config: any, params: any): Promise<any> {
+async function awsExec(service: string, commandName: string, config: any, params: any, extra: Record<string, unknown> = {}): Promise<any> {
   const resp = await fetch(EXECUTOR_URL, {
     method: "POST",
     headers: {
@@ -51,7 +33,7 @@ async function awsExec(service: string, commandName: string, config: any, params
       Authorization: `Bearer ${ENV.supabaseServiceRoleKey}`,
       apikey: ENV.supabaseServiceRoleKey,
     },
-    body: JSON.stringify({ service, commandName, config, params }),
+    body: JSON.stringify({ service, commandName, config, params, ...extra }),
   });
   const data = await resp.json();
   if (data.error) {
@@ -66,14 +48,14 @@ async function awsExec(service: string, commandName: string, config: any, params
 }
 
 // v2-compatible Proxy wrapper: allows `v2Client("IAM", config).listUsers({}).promise()`
-function v2Client(service: string, config: any): any {
+function v2Client(service: string, config: any, extra: Record<string, unknown> = {}): any {
   return new Proxy({}, {
     get(_target, method: string) {
       if (method === "then" || method === "catch" || typeof method === "symbol") return undefined;
       return (params: any = {}) => ({
         promise: async () => {
           const commandName = method.charAt(0).toUpperCase() + method.slice(1) + "Command";
-          return awsExec(service, commandName, config, params);
+          return awsExec(service, commandName, config, params, extra);
         },
       });
     },
@@ -81,8 +63,8 @@ function v2Client(service: string, config: any): any {
 }
 
 // Direct v3 send helper
-async function v3Send(service: string, commandName: string, config: any, params: any): Promise<any> {
-  return awsExec(service, commandName, config, params);
+async function v3Send(service: string, commandName: string, config: any, params: any, extra: Record<string, unknown> = {}): Promise<any> {
+  return awsExec(service, commandName, config, params, extra);
 }
 
 
@@ -2302,7 +2284,7 @@ async function ensureAlertTopicAndSubscription(
   awsConfig: any,
   notificationEmail: string,
 ): Promise<{ topicArn: string; subscriptionStatus: "existing" | "pending_confirmation" }> {
-  const sns = v2Client("SNS", awsConfig);
+  const sns = v2Client("SNS", awsConfig, { platformPurpose: "notify" });
   const accountId = await getAwsAccountId(awsConfig);
   const topicName = `cloudpilot-alerts-${accountId}`;
   const topic = await sns.createTopic({ Name: topicName }).promise();
@@ -2342,7 +2324,7 @@ async function sendIncidentNotification(
     return { sent: false, target: "No notification email configured", note: "Notification was skipped because no email is configured." };
   }
 
-  const sns = v2Client("SNS", awsConfig);
+  const sns = v2Client("SNS", awsConfig, { platformPurpose: "notify" });
   const { topicArn, subscriptionStatus } = await ensureAlertTopicAndSubscription(awsConfig, notificationEmail);
 
   const publishResult = await sns.publish({
@@ -2577,10 +2559,41 @@ async function getLatestRunbookExecution(
   return data?.[0] || null;
 }
 
+async function enqueueRunbookAwsWrite(
+  ctx: { supabaseAdmin: any; userId?: string; credentialId?: string; accountId?: string; conversationId?: string } | undefined,
+  awsConfig: any,
+  service: string,
+  operation: string,
+  params: unknown,
+  toolName = "manage_runbook_execution",
+): Promise<Record<string, any> | null> {
+  if (!ctx?.userId || !ctx.supabaseAdmin) return null;
+  const decision = classifyAwsOperation(service, operation, params);
+  if (decision.riskLevel === "BLOCKED") {
+    return { status: "blocked", reason: decision.reason, service, operation };
+  }
+  if (decision.requiresApproval) {
+    const pending = await createPendingAction(ctx.supabaseAdmin, {
+      userId: ctx.userId,
+      service,
+      operation,
+      params,
+      conversationId: ctx.conversationId,
+      toolName,
+      credentialId: ctx.credentialId,
+      accountId: ctx.accountId,
+      region: awsConfig?.region,
+    });
+    return pendingToolResult(pending, { service, operation, params });
+  }
+  return null;
+}
+
 async function executeRunbookStep(
   step: ResolvedRunbookStep,
   awsConfig: any,
   notificationEmail: string | null,
+  ctx?: { supabaseAdmin: any; userId?: string; credentialId?: string; accountId?: string; conversationId?: string },
 ): Promise<Record<string, any>> {
   switch (step.action) {
     case "capture_iam_snapshot":
@@ -2590,8 +2603,7 @@ async function executeRunbookStep(
     case "get_bucket_full_config":
       return getBucketFullConfig(awsConfig, String(step.params.bucket));
     case "put_public_access_block": {
-      const s3 = v2Client("S3", awsConfig);
-      await s3.putPublicAccessBlock({
+      const params = {
         Bucket: String(step.params.bucket),
         PublicAccessBlockConfiguration: {
           BlockPublicAcls: true,
@@ -2599,7 +2611,11 @@ async function executeRunbookStep(
           BlockPublicPolicy: true,
           RestrictPublicBuckets: true,
         },
-      }).promise();
+      };
+      const queued = await enqueueRunbookAwsWrite(ctx, awsConfig, "S3", "PutPublicAccessBlock", params);
+      if (queued) return queued;
+      const s3 = v2Client("S3", awsConfig);
+      await s3.putPublicAccessBlock(params).promise();
       return { bucket: step.params.bucket, status: "Public access block applied." };
     }
     case "list_public_objects":
@@ -2625,10 +2641,18 @@ async function executeRunbookStep(
       const idle = await findIdleEc2Instances(awsConfig);
       return { service: step.params.service, idleInstances: idle };
     }
-    case "stop_ec2_instances":
-      return stopEc2InstancesAction(awsConfig, Array.isArray(step.params.instance_ids) ? step.params.instance_ids : []);
-    case "start_ec2_instances":
-      return startEc2InstancesAction(awsConfig, Array.isArray(step.params.instance_ids) ? step.params.instance_ids : []);
+    case "stop_ec2_instances": {
+      const ids = Array.isArray(step.params.instance_ids) ? step.params.instance_ids : [];
+      const queued = await enqueueRunbookAwsWrite(ctx, awsConfig, "EC2", "StopInstances", { InstanceIds: ids });
+      if (queued) return queued;
+      return stopEc2InstancesAction(awsConfig, ids);
+    }
+    case "start_ec2_instances": {
+      const ids = Array.isArray(step.params.instance_ids) ? step.params.instance_ids : [];
+      const queued = await enqueueRunbookAwsWrite(ctx, awsConfig, "EC2", "StartInstances", { InstanceIds: ids });
+      if (queued) return queued;
+      return startEc2InstancesAction(awsConfig, ids);
+    }
     case "create_budget_alert":
       return createBudgetAlertAction(awsConfig, await getAwsAccountId(awsConfig), Number(step.params.threshold || 100), notificationEmail);
     case "rotate_access_keys":
@@ -2721,7 +2745,32 @@ async function continueRunbookExecution(
     }
 
     try {
-      const output = await executeRunbookStep(step, awsConfig, notificationEmail);
+      const output = await executeRunbookStep(step, awsConfig, notificationEmail, {
+        supabaseAdmin,
+        userId: execution.user_id,
+        conversationId: execution.conversation_id,
+      });
+      if (output?.pendingApproval) {
+        await updateRunbookExecution(supabaseAdmin, execution.id, {
+          status: "WAITING_CONFIRMATION",
+          current_step_index: index,
+          results: [...results, { step_id: step.id, status: "PENDING_APPROVAL", output, timestamp: new Date().toISOString() }],
+        });
+        await upsertRunbookStepStatus(supabaseAdmin, execution.id, step, index + 1, "WAITING_CONFIRMATION", JSON.stringify(output));
+        return {
+          status: "WAITING_CONFIRMATION",
+          executionId: execution.id,
+          currentStep: index + 1,
+          totalSteps: steps.length,
+          step,
+          pendingApproval: true,
+          approvalId: output.approvalId,
+          message: `Step ${index + 1}/${steps.length} is waiting for Approve in the CloudPilot pending-changes panel.`,
+        };
+      }
+      if (output?.status === "blocked") {
+        throw new Error(output.reason || "This runbook step is blocked by CloudPilot policy.");
+      }
       await upsertRunbookStepStatus(supabaseAdmin, execution.id, step, index + 1, "SUCCESS", JSON.stringify(output));
       results.push({
         step_id: step.id,
@@ -3324,7 +3373,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
 
     // Ensure log group exists (idempotent)
     try {
-      await v3Send("CloudWatchLogs", "CreateLogGroupCommand", awsConfig, { logGroupName: groupName });
+      await v3Send("CloudWatchLogs", "CreateLogGroupCommand", awsConfig, { logGroupName: groupName }, { platformPurpose: "audit" });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       if (e.name !== "ResourceAlreadyExistsException" && e.code !== "ResourceAlreadyExistsException") throw e;
@@ -3332,7 +3381,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
 
     // Ensure log stream exists (idempotent)
     try {
-      await v3Send("CloudWatchLogs", "CreateLogStreamCommand", awsConfig, { logGroupName: groupName, logStreamName: streamName });
+      await v3Send("CloudWatchLogs", "CreateLogStreamCommand", awsConfig, { logGroupName: groupName, logStreamName: streamName }, { platformPurpose: "audit" });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       if (e.name !== "ResourceAlreadyExistsException" && e.code !== "ResourceAlreadyExistsException") throw e;
@@ -3343,7 +3392,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
       logGroupName: groupName,
       logStreamNamePrefix: streamName,
       limit: 1,
-    });
+    }, { platformPurpose: "audit" });
     const seqToken = desc.logStreams?.[0]?.uploadSequenceToken;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -3357,10 +3406,10 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
     };
     if (seqToken) cwParams.sequenceToken = seqToken;
 
-    await v3Send("CloudWatchLogs", "PutLogEventsCommand", awsConfig, cwParams);
+    await v3Send("CloudWatchLogs", "PutLogEventsCommand", awsConfig, cwParams, { platformPurpose: "audit" });
 
     // ── 2. WORM S3 (Object Lock — Compliance Mode) ──────────────────────────
-    const identity = await v3Send("STS", "GetCallerIdentityCommand", awsConfig, {});
+    const identity = await v3Send("STS", "GetCallerIdentityCommand", awsConfig, {}, { platformPurpose: "audit" });
     const accountId = identity.Account;
     const wormBucket = `${WORM_BUCKET_PREFIX}${accountId}`;
 
@@ -3369,7 +3418,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
       await v3Send("S3", "CreateBucketCommand", awsConfig, {
         Bucket: wormBucket,
         ObjectLockEnabledForBucket: true,
-      });
+      }, { platformPurpose: "audit" });
 
       // Set default retention — 1 year Compliance mode (immutable)
       await v3Send("S3", "PutObjectLockConfigurationCommand", awsConfig, {
@@ -3383,7 +3432,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
             },
           },
         },
-      });
+      }, { platformPurpose: "audit" });
 
       // Block all public access
       await v3Send("S3", "PutPublicAccessBlockCommand", awsConfig, {
@@ -3394,7 +3443,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
           BlockPublicPolicy: true,
           RestrictPublicBuckets: true,
         },
-      });
+      }, { platformPurpose: "audit" });
 
       // Enable AES-256 encryption
       await v3Send("S3", "PutBucketEncryptionCommand", awsConfig, {
@@ -3402,7 +3451,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
         ServerSideEncryptionConfiguration: {
           Rules: [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } }],
         },
-      });
+      }, { platformPurpose: "audit" });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       // BucketAlreadyOwnedByYou or BucketAlreadyExists means it's already set up
@@ -3421,7 +3470,7 @@ async function pushAuditToAws(awsConfig: any, payload: Record<string, any>) {
       Body: new TextEncoder().encode(JSON.stringify(payload, null, 2)),
       ContentType: "application/json",
       ServerSideEncryption: "AES256",
-    });
+    }, { platformPurpose: "audit" });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (e: any) {
     // Audit failures are non-fatal — log but don't break the agent flow
@@ -3447,24 +3496,6 @@ function sanitizeString(val: unknown, maxLen: number): string {
 }
 
 
-const ipRequestCounts = new Map<string, { count: number; expiresAt: number }>();
-const RATE_LIMIT_WINDOW_MS = 60000;
-const MAX_REQUESTS_PER_WINDOW = 20;
-
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const record = ipRequestCounts.get(ip);
-  if (!record || record.expiresAt < now) {
-    ipRequestCounts.set(ip, { count: 1, expiresAt: now + RATE_LIMIT_WINDOW_MS });
-    return true;
-  }
-  if (record.count >= MAX_REQUESTS_PER_WINDOW) {
-    return false;
-  }
-  record.count++;
-  return true;
-}
-
 export const handler = async (req: Request): Promise<Response> => {
   const corsHeaders = getCorsHeaders(req);
   
@@ -3479,18 +3510,19 @@ export const handler = async (req: Request): Promise<Response> => {
     return authError;
   }
 
-  const clientIp = req.headers.get("x-forwarded-for") || "unknown";
-  if (!checkRateLimit(clientIp)) {
-    return new Response(
-      JSON.stringify({ error: "Rate limit exceeded. Try again later." }),
-      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-
   try {
     const body = await req.json();
-    const { toolCalls, awsConfig, userId, conversationId, notificationEmail, userHasConfirmedMutation, latestUserMessage } = body;
+    const { toolCalls, awsConfig, userId, conversationId, notificationEmail, latestUserMessage, credentialId, accountId } = body;
+    // Chat-text confirmation is not a security boundary. Writes require a stored UI approval.
+    const userHasConfirmedMutation = false;
     const supabaseAdmin = createClient(ENV.supabaseUrl, ENV.supabaseServiceRoleKey);
+    const rate = await checkDbRateLimit(supabaseAdmin, `aws-agent-ops:${userId || "internal"}`, 40, 1);
+    if (!rate.allowed) {
+      return new Response(
+        JSON.stringify({ error: GENERIC_ERRORS.rateLimited }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     const apiMessages: any[] = [];
 
     for (const toolCall of toolCalls) {
@@ -4384,9 +4416,27 @@ export const handler = async (req: Request): Promise<Response> => {
               }
 
               if (!userHasConfirmedMutation) {
+                const pending = userId
+                  ? await createPendingAction(supabaseAdmin, {
+                    userId,
+                    service: "EC2",
+                    operation: operationName,
+                    params: {
+                      GroupId: targetGroup.groupId,
+                      IpPermissions: [permission],
+                    },
+                    conversationId,
+                    toolName: "manage_security_group_rule",
+                    credentialId,
+                    accountId,
+                    region: awsConfig?.region,
+                  })
+                  : null;
                 const preview = {
-                  status: "preview_only",
+                  status: pending ? "pending_approval" : "preview_only",
                   confirmationRequired: true,
+                  pendingApproval: Boolean(pending),
+                  approvalId: pending?.id || null,
                   riskLevel: risk.riskLevel,
                   direction: getSecurityGroupDirection(args.action),
                   operation: operationName,
@@ -4414,9 +4464,9 @@ export const handler = async (req: Request): Promise<Response> => {
                   exposureSummary: args.cidr
                     ? `${getSecurityGroupDirection(args.action)} rule targets ${args.cidr}.`
                     : `${getSecurityGroupDirection(args.action)} rule targets security group ${sourceGroup?.groupName || sourceGroup?.groupId}.`,
-                  confirmationHint: requiredApprovals > 1
-                    ? "Reply with 'confirm' to register approval. A distinct second approver is required before execution."
-                    : "Reply with 'confirm' to approve and apply this security group change.",
+                  confirmationHint: pending
+                    ? "Approve this change in the CloudPilot pending-changes panel. Chat text is not an authorization."
+                    : "Sign in to queue this change for UI approval.",
                 };
 
                 const approvalRequest = userId
@@ -4784,9 +4834,13 @@ export const handler = async (req: Request): Promise<Response> => {
 
               if (!userHasConfirmedMutation) {
                 const execTime = Date.now() - startTime;
+                const createDecision = classifyAwsOperation("IAM", "createPolicy", { PolicyName: plan.policyName, PolicyDocument: JSON.stringify(plan.policyDocument) });
+                const attachDecision = classifyAwsOperation("IAM", plan.attachOperation, { PolicyArn: "arn:aws:iam::pending:policy/" + plan.policyName });
                 const preview = {
-                  status: "preview_only",
+                  status: createDecision.riskLevel === "BLOCKED" || attachDecision.riskLevel === "BLOCKED" ? "blocked" : "preview_only",
                   confirmationRequired: true,
+                  blocked: createDecision.riskLevel === "BLOCKED" || attachDecision.riskLevel === "BLOCKED",
+                  blockReason: createDecision.riskLevel === "BLOCKED" ? createDecision.reason : attachDecision.reason,
                   summary: `Create policy '${plan.policyName}' and attach it to IAM ${plan.args.principalType} '${plan.args.principalIdentifier}'.`,
                   requestedAction: plan.args.action,
                   principal: {
@@ -4810,9 +4864,9 @@ export const handler = async (req: Request): Promise<Response> => {
                   ],
                   warnings: plan.warnings,
                   policyDocument: plan.policyDocument,
-                  confirmationHint: requiredApprovals > 1
-                    ? "Reply with 'confirm' to register approval. A distinct second approver is required before execution."
-                    : "Reply with 'confirm' to approve and apply this IAM change.",
+                  confirmationHint: createDecision.riskLevel === "BLOCKED" || attachDecision.riskLevel === "BLOCKED"
+                    ? "This IAM change is blocked by CloudPilot policy (privilege escalation). It cannot be approved from chat or the UI."
+                    : "Approve this change in the CloudPilot pending-changes panel. Chat text is not an authorization.",
                 };
 
                 const approvalRequest = userId
@@ -5167,10 +5221,11 @@ export const handler = async (req: Request): Promise<Response> => {
                 content: JSON.stringify(simulationResult),
               } as any);
             } catch (err: any) {
+              logInternalError("ops-runAttackSimulation", err);
               apiMessages.push({
                 role: "tool",
                 tool_call_id: toolCall.id,
-                content: JSON.stringify({ error: err.message || "Simulation failed." }),
+                content: wrapUntrustedAwsData({ error: GENERIC_ERRORS.internal }),
               } as any);
             }
           }
@@ -5218,10 +5273,11 @@ export const handler = async (req: Request): Promise<Response> => {
                 content: JSON.stringify(evasionResult),
               } as any);
             } catch (err: any) {
+              logInternalError("ops-runEvasionTest", err);
               apiMessages.push({
                 role: "tool",
                 tool_call_id: toolCall.id,
-                content: JSON.stringify({ error: err.message || "Evasion test failed." }),
+                content: wrapUntrustedAwsData({ error: GENERIC_ERRORS.internal }),
               } as any);
             }
           }
@@ -5240,7 +5296,7 @@ export const handler = async (req: Request): Promise<Response> => {
   } catch (e: any) {
     console.error("[Ops] Fatal error:", e);
     return new Response(
-      JSON.stringify({ error: e.message || "Internal error" }),
+      JSON.stringify({ error: GENERIC_ERRORS.internal }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

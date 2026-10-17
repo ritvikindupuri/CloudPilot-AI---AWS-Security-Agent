@@ -172,8 +172,8 @@ The following Supabase Edge Functions must be redeployed for the fixes to take e
 ```bash
 curl -X POST "https://your-project.supabase.co/functions/v1/aws-agent" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer sb_publishable_..." \
-  -H "apikey: sb_publishable_..." \
+  -H "Authorization: Bearer sb_publishable_PLACEHOLDER" \
+  -H "apikey: sb_publishable_PLACEHOLDER" \
   -d '{
     "messages": [{"role": "user", "content": "Query all S3 buckets"}],
     "credentials": {...},
@@ -181,7 +181,7 @@ curl -X POST "https://your-project.supabase.co/functions/v1/aws-agent" \
   }'
 ```
 
-**Expected**: Should NOT return "Conflicting API keys" error. Tool calls should execute normally (subject to valid AWS credentials).
+**Expected**: HTTP 401. Anonymous access to aws-agent is no longer allowed. The `sb_publishable_PLACEHOLDER` values above are documentation placeholders, not live credentials.
 
 ### Test 2: Error Reporting (Bug 2 verification)
 With the deployed fix, trigger a scenario that causes tool errors and verify:

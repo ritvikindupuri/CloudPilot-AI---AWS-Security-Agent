@@ -6,16 +6,19 @@ on:
   pull_request:
     branches: ['main']
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Deno
-        uses: denoland/setup-deno@v2
+        uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
         with:
           deno-version: v2.x
 
@@ -23,31 +26,58 @@ jobs:
         run: |
           echo "Type checking aws-agent..."
           deno check supabase/functions/aws-agent/index.ts
-          
+
           echo "Type checking aws-agent-tools..."
           deno check supabase/functions/aws-agent-tools/index.ts
-          
+
           echo "Type checking aws-agent-scanner..."
           deno check supabase/functions/aws-agent-scanner/index.ts
-          
+
           echo "Type checking aws-agent-ops..."
           deno check supabase/functions/aws-agent-ops/index.ts
-          
+
           echo "Type checking aws-executor..."
           deno check supabase/functions/aws-executor/index.ts
-          
+
+          echo "Type checking aws-exchange-credentials..."
+          deno check supabase/functions/aws-exchange-credentials/index.ts
+
+          echo "Type checking aws-credential-vault..."
+          deno check supabase/functions/aws-credential-vault/index.ts
+
+          echo "Type checking guardian-event-processor..."
+          deno check supabase/functions/guardian-event-processor/index.ts
+
           echo "All type checks passed!"
 
-      - name: Run classifier tests
+      - name: Run classifier and security tests
         run: |
           echo "Running Deno tests..."
           deno test --allow-env supabase/functions/_shared/tool-result-classifier.test.ts
-          
-          echo "Running Node.js compatibility tests..."
           deno test --allow-env supabase/functions/aws-agent/tool-result-classifier.test.ts
-          
+          deno test --allow-env supabase/functions/_shared/security.test.ts
+          deno test --allow-env --allow-net supabase/functions/aws-executor/handler.test.ts
+          deno test --allow-env --allow-net supabase/functions/aws-agent/handler.test.ts
+
           echo "All tests passed!"
 
       - name: Summary
         if: success()
         run: echo "✅ All Deno type checks and tests passed successfully!"
+
+  frontend:
+    name: Frontend build and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Unit tests
+        run: npx vitest run
+      - name: Production build
+        run: npm run build
