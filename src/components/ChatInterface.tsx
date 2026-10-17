@@ -7,7 +7,7 @@ import ThinkingIndicator from "@/components/ThinkingIndicator";
 import QuickActions from "@/components/QuickActions";
 import AwsCredentialsPanel, { type AwsCredentials } from "@/components/AwsCredentialsPanel";
 import PendingAwsActions from "@/components/PendingAwsActions";
-import { loadStoredAwsConnection, stripAwsSecrets } from "@/lib/aws-connection";
+import { loadStoredAwsConnection, persistPublicAwsConnection, clearStoredAwsConnection } from "@/lib/aws-connection";
 import VpcRoutingDialog from "@/components/VpcRoutingDialog";
 import FindingsPanel, { type Finding } from "@/components/FindingsPanel";
 import StatusBar from "@/components/StatusBar";
@@ -98,7 +98,7 @@ const ChatInterface = () => {
   } = useChatHistory(user);
 
   const handleSignOut = async () => {
-    localStorage.removeItem("cloudpilot-aws-credentials");
+    clearStoredAwsConnection();
     await signOut();
   };
 
@@ -125,9 +125,18 @@ const ChatInterface = () => {
   };
 
   const handleCredentialsSave = (creds: AwsCredentials) => {
-    const cleaned = stripAwsSecrets(creds as unknown as Record<string, unknown>) as unknown as AwsCredentials;
-    setCredentials(cleaned);
-    localStorage.setItem("cloudpilot-aws-credentials", JSON.stringify(cleaned));
+    const stored = persistPublicAwsConnection(creds);
+    setCredentials({
+      method: stored?.method || creds.method,
+      region: stored?.region || creds.region,
+      credentialId: stored?.credentialId,
+      connected: true,
+      identity: creds.identity,
+      permissions: creds.permissions,
+      displayKeyPrefix: creds.displayKeyPrefix,
+      externalId: creds.externalId,
+      expiresAt: creds.expiresAt,
+    });
     if (vpcRoutingStatus === "inactive") {
       setShowVpcDialog(true);
     }
@@ -464,7 +473,7 @@ const ChatInterface = () => {
                       {credentials && (
                         <button 
                           onClick={() => {
-                            localStorage.removeItem("cloudpilot-aws-credentials");
+                            clearStoredAwsConnection();
                             setCredentials(null);
                             toast.success("Disconnected from AWS account.");
                           }}

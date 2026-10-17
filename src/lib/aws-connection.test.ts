@@ -1,11 +1,17 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { stripAwsSecrets, loadStoredAwsConnection } from "./aws-connection";
+import {
+  toPublicAwsConnection,
+  loadStoredAwsConnection,
+  persistPublicAwsConnection,
+  clearStoredAwsConnection,
+} from "./aws-connection";
 
-describe("stripAwsSecrets", () => {
-  it("removes session credentials and nested secrets", () => {
-    const cleaned = stripAwsSecrets({
+describe("toPublicAwsConnection", () => {
+  it("keeps only allowlisted connection metadata", () => {
+    const cleaned = toPublicAwsConnection({
       method: "assume_role",
       region: "us-east-1",
+      credentialId: "11111111-1111-4111-8111-111111111111",
       accessKeyId: "AKIASECRET",
       secretAccessKey: "secret",
       session: {
@@ -14,12 +20,15 @@ describe("stripAwsSecrets", () => {
         sessionToken: "token",
       },
       identity: { account: "123456789012", arn: "arn:aws:iam::123:role/x" },
+      externalId: "should-not-persist",
+      connected: true,
     });
-    expect(cleaned?.method).toBe("assume_role");
-    expect(cleaned?.identity).toEqual({ account: "123456789012", arn: "arn:aws:iam::123:role/x" });
-    expect(cleaned).not.toHaveProperty("accessKeyId");
-    expect(cleaned).not.toHaveProperty("secretAccessKey");
-    expect(cleaned).not.toHaveProperty("session");
+    expect(cleaned).toEqual({
+      method: "assume_role",
+      region: "us-east-1",
+      credentialId: "11111111-1111-4111-8111-111111111111",
+      connected: true,
+    });
   });
 });
 
@@ -28,7 +37,7 @@ describe("loadStoredAwsConnection", () => {
     localStorage.clear();
   });
 
-  it("scrubs secrets persisted from older clients", () => {
+  it("migrates legacy storage and never writes secrets back", () => {
     localStorage.setItem(
       "cloudpilot-aws-credentials",
       JSON.stringify({
@@ -36,13 +45,38 @@ describe("loadStoredAwsConnection", () => {
         region: "us-west-2",
         session: { accessKeyId: "ASIA", secretAccessKey: "x", sessionToken: "y" },
         identity: { account: "1", arn: "arn" },
+        connected: true,
       }),
     );
     const loaded = loadStoredAwsConnection();
-    expect(loaded?.region).toBe("us-west-2");
-    expect(loaded).not.toHaveProperty("session");
-    const persisted = JSON.parse(localStorage.getItem("cloudpilot-aws-credentials") || "{}");
+    expect(loaded).toEqual({
+      method: "access_key",
+      region: "us-west-2",
+      connected: true,
+    });
+    expect(localStorage.getItem("cloudpilot-aws-credentials")).toBeNull();
+    const persisted = JSON.parse(localStorage.getItem("cloudpilot-aws-connection") || "{}");
     expect(persisted.session).toBeUndefined();
     expect(persisted.accessKeyId).toBeUndefined();
+    expect(persisted.identity).toBeUndefined();
+  });
+
+  it("persistPublicAwsConnection writes only allowlisted fields", () => {
+    persistPublicAwsConnection({
+      method: "assume_role",
+      region: "eu-west-1",
+      credentialId: "22222222-2222-4222-8222-222222222222",
+      secretAccessKey: "nope",
+      connected: true,
+    });
+    const persisted = JSON.parse(localStorage.getItem("cloudpilot-aws-connection") || "{}");
+    expect(persisted).toEqual({
+      method: "assume_role",
+      region: "eu-west-1",
+      credentialId: "22222222-2222-4222-8222-222222222222",
+      connected: true,
+    });
+    clearStoredAwsConnection();
+    expect(localStorage.getItem("cloudpilot-aws-connection")).toBeNull();
   });
 });
