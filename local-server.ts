@@ -175,9 +175,10 @@ for (const [key, value] of Object.entries(envVars)) {
 }
 
 // Set required Supabase env variables to loopback internally
-Deno.env.set("SUPABASE_URL", "http://localhost:54321");
+Deno.env.set("SUPABASE_URL", "http://127.0.0.1:54321");
 Deno.env.set("SUPABASE_ANON_KEY", Deno.env.get("SUPABASE_ANON_KEY") || "mock-anon-key");
-Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "mock-service-role-key");
+const localServiceRoleKey = crypto.randomUUID() + crypto.randomUUID();
+Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", localServiceRoleKey);
 
 // Import handlers dynamically so they execute AFTER environment variables are set
 console.log("[CloudPilot Local Gateway] Loading modules...");
@@ -191,11 +192,13 @@ const { handler: awsCredentialVault } = await import("./supabase/functions/aws-c
 const { handler: webhookNotify } = await import("./supabase/functions/webhook-notify/index.ts");
 console.log("[CloudPilot Local Gateway] Modules successfully loaded.");
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "http://localhost:8080",
+const localOrigins = new Set(["http://localhost:8080", "http://127.0.0.1:8080"]);
+const baseCorsHeaders = {
+  "Vary": "Origin",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PUT, PATCH, DELETE",
 };
+const sessionStore = new Map<string, string>();
 
 // ── SECURITY: Password hashing using Web Crypto PBKDF2 ──
 
@@ -296,11 +299,21 @@ function parseFilters(url: URL, existingColumns: Set<string>): { where: string; 
 
 
 serve(async (req) => {
+  const url = new URL(req.url);
+  const host = req.headers.get("host");
+  if (host !== "localhost:54321" && host !== "127.0.0.1:54321") {
+    return new Response("Invalid host", { status: 403 });
+  }
+  const origin = req.headers.get("origin");
+  if (origin && !localOrigins.has(origin)) {
+    return new Response("Invalid origin", { status: 403 });
+  }
+  const corsHeaders: Record<string, string> = { ...baseCorsHeaders };
+  if (origin) corsHeaders["Access-Control-Allow-Origin"] = origin;
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const url = new URL(req.url);
   const path = url.pathname;
 
   try {
@@ -318,8 +331,6 @@ serve(async (req) => {
 
       // In-memory session store (token → userId) — scoped to process lifetime only
       // Tokens are cryptographically random and NOT predictable
-      const sessionStore = (globalThis as any).__cloudpilotSessions ??= new Map<string, string>();
-
       const getSessionPayload = (user: any) => {
         const expires_in = 3600;
         const accessToken = generateSessionToken();
@@ -441,12 +452,20 @@ serve(async (req) => {
       const rawTableName = path.slice("/rest/v1/".length).split("?")[0].split("/")[0];
 
       // SECURITY: Strict table name allowlist — prevents SQL injection via URL path
-      if (!ALLOWED_TABLES.has(rawTableName)) {
+      if (rawTableName === "registered_users" || !ALLOWED_TABLES.has(rawTableName)) {
         return new Response(JSON.stringify({ error: "Table not found" }), {
           status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" }
         });
       }
       const tableName = rawTableName;
+      const authorization = req.headers.get("authorization") ?? "";
+      const token = /^Bearer (\S+)$/i.exec(authorization)?.[1];
+      if (!token || (token !== localServiceRoleKey && !sessionStore.has(token))) {
+        return Response.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
+      }
+      if (tableName === "stored_aws_credentials" && token !== localServiceRoleKey) {
+        return Response.json({ error: "Forbidden" }, { status: 403, headers: corsHeaders });
+      }
       console.log(`[CloudPilot SQL Database] ${req.method} ${path}`);
 
       const tryParseJson = (val: any) => {
@@ -769,7 +788,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
-}, { port: 54321 });
+}, { hostname: "127.0.0.1", port: 54321 });
 
 console.log("=========================================");
 console.log("CloudPilot Local Deno Gateway active on:");
