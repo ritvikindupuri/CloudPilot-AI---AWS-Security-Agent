@@ -2414,7 +2414,7 @@ export const handler = async (req: Request): Promise<Response> => {
                     executionTimeMs: execTime,
                   }),
                 } as any);
-                continue;
+                return { apiMessages, latestUnifiedAuditSummary };
               }
               
               // Apply mode is queued for UI approval (chat confirmation is not an authorization).
