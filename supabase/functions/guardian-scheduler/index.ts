@@ -2,29 +2,13 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import AWS from "https://esm.sh/aws-sdk@2.1693.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
-// SECURITY HARDENING: Strict CORS origin validation with allowlist
-const ALLOWED_ORIGINS = [
-  "http://localhost:8080",
-  "http://localhost:5173",
-  ...(Deno.env.get("ALLOWED_ORIGINS") || "").split(",").filter(Boolean),
-];
-
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) 
-    ? origin 
-    : (Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080");
-  
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-guardian-secret",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Max-Age": "86400",
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-  };
-}
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { constantTimeCompare } from "../_shared/internal-auth.ts";
+import { resolveAwsConfigForUser } from "../_shared/customer-aws.ts";
+import { sanitizeAwsClientConfig } from "../_shared/aws-command-policy.ts";
+import { isLegacyKeysEnabled } from "../_shared/vault-crypto.ts";
+import { GENERIC_ERRORS, logInternalError } from "../_shared/generic-error.ts";
+import { checkDbRateLimit } from "../_shared/rate-limit-db.ts";
 
 function requireEnv(name: string, allowEmpty = false): string {
   const value = Deno.env.get(name);
@@ -80,7 +64,7 @@ async function resolveUserId(req: Request, body: any, supabaseAdmin: any): Promi
   }
 
   const secret = req.headers.get("x-guardian-secret");
-  if (AUTOMATION_SECRET && secret === AUTOMATION_SECRET) {
+  if (AUTOMATION_SECRET && secret && constantTimeCompare(secret, AUTOMATION_SECRET)) {
     const userId = sanitizeString(body.userId, 64);
     if (!userId) throw new Error("userId is required when authenticating with the automation secret.");
     return userId;
@@ -526,49 +510,6 @@ async function runDriftScan(supabaseAdmin: any, userId: string, awsConfig: any) 
   return { accountId, snapshotCount: currentSnapshots.length, driftEvents: events };
 }
 
-// ── AES-256-GCM Encryption helpers for stored credentials ──────────────────
-// Key derivation: PBKDF2 from service role key + user-specific salt
-// Matches the aws-credential-vault edge function encryption scheme.
-
-async function deriveDecryptionKey(userId: string): Promise<CryptoKey> {
-  const encoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(REQUIRED_SCHEDULER_ENVS.supabaseServiceRoleKey),
-    "PBKDF2",
-    false,
-    ["deriveKey"]
-  );
-  return crypto.subtle.deriveKey(
-    {
-      name: "PBKDF2",
-      salt: encoder.encode(`cloudpilot-vault-${userId}`),
-      iterations: 100000,
-      hash: "SHA-256",
-    },
-    keyMaterial,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["decrypt"]
-  );
-}
-
-async function decryptValue(encryptedB64: string, userId: string): Promise<string> {
-  try {
-    const key = await deriveDecryptionKey(userId);
-    const combined = Uint8Array.from(atob(encryptedB64), c => c.charCodeAt(0));
-    const iv = combined.slice(0, 12);
-    const ciphertext = combined.slice(12);
-    const decrypted = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv },
-      key,
-      ciphertext
-    );
-    return new TextDecoder().decode(decrypted);
-  } catch {
-    throw new Error("Failed to decrypt stored credential value. Credentials may need re-encryption.");
-  }
-}
 
 // ── Autonomous mode: fetch all stored credentials and scan each ─────────────
 async function runAutonomousScans(supabaseAdmin: any): Promise<any[]> {
@@ -590,17 +531,15 @@ async function runAutonomousScans(supabaseAdmin: any): Promise<any[]> {
   for (const cred of storedCreds) {
     const scanStart = Date.now();
     try {
-      const accessKeyId = await decryptValue(cred.encrypted_access_key_id, cred.user_id);
-      const secretAccessKey = await decryptValue(cred.encrypted_secret_access_key, cred.user_id);
-      const sessionToken = cred.encrypted_session_token
-        ? await decryptValue(cred.encrypted_session_token, cred.user_id)
-        : undefined;
-
+      const resolved = await resolveAwsConfigForUser({
+        userId: cred.user_id,
+        credentialId: cred.id,
+      });
       const awsConfig = buildAwsConfig({
-        region: cred.region,
-        accessKeyId,
-        secretAccessKey,
-        sessionToken,
+        region: resolved.awsConfig.region,
+        accessKeyId: (resolved.awsConfig as any).credentials?.accessKeyId,
+        secretAccessKey: (resolved.awsConfig as any).credentials?.secretAccessKey,
+        sessionToken: (resolved.awsConfig as any).credentials?.sessionToken,
       });
 
       const mode = cred.scan_mode || "all";
@@ -731,46 +670,56 @@ serve(async (req) => {
       REQUIRED_SCHEDULER_ENVS.supabaseServiceRoleKey,
     );
 
-    // ── Rate limiting via token bucket in rate_limit_entries table ──
-    const rateLimitKey = `guardian-scheduler:${body.userId || "autonomous"}`;
-    const windowMinutes = 5;
-    const maxRequests = 10;
-    const now = new Date();
-    const windowStart = new Date(now.getTime() - windowMinutes * 60 * 1000);
-
-    const { data: rlEntry } = await supabaseAdmin
-      .from("rate_limit_entries")
-      .select("*")
-      .eq("key", rateLimitKey)
-      .gte("window_start", windowStart.toISOString())
-      .maybeSingle();
-
-    if (rlEntry && rlEntry.request_count >= maxRequests) {
+    const forwarded = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+    const ip = forwarded || req.headers.get("cf-connecting-ip") || "unknown";
+    const preAuth = await checkDbRateLimit(
+      supabaseAdmin,
+      `guardian-scheduler-preauth:${ip}`,
+      30,
+      5,
+    );
+    if (!preAuth.allowed) {
       return new Response(JSON.stringify({
-        error: "Rate limit exceeded. Max 10 requests per 5 minutes.",
-        retryAfter: windowMinutes * 60,
+        error: GENERIC_ERRORS.rateLimited,
+        retryAfter: preAuth.retryAfterSeconds,
       }), {
         status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(windowMinutes * 60) },
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(preAuth.retryAfterSeconds) },
       });
     }
 
-    if (rlEntry) {
-      await supabaseAdmin
-        .from("rate_limit_entries")
-        .update({ request_count: rlEntry.request_count + 1 })
-        .eq("id", rlEntry.id);
-    } else {
-      await supabaseAdmin
-        .from("rate_limit_entries")
-        .insert({ key: rateLimitKey, request_count: 1, window_start: now.toISOString() });
+    // Authenticate before using any caller-chosen identity as a rate-limit key.
+    const guardianSecret = req.headers.get("x-guardian-secret") || "";
+    const isAutonomous = !body.credentials && !!AUTOMATION_SECRET && constantTimeCompare(guardianSecret, AUTOMATION_SECRET);
+
+    let authenticatedUserId: string | null = null;
+    if (!isAutonomous) {
+      try {
+        authenticatedUserId = await resolveUserId(req, body, supabaseAdmin);
+      } catch (err) {
+        logInternalError("guardian-scheduler-auth", err);
+        return new Response(JSON.stringify({ error: GENERIC_ERRORS.unauthorized }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
-    // ── Autonomous mode: pg_cron invocation with no credentials in body ──
-    const isAutonomous = !body.credentials && (
-      req.headers.get("x-guardian-secret") === AUTOMATION_SECRET ||
-      body.autonomous === true
+    const rate = await checkDbRateLimit(
+      supabaseAdmin,
+      isAutonomous ? "guardian-scheduler:autonomous" : `guardian-scheduler:${authenticatedUserId}`,
+      10,
+      5,
     );
+    if (!rate.allowed) {
+      return new Response(JSON.stringify({
+        error: GENERIC_ERRORS.rateLimited,
+        retryAfter: rate.retryAfterSeconds,
+      }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rate.retryAfterSeconds) },
+      });
+    }
 
     if (isAutonomous) {
       console.log("[Guardian] Autonomous scan triggered — processing all stored credentials.");
@@ -787,8 +736,22 @@ serve(async (req) => {
     }
 
     // ── Manual mode: existing single-user credential flow ──
-    const userId = await resolveUserId(req, body, supabaseAdmin);
-    const awsConfig = buildAwsConfig(body.credentials || {});
+    const userId = authenticatedUserId as string;
+    let awsConfig: Record<string, unknown>;
+    if (isLegacyKeysEnabled() && body.credentials?.accessKeyId) {
+      awsConfig = buildAwsConfig(body.credentials);
+    } else {
+      const resolved = await resolveAwsConfigForUser({
+        userId,
+        credentialId: body.credentialId,
+        bodyCredentials: null,
+      });
+      awsConfig = {
+        ...sanitizeAwsClientConfig(resolved.awsConfig),
+        maxRetries: 4,
+        retryDelayOptions: { base: 250 },
+      };
+    }
     const mode = sanitizeString(body.mode || "all", 32).toLowerCase();
     const notificationEmail = sanitizeString(body.notificationEmail || "", 320) || null;
     const results: Record<string, any> = {
@@ -885,10 +848,13 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {
-    const status = String(error?.message || "").startsWith("Missing required environment variable") ? 500 : 400;
+    logInternalError("guardian-scheduler", error);
+    const msg = String(error?.message || "");
+    const status = msg.startsWith("Missing required environment variable") || msg.includes("Unauthorized")
+      ? (msg.includes("Unauthorized") ? 401 : 500)
+      : 400;
     return new Response(JSON.stringify({
-      error: error?.message || "Scheduler execution failed.",
-      category: status === 500 ? "configuration" : "validation",
+      error: status === 401 ? GENERIC_ERRORS.unauthorized : (status === 500 ? GENERIC_ERRORS.misconfigured : GENERIC_ERRORS.badRequest),
     }), {
       status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

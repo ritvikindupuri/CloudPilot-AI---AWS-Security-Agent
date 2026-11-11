@@ -1,31 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { STSClient, GetCallerIdentityCommand, AssumeRoleCommand } from "https://esm.sh/@aws-sdk/client-sts@3.744.0";
+import { STSClient, GetCallerIdentityCommand } from "https://esm.sh/@aws-sdk/client-sts@3.744.0";
 import { IAMClient, SimulatePrincipalPolicyCommand } from "https://esm.sh/@aws-sdk/client-iam@3.744.0";
 
-// SECURITY HARDENING: Strict CORS origin validation with allowlist
-const ALLOWED_ORIGINS = [
-  "http://localhost:8080",
-  "http://localhost:5173",
-  ...(Deno.env.get("ALLOWED_ORIGINS") || "").split(",").filter(Boolean),
-];
-
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) 
-    ? origin 
-    : (Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080");
-  
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Max-Age": "86400",
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-  };
-}
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { isLegacyKeysEnabled } from "../_shared/vault-crypto.ts";
+import { assumeCustomerRole } from "../_shared/sts-credentials.ts";
+import { ensureExternalId, adminClient } from "../_shared/customer-aws.ts";
+import { GENERIC_ERRORS, logInternalError } from "../_shared/generic-error.ts";
 
 const AWS_REGION_REGEX = /^[a-z]{2}(-[a-z]+-\d+)?$/;
 const ACCESS_KEY_REGEX = /^[A-Z0-9]{16,128}$/;
@@ -59,11 +41,38 @@ export const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { credentials } = await req.json();
+    const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: GENERIC_ERRORS.unauthorized }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const token = authHeader.replace(/^Bearer\s+/i, "");
+    const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
+    if (authErr || !user) {
+      return new Response(JSON.stringify({ error: GENERIC_ERRORS.unauthorized }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const body = await req.json();
+    if (body?.action === "start_onboarding") {
+      const region = sanitizeString(body.region || "us-east-1", 30) || "us-east-1";
+      const onboard = await ensureExternalId(user.id, region);
+      return new Response(JSON.stringify({
+        credentialId: onboard.credentialId,
+        externalId: onboard.externalId,
+        cloudPilotAccountId: Deno.env.get("CLOUDPILOT_AWS_ACCOUNT_ID") || null,
+        template: "cloudformation/cloudpilot-readonly-role.yaml",
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    const { credentials } = body;
 
     if (!credentials || typeof credentials !== "object") {
       return new Response(
-        JSON.stringify({ error: "AWS credentials are required." }),
+        JSON.stringify({ error: GENERIC_ERRORS.credentialsRequired }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -84,8 +93,15 @@ export const handler = async (req: Request): Promise<Response> => {
     };
     let identity: { account: string; arn: string; userId: string };
     let policySourceArn = "";
+    let storedCredentialId: string | undefined;
 
     if (credentials.method === "access_key") {
+      if (!isLegacyKeysEnabled()) {
+        return new Response(
+          JSON.stringify({ error: GENERIC_ERRORS.legacyKeysDisabled }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       const accessKeyId = sanitizeCredentialValue(credentials.accessKeyId, 128);
       const secretAccessKey = sanitizeCredentialValue(credentials.secretAccessKey, 256);
       const providedSessionToken = credentials.sessionToken
@@ -162,50 +178,29 @@ export const handler = async (req: Request): Promise<Response> => {
         );
       }
 
-      const stsConfig: Record<string, unknown> = { region };
-      if (credentials.accessKeyId && credentials.secretAccessKey) {
-        stsConfig.credentials = {
-          accessKeyId: sanitizeCredentialValue(credentials.accessKeyId, 128),
-          secretAccessKey: sanitizeCredentialValue(credentials.secretAccessKey, 256),
-          sessionToken: credentials.sessionToken
-            ? sanitizeCredentialValue(credentials.sessionToken, 4096)
-            : undefined,
-        };
-      }
-
-      const sts = new STSClient(stsConfig);
-      const assumedRole = await sts.send(new AssumeRoleCommand({
-        RoleArn: roleArn,
-        RoleSessionName: `CloudPilot-${Date.now()}`,
-        DurationSeconds: 3600,
-      }));
-
-      if (!assumedRole.Credentials?.AccessKeyId || !assumedRole.Credentials?.SecretAccessKey || !assumedRole.Credentials?.SessionToken || !assumedRole.Credentials?.Expiration) {
-        throw new Error("Failed to assume role.");
-      }
-
-      const assumedSts = new STSClient({
-        credentials: {
-          accessKeyId: assumedRole.Credentials.AccessKeyId,
-          secretAccessKey: assumedRole.Credentials.SecretAccessKey,
-          sessionToken: assumedRole.Credentials.SessionToken,
-        },
+      const onboard = await ensureExternalId(user.id, region);
+      const session = await assumeCustomerRole({
+        roleArn,
+        externalId: onboard.externalId,
         region,
       });
-      const callerIdentity = await assumedSts.send(new GetCallerIdentityCommand({}));
-      identity = {
-        account: callerIdentity.Account || "",
-        arn: callerIdentity.Arn || "",
-        userId: callerIdentity.UserId || "",
-      };
+      identity = session.identity;
       policySourceArn = roleArn;
-
       tempCredentials = {
-        accessKeyId: assumedRole.Credentials.AccessKeyId,
-        secretAccessKey: assumedRole.Credentials.SecretAccessKey,
-        sessionToken: assumedRole.Credentials.SessionToken,
-        expiration: assumedRole.Credentials.Expiration.toISOString(),
+        accessKeyId: session.accessKeyId,
+        secretAccessKey: session.secretAccessKey,
+        sessionToken: session.sessionToken,
+        expiration: session.expiration,
       };
+      storedCredentialId = onboard.credentialId;
+      await adminClient().from("stored_aws_credentials").update({
+        role_arn: roleArn,
+        credential_method: "assume_role",
+        account_id: identity.account,
+        region,
+        encryption_key_version: "v2",
+        updated_at: new Date().toISOString(),
+      }).eq("id", onboard.credentialId);
     } else {
       return new Response(
         JSON.stringify({ error: `Unsupported credentials method: ${credentials.method}` }),
@@ -412,15 +407,12 @@ export const handler = async (req: Request): Promise<Response> => {
 
     return new Response(
       JSON.stringify({
-        sessionCredentials: {
-          accessKeyId: tempCredentials.accessKeyId,
-          secretAccessKey: tempCredentials.secretAccessKey,
-          sessionToken: tempCredentials.sessionToken,
-          expiration: tempCredentials.expiration,
-          region,
-        },
+        connected: true,
+        credentialId: storedCredentialId || null,
+        region,
         identity,
         permissions,
+        expiresAt: tempCredentials.expiration,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -458,12 +450,11 @@ export const handler = async (req: Request): Promise<Response> => {
       friendlyMessage = `Access Denied: ${message}. Ensure your IAM user or role has sts:GetCallerIdentity and sts:GetSessionToken permissions.`;
     }
 
+    logInternalError("aws-exchange-credentials", err);
     return new Response(
       JSON.stringify({
         ok: false,
-        error: friendlyMessage,
-        code: errorCode,
-        details: message,
+        error: isAccessDenied ? GENERIC_ERRORS.accessDenied : GENERIC_ERRORS.awsFailed,
       }),
       {
         status: isHandledCredentialError ? 200 : 500,

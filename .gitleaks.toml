@@ -1,0 +1,15 @@
+title = "CloudPilot"
+
+[extend]
+useDefault = true
+
+# Current-tree scan: placeholders only. Do not allowlist whole documentation files.
+
+[allowlist]
+regexTarget = "match"
+regexes = [
+  '''sb_publishable_\.\.\.''',
+  '''sb_publishable_PLACEHOLDER''',
+  '''xoxb-example''',
+  '''AKIAEXAMPLE''',
+]

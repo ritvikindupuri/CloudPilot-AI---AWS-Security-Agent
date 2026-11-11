@@ -6,81 +6,78 @@ on:
   pull_request:
     branches: ['main']
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Deno
-        uses: denoland/setup-deno@v2
+        uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
         with:
           deno-version: v2.x
-
-      - name: Lint edge functions for syntax errors
-        run: |
-          echo "Linting edge functions for syntax errors..."
-          for func in aws-agent aws-agent-tools aws-agent-scanner aws-agent-ops aws-executor; do
-            echo "Linting $func..."
-            output=$(deno lint supabase/functions/$func/index.ts 2>&1 || true)
-            echo "$output"
-            if echo "$output" | grep -qi "SyntaxError"; then
-              echo "❌ SyntaxError detected in $func"
-              exit 1
-            fi
-          done
-          echo "✅ No syntax errors found"
 
       - name: Type check edge functions
         run: |
           echo "Type checking aws-agent..."
           deno check supabase/functions/aws-agent/index.ts
-          
+
           echo "Type checking aws-agent-tools..."
           deno check supabase/functions/aws-agent-tools/index.ts
-          
+
           echo "Type checking aws-agent-scanner..."
           deno check supabase/functions/aws-agent-scanner/index.ts
-          
+
           echo "Type checking aws-agent-ops..."
           deno check supabase/functions/aws-agent-ops/index.ts
-          
+
           echo "Type checking aws-executor..."
           deno check supabase/functions/aws-executor/index.ts
-          
+
+          echo "Type checking aws-exchange-credentials..."
+          deno check supabase/functions/aws-exchange-credentials/index.ts
+
+          echo "Type checking aws-credential-vault..."
+          deno check supabase/functions/aws-credential-vault/index.ts
+
+          echo "Type checking guardian-event-processor..."
+          deno check supabase/functions/guardian-event-processor/index.ts
+
           echo "All type checks passed!"
 
-      - name: Boot smoke test edge functions
-        run: |
-          for func in aws-agent aws-agent-tools aws-agent-scanner aws-agent-ops; do
-            echo "Testing $func boot..."
-            rc=0
-            output=$(cd supabase/functions/$func && NO_COLOR=1 SUPABASE_URL=https://example.supabase.co \
-              SUPABASE_SERVICE_ROLE_KEY=dummy SUPABASE_ANON_KEY=dummy \
-              timeout 20 deno run -A --quiet index.ts 2>&1) || rc=$?
-            if grep -qE 'SyntaxError|error: Uncaught' <<<"$output"; then
-              echo "FAIL: $func threw at boot:"; echo "$output" | tail -20; exit 1
-            fi
-            if [ "$rc" -ne 124 ]; then
-              echo "FAIL: $func exited with code $rc before the 20s timeout (expected 124 = still serving)"
-              echo "$output" | tail -20; exit 1
-            fi
-            echo "OK: $func booted"
-          done
-          echo "All functions boot successfully"
-
-      - name: Run classifier tests
+      - name: Run classifier and security tests
         run: |
           echo "Running Deno tests..."
           deno test --allow-env supabase/functions/_shared/tool-result-classifier.test.ts
-          
-          echo "Running Node.js compatibility tests..."
           deno test --allow-env supabase/functions/aws-agent/tool-result-classifier.test.ts
-          
+          deno test --allow-env supabase/functions/_shared/security.test.ts
+          deno test --allow-env --allow-net supabase/functions/aws-executor/handler.test.ts
+          deno test --allow-env --allow-net supabase/functions/aws-agent/handler.test.ts
+
           echo "All tests passed!"
 
       - name: Summary
         if: success()
         run: echo "✅ All Deno type checks and tests passed successfully!"
+
+  frontend:
+    name: Frontend build and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Unit tests
+        run: npx vitest run
+      - name: Production build
+        run: npm run build

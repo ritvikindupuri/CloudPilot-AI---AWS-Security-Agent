@@ -9,6 +9,8 @@
  * 4. User-friendly error guidance
  */
 
+import { unwrapUntrustedAwsData } from "./untrusted-content.ts";
+
 export type ErrorClass =
   | "PLATFORM_DISPATCH"      // Internal service error
   | "CLOUDPILOT_AUTH_REQUIRED" // User authentication required
@@ -44,13 +46,23 @@ export interface ClassifiedError {
  * @param resultContent - The content string from a tool result
  * @returns true if the result represents an error, false otherwise
  */
+function peelWrapper(resultContent: string): string {
+  let content = resultContent;
+  for (let i = 0; i < 3; i++) {
+    const next = unwrapUntrustedAwsData(content);
+    if (next === content) break;
+    content = next;
+  }
+  return content;
+}
+
 export function isToolResultError(resultContent: string): boolean {
   if (!resultContent || resultContent.trim().length === 0) {
     return false;
   }
 
   // Strip [VALIDATOR WARNING: ...] prefix if present
-  let content = resultContent;
+  let content = peelWrapper(resultContent);
   const validatorWarningMatch = resultContent.match(/^\[VALIDATOR WARNING:.*?\]\n\n/s);
   if (validatorWarningMatch) {
     content = resultContent.slice(validatorWarningMatch[0].length);
@@ -236,6 +248,7 @@ export function extractToolResultError(result: any): { errorClass: ErrorClass; m
   // Parse content if it's a string
   let content = result.content;
   if (typeof content === "string") {
+    content = peelWrapper(content);
     // Strip validator warning prefix
     const validatorWarningMatch = content.match(/^\[VALIDATOR WARNING:.*?\]\n\n/s);
     if (validatorWarningMatch) {
@@ -314,7 +327,8 @@ export function analyzeToolResults(results: any[]): {
   let firstErrorClass: ErrorClass | undefined;
 
   for (const result of results) {
-    const content = typeof result.content === "string" ? result.content : JSON.stringify(result.content || result);
+    const raw = typeof result.content === "string" ? result.content : JSON.stringify(result.content || result);
+    const content = peelWrapper(raw);
     if (isToolResultError(content)) {
       errors++;
       if (!firstErrorClass) {

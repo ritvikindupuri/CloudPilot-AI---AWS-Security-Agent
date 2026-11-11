@@ -1,0 +1,4 @@
+Contact: https://github.com/ritvikindupuri/CloudPilot-AI---AWS-Security-Agent/security/advisories/new
+Policy: https://github.com/ritvikindupuri/CloudPilot-AI---AWS-Security-Agent/blob/main/SECURITY.md
+Preferred-Languages: en
+Expires: 2027-10-17T00:00:00.000Z

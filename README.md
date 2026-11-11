@@ -70,8 +70,11 @@
 
 The architecture also shows two supporting components that operate alongside the main request path:
 
-- **User Interface:** chat, pre-built security workflows, and AWS credential controls feed requests and configuration into the pipeline.
-- **Data & State:** `cloudpilot.db` (SQLite) persists application state such as conversations, messages, runbooks, and compliance baselines.
+- **User Interface:** Chat console, pre-built security workflows, and AWS credential controls feed requests and configuration into the pipeline.
+- **Data & State (Dual-Mode Database Architecture):**
+  - **Production (Cloud):** Connects to **Supabase (PostgreSQL)** utilizing Supabase GoTrue Auth (JWTs), Row-Level Security (RLS) policies, and hosted Edge Functions.
+  - **Local Development / Docker:** Uses a local Deno gateway (`local-server.ts`) that provides a zero-dependency **Supabase Auth & PostgREST emulation layer** backed by a local SQLite database (`cloudpilot.db`).
+  - **Unified Client SDK:** The React frontend uses the official `@supabase/supabase-js` client identically in both environments without code changes (`supabase.from('messages').select(...)`, `supabase.auth.signInWithPassword(...)`).
 
 ---
 
@@ -239,12 +242,13 @@ This approach is simpler than AWS EventBridge because it runs inside the databas
 
 ## Tech Stack
 
-- **Frontend:** React, TypeScript, Vite, Tailwind CSS, shadcn-ui, Framer Motion
-- **Backend / API:** Local Deno Gateway (`local-server.ts`), running Edge Function modules locally on port 54321
-- **Database / Auth:** Mocked locally using browser `localStorage` and client-side session handlers
-- **AI Model:** Anthropic Claude Sonnet 5 (via official API)
-- **Cloud Integration:** AWS SDK for JavaScript v3 (35+ services)
-- **Containerization:** Docker & Docker Compose (single-command setup)
+- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui, Framer Motion
+- **Backend & Compute:** Supabase Edge Functions (Deno runtime in cloud) / Local Deno Server (`local-server.ts`)
+- **Database & Auth:** Supabase (PostgreSQL with RLS & GoTrue Auth) in cloud / SQLite relational database (`cloudpilot.db` with PBKDF2 password hashing) in local dev
+- **AI Models & Orchestration:** Anthropic Claude Sonnet 5 (Fast Scan) & Claude Opus 5 (Deep Audit) with ReAct agentic loop
+- **Cloud Integration:** AWS SDK for JavaScript v3 (35+ services across IAM, S3, EC2, VPC, CloudTrail, CloudWatch, GuardDuty)
+- **Containerization & IaC:** Docker, Docker Compose, AWS CloudFormation & Terraform (In-VPC Stack)
+
 
 ---
 
@@ -267,9 +271,10 @@ The fastest way to get started. Docker handles all dependencies (Node.js, Deno, 
 #### 1. Clone the Repository
 
 ```sh
-git clone <https://github.com/ritvikindupuri/aws-guardian-buddy.git>
-cd <aws-guardian-buddy>
+git clone https://github.com/ritvikindupuri/CloudPilot-AI---AWS-Security-Agent.git
+cd CloudPilot-AI---AWS-Security-Agent
 ```
+
 
 #### 2. Configure Environment Variables
 
@@ -322,13 +327,14 @@ Run directly on your machine using Node.js and npm.
 #### 1. Clone & Install Dependencies
 
 ```sh
-git clone <https://github.com/ritvikindupuri/aws-guardian-buddy.git>
-cd <aws-guardian-buddy>
+git clone https://github.com/ritvikindupuri/CloudPilot-AI---AWS-Security-Agent.git
+cd CloudPilot-AI---AWS-Security-Agent
 
 npm install
 # or
 bun install
 ```
+
 
 #### 2. Configure Environment Variables
 
@@ -354,6 +360,33 @@ bun run dev
 This launches both the React Vite frontend and the local Deno server gateway concurrently. Open **http://localhost:8080** in your browser. All database states are persisted in your local `cloudpilot.db` SQLite file.
 
 ---
+
+### Option C: 1-Click AWS Evaluation Sandbox & Automated Batch Test Suite
+
+To evaluate all built-in Quick Action prompts without manual clicking or risking production cloud assets:
+
+1. **Deploy 1-Click Sandbox Stack (Free Tier Compatible, $0 Cost):**
+   ```bash
+   aws cloudformation create-stack \
+     --stack-name cloudpilot-eval-sandbox \
+     --template-body file://cloudformation/sandbox-test-stack.yaml \
+     --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
+   ```
+   *Pre-populates test S3 buckets, open Security Groups, IAM roles with wildcard policies, and a `t2.micro` EC2 instance in `us-east-1` in under 2 minutes.*
+
+2. **Run Automated Batch Evaluator Across All Prompts:**
+   ```bash
+   npm run eval:quick-actions
+   ```
+   *Programmatically evaluates all Quick Action prompts, validating intent classification, persona injection, tool allowlists, and Safety Gate approvals with 0 runtime exceptions.*
+
+3. **1-Click Teardown (When Finished):**
+   ```bash
+   aws cloudformation delete-stack --stack-name cloudpilot-eval-sandbox
+   ```
+
+---
+
 
 ## How to Use CloudPilot AI
 

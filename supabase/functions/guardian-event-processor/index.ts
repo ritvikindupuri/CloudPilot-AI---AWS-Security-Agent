@@ -1,30 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import AWS from "https://esm.sh/aws-sdk@2.1693.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
-// SECURITY HARDENING: Strict CORS origin validation with allowlist
-const ALLOWED_ORIGINS = [
-  "http://localhost:8080",
-  "http://localhost:5173",
-  ...(Deno.env.get("ALLOWED_ORIGINS") || "").split(",").filter(Boolean),
-];
-
-function getCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) 
-    ? origin 
-    : (Deno.env.get("ALLOWED_ORIGIN") || "http://localhost:8080");
-  
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-guardian-secret",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Max-Age": "86400",
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-  };
-}
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { constantTimeCompare } from "../_shared/internal-auth.ts";
+import { resolveAwsConfigForUser } from "../_shared/customer-aws.ts";
+import {
+  classifyAwsOperation,
+  isPlatformAllowlisted,
+  sanitizeAwsClientConfig,
+  type PlatformPurpose,
+} from "../_shared/aws-command-policy.ts";
+import { isLegacyKeysEnabled } from "../_shared/vault-crypto.ts";
+import { GENERIC_ERRORS, logInternalError } from "../_shared/generic-error.ts";
 
 function requireEnv(name: string): string {
   const value = Deno.env.get(name);
@@ -156,7 +143,7 @@ async function resolveUserId(req: Request, body: any, supabaseAdmin: any): Promi
   }
 
   const secret = req.headers.get("x-guardian-secret");
-  if (AUTOMATION_SECRET && secret === AUTOMATION_SECRET) {
+  if (AUTOMATION_SECRET && secret && constantTimeCompare(secret, AUTOMATION_SECRET)) {
     const userId = sanitizeString(body.userId, 64);
     if (!userId) throw new Error("userId is required when authenticating with the automation secret.");
     return userId;
@@ -165,37 +152,49 @@ async function resolveUserId(req: Request, body: any, supabaseAdmin: any): Promi
   throw new Error("Unauthorized event-processor request.");
 }
 
-async function getAwsAccountId(awsConfig: any): Promise<string> {
-  const sts = new AWS.STS(awsConfig);
-  const identity = await sts.getCallerIdentity({}).promise();
-  if (!identity.Account) throw new Error("Unable to resolve AWS account ID.");
-  return identity.Account;
+async function getAwsAccountId(awsConfig: Record<string, unknown>): Promise<string> {
+  const identity = await invokeExecutor("STS", "GetCallerIdentityCommand", awsConfig, {}, "audit");
+  const account = String((identity as { Account?: string } | null)?.Account || "");
+  if (!account) throw new Error("Unable to resolve AWS account ID.");
+  return account;
 }
 
-async function ensureAlertTopicAndSubscription(awsConfig: any, notificationEmail: string) {
-  const sns = new AWS.SNS(awsConfig);
+async function ensureAlertTopicAndSubscription(awsConfig: Record<string, unknown>, notificationEmail: string) {
   const accountId = await getAwsAccountId(awsConfig);
-  const topic = await sns.createTopic({ Name: `cloudpilot-alerts-${accountId}` }).promise();
-  if (!topic.TopicArn) throw new Error("Failed to create SNS topic.");
-  const subscriptions = await sns.listSubscriptionsByTopic({ TopicArn: topic.TopicArn }).promise();
-  const existing = (subscriptions.Subscriptions || []).find(
-    (subscription) => subscription.Protocol === "email" && subscription.Endpoint === notificationEmail,
+  const topic = await invokeExecutor("SNS", "CreateTopicCommand", awsConfig, {
+    Name: `cloudpilot-alerts-${accountId}`,
+  }, "notify", accountId) as { TopicArn?: string };
+  if (!topic?.TopicArn) throw new Error("Failed to create SNS topic.");
+  const subscriptions = await invokeExecutor("SNS", "ListSubscriptionsByTopicCommand", awsConfig, {
+    TopicArn: topic.TopicArn,
+  }, "notify", accountId) as { Subscriptions?: Array<{ Protocol?: string; Endpoint?: string }> };
+  const existing = (subscriptions.Subscriptions || []).find((subscription: { Protocol?: string; Endpoint?: string }) =>
+    subscription.Protocol === "email" && subscription.Endpoint === notificationEmail
   );
   if (!existing) {
-    await sns.subscribe({ TopicArn: topic.TopicArn, Protocol: "email", Endpoint: notificationEmail }).promise();
+    await invokeExecutor("SNS", "SubscribeCommand", awsConfig, {
+      TopicArn: topic.TopicArn,
+      Protocol: "email",
+      Endpoint: notificationEmail,
+    }, "notify", accountId);
   }
   return topic.TopicArn;
 }
 
-async function publishAlert(awsConfig: any, notificationEmail: string | null, subject: string, message: string) {
+async function publishAlert(
+  awsConfig: Record<string, unknown>,
+  notificationEmail: string | null,
+  subject: string,
+  message: string,
+) {
   if (!notificationEmail) return { sent: false, target: null, note: "No notification email configured." };
-  const sns = new AWS.SNS(awsConfig);
+  const accountId = await getAwsAccountId(awsConfig);
   const topicArn = await ensureAlertTopicAndSubscription(awsConfig, notificationEmail);
-  const result = await sns.publish({
+  const result = await invokeExecutor("SNS", "PublishCommand", awsConfig, {
     TopicArn: topicArn,
     Subject: subject.slice(0, 100),
     Message: message,
-  }).promise();
+  }, "notify", accountId) as { MessageId?: string };
   return { sent: true, target: notificationEmail, topicArn, messageId: result.MessageId || null };
 }
 
@@ -364,11 +363,47 @@ function canAutoFixEvent(event: EnrichedEvent, policy: PolicyRecord) {
   };
 }
 
-async function autoFixEvent(awsConfig: any, event: EnrichedEvent) {
+async function invokeExecutor(
+  service: string,
+  commandName: string,
+  awsConfig: Record<string, unknown> | unknown,
+  params: unknown,
+  purpose: PlatformPurpose = "autofix",
+  targetAccountId?: string,
+): Promise<Record<string, unknown>> {
+  const decision = classifyAwsOperation(service, commandName, params);
+  if (decision.riskLevel === "BLOCKED") {
+    throw new Error(decision.reason || GENERIC_ERRORS.mutationBlocked);
+  }
+  if (decision.requiresApproval && !isPlatformAllowlisted(purpose, service, commandName, params, { targetAccountId })) {
+    throw new Error(GENERIC_ERRORS.approvalRequired);
+  }
+  const resp = await fetch(`${REQUIRED_EVENT_PROCESSOR_ENVS.supabaseUrl}/functions/v1/aws-executor`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${REQUIRED_EVENT_PROCESSOR_ENVS.supabaseServiceRoleKey}`,
+      apikey: REQUIRED_EVENT_PROCESSOR_ENVS.supabaseServiceRoleKey,
+    },
+    body: JSON.stringify({
+      service,
+      commandName,
+      config: sanitizeAwsClientConfig(awsConfig),
+      params,
+      platformPurpose: purpose,
+    }),
+  });
+  const data = await resp.json().catch(() => ({})) as { error?: string; result?: Record<string, unknown> };
+  if (!resp.ok || data.error) {
+    throw new Error(GENERIC_ERRORS.awsFailed);
+  }
+  return data.result || {};
+}
+
+async function autoFixEvent(awsConfig: Record<string, unknown>, event: EnrichedEvent) {
   switch (event.event_name) {
     case "DeleteBucketPublicAccessBlock": {
-      const s3 = new AWS.S3(awsConfig);
-      await s3.putPublicAccessBlock({
+      const params = {
         Bucket: event.resource_id,
         PublicAccessBlockConfiguration: {
           BlockPublicAcls: true,
@@ -376,27 +411,26 @@ async function autoFixEvent(awsConfig: any, event: EnrichedEvent) {
           BlockPublicPolicy: true,
           RestrictPublicBuckets: true,
         },
-      }).promise();
-      return { applied: true, action: "putPublicAccessBlock", resource: event.resource_id };
+      };
+      await invokeExecutor("S3", "PutPublicAccessBlockCommand", awsConfig, params);
+      return { applied: true, action: "putPublicAccessBlock", resource: event.resource_id, standingApproval: "autofix-policy" };
     }
     case "DeleteBucketEncryption": {
-      const s3 = new AWS.S3(awsConfig);
-      await s3.putBucketEncryption({
+      const params = {
         Bucket: event.resource_id,
         ServerSideEncryptionConfiguration: {
           Rules: [{ ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" } }],
         },
-      }).promise();
-      return { applied: true, action: "putBucketEncryption", resource: event.resource_id };
+      };
+      await invokeExecutor("S3", "PutBucketEncryptionCommand", awsConfig, params);
+      return { applied: true, action: "putBucketEncryption", resource: event.resource_id, standingApproval: "autofix-policy" };
     }
     case "StopLogging":
     case "DeleteTrail": {
-      const cloudTrail = new AWS.CloudTrail(awsConfig);
-      await cloudTrail.startLogging({ Name: event.resource_id }).promise();
-      return { applied: true, action: "startLogging", resource: event.resource_id };
+      await invokeExecutor("CloudTrail", "StartLoggingCommand", awsConfig, { Name: event.resource_id });
+      return { applied: true, action: "startLogging", resource: event.resource_id, standingApproval: "autofix-policy" };
     }
     case "AuthorizeSecurityGroupIngress": {
-      const ec2 = new AWS.EC2(awsConfig);
       const params = event.raw_event.requestParameters || {};
       const ipPermissions = getItems(params.ipPermissions).map((permission) => ({
         IpProtocol: permission.ipProtocol,
@@ -405,8 +439,8 @@ async function autoFixEvent(awsConfig: any, event: EnrichedEvent) {
         IpRanges: getItems(permission.ipRanges).map((range) => ({ CidrIp: range.cidrIp, Description: range.description })),
         Ipv6Ranges: getItems(permission.ipv6Ranges).map((range) => ({ CidrIpv6: range.cidrIpv6, Description: range.description })),
       }));
-      await ec2.revokeSecurityGroupIngress({ GroupId: params.groupId, IpPermissions: ipPermissions }).promise();
-      return { applied: true, action: "revokeSecurityGroupIngress", resource: params.groupId };
+      await invokeExecutor("EC2", "RevokeSecurityGroupIngressCommand", awsConfig, { GroupId: params.groupId, IpPermissions: ipPermissions });
+      return { applied: true, action: "revokeSecurityGroupIngress", resource: params.groupId, standingApproval: "autofix-policy" };
     }
     default:
       return { applied: false, note: "No automatic fix is available for this event type." };
@@ -439,7 +473,7 @@ async function createRunbookExecutionForEvent(supabaseAdmin: any, userId: string
   return { runbookId, executionId: id };
 }
 
-async function recordDriftEvent(supabaseAdmin: any, userId: string, awsConfig: any, event: EnrichedEvent) {
+async function recordDriftEvent(supabaseAdmin: any, userId: string, awsConfig: Record<string, unknown>, event: EnrichedEvent) {
   const accountId = await getAwsAccountId(awsConfig);
   await supabaseAdmin.from("drift_events").insert({
     id: crypto.randomUUID(),
@@ -502,7 +536,29 @@ serve(async (req) => {
       REQUIRED_EVENT_PROCESSOR_ENVS.supabaseServiceRoleKey,
     );
     const userId = await resolveUserId(req, body, supabaseAdmin);
-    const awsConfig = buildAwsConfig(body.credentials || {});
+    let awsConfig: Record<string, unknown>;
+    try {
+      if (isLegacyKeysEnabled() && body.credentials?.accessKeyId) {
+        awsConfig = buildAwsConfig(body.credentials);
+      } else {
+        const resolved = await resolveAwsConfigForUser({
+          userId,
+          credentialId: body.credentialId,
+          bodyCredentials: null,
+        });
+        awsConfig = {
+          ...sanitizeAwsClientConfig(resolved.awsConfig),
+          maxRetries: 4,
+          retryDelayOptions: { base: 250 },
+        };
+      }
+    } catch (err) {
+      logInternalError("guardian-event-processor-credentials", err);
+      return new Response(JSON.stringify({ error: GENERIC_ERRORS.credentialsRequired }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const notificationEmail = sanitizeString(body.notificationEmail || "", 320) || null;
     const detail = body.event?.detail || body.detail || body.event;
     if (!detail || typeof detail !== "object") {
