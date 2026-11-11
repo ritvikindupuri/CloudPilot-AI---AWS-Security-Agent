@@ -2456,12 +2456,14 @@ export const handler = async (req: Request): Promise<Response> => {
                   rule,
                 })),
               } as any);
+              return { apiMessages, latestUnifiedAuditSummary };
             } catch (err: any) {
               apiMessages.push({
                 role: "tool",
                 tool_call_id: toolCall.id,
                 content: JSON.stringify({ error: err?.message || "Cost rule creation failed." }),
               } as any);
+              return { apiMessages, latestUnifiedAuditSummary };
             }
           }
 
