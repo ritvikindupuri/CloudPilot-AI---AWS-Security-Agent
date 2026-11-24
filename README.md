@@ -60,9 +60,8 @@
 10. **Audit Logging (Step 10)**: Tool execution is captured through the audit architecture. The diagram shows the three audit destinations used for accountability:
     - **CloudWatch Logs**
     - **Immutable S3 archive (WORM / Object Lock)**
-    - **Local Audit Store (SQLite database)**
 
-    The S3 sink provides the immutable WORM record; the overall design provides triple-sink audit logging of tool executions.
+    Tool executions are logged to CloudWatch Logs and an S3 Object Lock (WORM) archive; the S3 sink provides the immutable record. In local development, application data is stored in SQLite.
 
 11. **Results Returned to App (Step 11)**: Real AWS results flow back through the agent, where the selected model synthesizes the final response and streams it to the React interface. The user receives **live findings**, **remediation guidance**, **reports**, and **approved actions** based on the authenticated AWS data and executed workflows.
 
@@ -86,8 +85,8 @@ CloudPilot AI features a **Dual Scan Engine architecture** combined with a light
 
 | Mode | Engine / Model | Speed | Ideal Use Cases |
 |------|---------------|-------|-----------------|
-| **⚡ Fast Scan** | Claude Sonnet 5 | ~2–5 sec | Quick security audits, listing S3 buckets, inspecting security group rules, and everyday interactive queries. |
-| **🔍 Deep Audit** | Claude Opus 5 / Extended Reasoning | ~10–20 sec | Multi-pass CIS Benchmark evaluations, nested security group cross-references, IAM privilege escalation path discovery, and historical CloudTrail event correlation. |
+| **⚡ Fast Scan** | Claude Sonnet 5 | Fastest (single pass) | Quick security audits, listing S3 buckets, inspecting security group rules, and everyday interactive queries. |
+| **🔍 Deep Audit** | Claude Opus 5 / Extended Reasoning | Slower (multi-pass) | Multi-pass CIS Benchmark evaluations, nested security group cross-references, IAM privilege escalation path discovery, and historical CloudTrail event correlation. |
 
 ### Intent Classifier Matrix
 
@@ -95,7 +94,7 @@ The Intent Router pre-classifies queries to select only the required tool subset
 
 | Component | Model | Purpose |
 |-----------|-------|---------|
-| **Intent Classifier** | Claude Sonnet 5 | Single-shot query classification into 9 intent categories (~100-200ms) |
+| **Intent Classifier** | Claude Sonnet 5 | Single-shot query classification into 9 specialist intents plus a general fallback |
 | **Main Agent** | Claude Sonnet 5 / Claude Opus 5 | Multi-iteration **ReAct (Reasoning and Acting)** loop with filtered tool set (up to 15 iterations) |
 | **Safety Gate Judge** | Claude Sonnet 5 | Audits proposed AWS API tool calls against safety policies and user intent |
 
@@ -150,7 +149,7 @@ Navigate to the **Skills** tab in the top navigation to:
 
 ### CloudPilot In-VPC Mini Agent — Self-Hosted In-VPC Sidecar (`/in-vpc-agent`)
 
-For security-conscious enterprise teams requiring all security telemetry and automated remediation to execute **100% inside their own AWS VPC boundary**, CloudPilot provides the **In-VPC Mini Agent**:
+For security-conscious enterprise teams requiring security telemetry and event evaluation to execute **100% inside their own AWS VPC boundary**, CloudPilot provides the **In-VPC Mini Agent**:
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -160,7 +159,7 @@ For security-conscious enterprise teams requiring all security telemetry and aut
 │                           │                            │
 │                           ▼                            │
 │   [In-VPC Lambda Agent catches event in real time]     │
-│   [Evaluates Zero-Trust rule & Auto-Remediates]        │
+│   [Evaluates Zero-Trust rule & flags risk]             │
 │                           │                            │
 └───────────────────────────┼────────────────────────────┘
                             │ (TLS audit sync)
@@ -169,8 +168,8 @@ For security-conscious enterprise teams requiring all security telemetry and aut
 │              CLOUDPILOT WEB DASHBOARD                  │
 │                                                        │
 │  🟢 Status: Agent Active in us-east-1 (VPC vpc-0a1b)   │
-│  • [Live Stream] Auto-closed port 22 on sg-0a9b8c7d    │
-│  • [Live Stream] Enforced S3 Public Access Block       │
+│  • [Live Stream] Flagged open port 22 on sg-0a9b8c7d   │
+│  • [Live Stream] Flagged S3 bucket policy change       │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -178,7 +177,7 @@ For security-conscious enterprise teams requiring all security telemetry and aut
 1. **1-Click AWS CloudFormation (`deploy/cloudformation/cloudpilot-in-vpc.yaml`)**:
    - Deploys serverless AWS Lambda + EventBridge security rule + IAM Execution Role in under 60 seconds with **$0 idle cost**.
    - Listens to CloudTrail mutation events (`AuthorizeSecurityGroupIngress`, `PutBucketPolicy`, `AttachUserPolicy`).
-   - Auto-closes high-risk ports (0.0.0.0/0 on port 22/3389) and enforces S3 Public Access Blocks in `< 2 seconds`.
+   - Flags high-risk changes (0.0.0.0/0 on port 22/3389, S3 bucket policy/ACL changes) in real time. Automatic remediation is scaffolded (IAM permissions are provisioned) but not yet implemented.
 2. **Drop-in Terraform Module (`deploy/terraform/`)**:
    - Ready-to-use Terraform module with inputs for `vpc_id`, `subnet_ids`, `cloudpilot_api_key`, and `auto_remediation_enabled`.
    - Includes dead-letter queue (DLQ) and CloudWatch Logs retention.
@@ -190,10 +189,10 @@ For security-conscious enterprise teams requiring all security telemetry and aut
 
 | Capability | AWS GuardDuty | AWS Security Hub | **CloudPilot In-VPC Agent** |
 | :--- | :--- | :--- | :--- |
-| **Response Latency** | 🐌 5–30+ minutes (batch log analysis) | 🐌 Hourly / Daily scans | ⚡ **< 1.8 seconds** (EventBridge to Lambda) |
-| **Action Taken** | 📢 Alert Only (creates finding in console) | 📢 Alert Only (compliance score) | 🛡️ **Autonomous Remediation** (instantly revokes open port 22/3389 rules & locks S3 buckets) |
+| **Response Latency** | 🐌 5–30+ minutes (batch log analysis) | 🐌 Hourly / Daily scans | ⚡ **Real time** (EventBridge to Lambda) |
+| **Action Taken** | 📢 Alert Only (creates finding in console) | 📢 Alert Only (compliance score) | 🛡️ **Real-Time Flagging** (open port 22/3389 rules & S3 exposure; auto-remediation scaffolded, not yet implemented) |
 | **Data Perimeter** | ☁️ Managed by AWS global SaaS plane | ☁️ Managed by AWS global SaaS plane | 🔒 **100% Inside Your Private VPC** (zero egress of infrastructure configs) |
-| **Human Burden** | 🔴 High (manual intervention at 3 AM) | 🔴 High (manual ticket workflows) | 🟢 **Zero** (self-healing circuit breaker + email post-mortem) |
+| **Human Burden** | 🔴 High (manual intervention at 3 AM) | 🔴 High (manual ticket workflows) | 🟢 **Lower** (risky changes flagged the moment they happen) |
 | **Idle Cost** | 💸 Billed on VPC flow log & CloudTrail GBs | 💸 Billed per compliance check ($0.0010/chk) | 💵 **$0 Idle / Serverless** (pennies/month on Lambda invocations) |
 
 ---
@@ -214,7 +213,7 @@ This approach is simpler than AWS EventBridge because it runs inside the databas
 ## Key Features
 
 - **Live AWS API Execution**: Connect your credentials to audit, investigate, and remediate cloud infrastructure using real AWS API responses.
-- **Smart Intent Router**: LLM-based query classification selects only relevant tools per query, reducing token usage by 40-70%.
+- **Smart Intent Router**: LLM-based query classification selects only relevant tools per query, designed to reduce token usage.
 - **Agent Skills Engine**: Dynamically activates domain-specific specialist personas (Security Audit Specialist, FinOps Cost Analyst, Red Team Expert, etc.) based on query intent, transforming the agent from a generalist into a focused domain expert for each task.
 - **Pre-Flight IAM Boundary Checks**: The application automatically evaluates your principal's permissions upon connection, presenting a green/red checklist.
 - **PrivateLink / VPC Endpoints**: CloudPilot backend can be deployed inside an AWS VPC with VPC Endpoints (AWS PrivateLink), allowing API calls to never traverse the public internet.
@@ -510,13 +509,13 @@ Click the **Compliance** tab in the top navigation bar:
 3. Team members can share conversations, audit histories, and compliance reports across the organization.
 
 ### Step 14: Deploy the In-VPC Mini Agent (`/in-vpc-agent`)
-For enterprises requiring automated 24/7 in-VPC monitoring and instant drift auto-remediation:
+For enterprises requiring automated 24/7 in-VPC monitoring and real-time drift flagging:
 1. Click the **In-VPC Agent** tab in the top navigation bar.
 2. Choose your preferred deployment method:
    - **1-Click CloudFormation:** Click **Copy YAML** (or upload `deploy/cloudformation/cloudpilot-in-vpc.yaml` in AWS CloudFormation) to launch the serverless watchdog in under 60 seconds with **$0 idle cost**.
    - **Terraform Module:** Copy the drop-in `main.tf` snippet from `deploy/terraform/` and run `terraform init && terraform apply`.
-3. **Live Event Stream:** Once deployed, the agent automatically intercepts CloudTrail mutation events (security groups, public S3, IAM escalations), executes auto-remediation in `< 2 seconds`, and streams audit telemetry live into your dashboard.
-4. **Interactive Simulator:** Click **Simulate Port 22 Drift** or **Simulate Public S3 Exposure** on the In-VPC Agent page to test the real-time detection and auto-remediation loop directly in local development!
+3. **Live Event Stream:** Once deployed, the agent automatically intercepts CloudTrail mutation events (security groups, public S3, IAM escalations), flags risky changes in real time, and streams audit telemetry live into your dashboard (auto-remediation is scaffolded but not yet implemented).
+4. **Interactive Simulator:** Click **Simulate Port 22 Drift** or **Simulate Public S3 Exposure** on the In-VPC Agent page to test the real-time detection loop directly in local development!
 
 ---
 
